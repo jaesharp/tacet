@@ -33,8 +33,8 @@ use tacet_core::constants::{
     DEFAULT_BOOTSTRAP_ITERATIONS, DEFAULT_FAIL_THRESHOLD, DEFAULT_PASS_THRESHOLD,
 };
 use tacet_core::result::{
-    Diagnostics, EffectEstimate, Exploitability, InconclusiveReason, IssueCode,
-    MeasurementQuality, Outcome, QualityIssue,
+    Diagnostics, EffectEstimate, Exploitability, InconclusiveReason, IssueCode, MeasurementQuality,
+    Outcome, QualityIssue,
 };
 use tacet_core::statistics::{
     bootstrap_difference_covariance, bootstrap_difference_covariance_discrete,
@@ -303,10 +303,7 @@ pub fn analyze_single_pass(
         eprintln!("[DEBUG] theta_user = {:.2} ns, theta_floor_stat = {:.2} ns, theta_tick = {:.2} ns, theta_floor = {:.2} ns, theta_eff = {:.2} ns",
             config.theta_ns, theta_floor_stat, theta_tick, theta_floor, theta_eff);
         eprintln!("[DEBUG] c_floor = {:.2} ns·√n", c_floor);
-        eprintln!(
-            "[DEBUG] MDE: {:.2} ns",
-            mde.mde_ns
-        );
+        eprintln!("[DEBUG] MDE: {:.2} ns", mde.mde_ns);
         eprintln!("[DEBUG] delta_hat = {:?}", delta_hat.as_slice());
         eprintln!(
             "[DEBUG] sigma diagonal = [{:.2e}, {:.2e}, {:.2e}, ..., {:.2e}]",

@@ -1,12 +1,15 @@
 [package]
 name = "tacet-napi"
-version = "0.3.3"
+version = "0.4.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Node.js/Bun bindings for tacet via napi-rs"
-keywords = ["security", "cryptography", "timing", "side-channel", "nodejs"]
+description = "[DEPRECATED] Node.js/Bun bindings for tacet - use tacet-wasm instead"
+keywords = ["security", "cryptography", "timing", "side-channel", "nodejs", "deprecated"]
 categories = ["cryptography", "api-bindings"]
+
+[badges]
+maintenance = { status = "deprecated" }
 
 [lib]
 crate-type = ["cdylib"]

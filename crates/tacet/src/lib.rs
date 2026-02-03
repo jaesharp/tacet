@@ -90,9 +90,9 @@ pub use constants::{DECILES, LOG_2PI};
 pub use measurement::{BoxedTimer, Timer, TimerError, TimerSpec};
 pub use oracle::{compute_min_uniqueness_ratio, TimingOracle};
 pub use result::{
-    BatchingInfo, Diagnostics, EffectEstimate, Exploitability, InconclusiveReason,
-    IssueCode, MeasurementQuality, Metadata, MinDetectableEffect, Outcome, QualityIssue,
-    TopQuantile, UnmeasurableInfo, UnreliablePolicy,
+    BatchingInfo, Diagnostics, EffectEstimate, Exploitability, InconclusiveReason, IssueCode,
+    MeasurementQuality, Metadata, MinDetectableEffect, Outcome, QualityIssue, TopQuantile,
+    UnmeasurableInfo, UnreliablePolicy,
 };
 pub use types::{AttackerModel, Class, TimingSample};
 

@@ -2,7 +2,7 @@
 title: Power Module Specification (v1.0)
 description: Specification for tacet's power and electromagnetic side-channel analysis module
 sidebar:
-  order: 3
+  order: 5
 ---
 
 This document specifies tacet's power side-channel analysis module. It extends the [main specification](/reference/specification) with power-specific data models, feature extraction, and output types. The statistical engine (Bayesian inference, quality gates, covariance estimation) is shared with timing analysis—this document only defines the **differences**.

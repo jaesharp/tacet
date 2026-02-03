@@ -272,9 +272,7 @@ fn format_fail_body(
     writeln!(
         out,
         "    Max effect: {:.1} ns [CI: {:.1}\u{2013}{:.1}]",
-        effect.max_effect_ns,
-        effect.credible_interval_ns.0,
-        effect.credible_interval_ns.1
+        effect.max_effect_ns, effect.credible_interval_ns.0, effect.credible_interval_ns.1
     )
     .unwrap();
 
@@ -311,9 +309,7 @@ fn format_inconclusive_body(out: &mut String, leak_probability: f64, effect: &Ef
     writeln!(
         out,
         "    Max effect estimate: {:.1} ns [CI: {:.1}\u{2013}{:.1}]",
-        effect.max_effect_ns,
-        effect.credible_interval_ns.0,
-        effect.credible_interval_ns.1
+        effect.max_effect_ns, effect.credible_interval_ns.0, effect.credible_interval_ns.1
     )
     .unwrap();
 }

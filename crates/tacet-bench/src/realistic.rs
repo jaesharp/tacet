@@ -294,9 +294,11 @@ fn measure_operation(
     };
 
     // Use BoxedTimer::measure_cycles and convert to nanoseconds
-    let cycles = timer.measure_cycles(|| {
-        busy_wait_ns(base_ns + effect_delay);
-    }).expect("measurement should not fail during benchmarking");
+    let cycles = timer
+        .measure_cycles(|| {
+            busy_wait_ns(base_ns + effect_delay);
+        })
+        .expect("measurement should not fail during benchmarking");
 
     // Convert cycles to nanoseconds
     timer.cycles_to_ns(cycles).round() as u64

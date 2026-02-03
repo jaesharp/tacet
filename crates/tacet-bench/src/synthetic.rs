@@ -124,7 +124,7 @@ pub enum NoiseModel {
     /// Independent and identically distributed samples (traditional assumption)
     #[default]
     IID,
-    /// AR(1) autocorrelated noise: x[t] = φ * x[t-1] + sqrt(1-φ²) * ε[t]
+    /// AR(1) autocorrelated noise: `x[t] = φ * x[t-1] + sqrt(1-φ²) * ε[t]`
     ///
     /// Supports both positive and negative autocorrelation:
     /// - φ > 0: Positive autocorrelation (consecutive samples tend to be similar)
@@ -430,9 +430,9 @@ fn generate_samples_with_noise(
                 .iter()
                 .zip(ar_noise.iter())
                 .map(|(log_val, ar)| {
-                    // Add AR(1) noise scaled by base_sigma to log-space
-                    // This preserves the correlation structure while affecting timing
-                    let noisy_log = log_val + ar * 0.05; // 5% correlation contribution
+                    // Add AR(1) noise scaled to produce measured ACF ≈ nominal φ
+                    // Scale of 0.10 compensates for base variance dilution
+                    let noisy_log = log_val + ar * 0.10;
                     noisy_log.exp() as u64
                 })
                 .collect()

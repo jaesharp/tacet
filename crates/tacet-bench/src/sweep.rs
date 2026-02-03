@@ -184,41 +184,43 @@ impl SweepConfig {
         }
     }
 
-    /// Medium preset: good coverage for development (~30 min)
+    /// Medium preset: validation run matching thorough's structure (~2 hours)
     ///
-    /// Designed for SharedHardware stress testing with moderate noise (σ = 100 ns).
+    /// Designed to validate thorough's configuration before long runs.
+    /// Same σ, attacker models, and noise range as thorough, but with:
+    /// - Fewer effect sizes (subset of thorough's)
+    /// - Fewer datasets per point
+    /// - Both Shift and Tail patterns to verify pattern handling
     ///
-    /// Effect sizes (as multiples of σ = 100 ns):
+    /// Effect sizes (as multiples of σ = 50 ns):
     /// - 0: null (FPR testing)
-    /// - 0.1: 10 ns shift
-    /// - 0.5: 50 ns shift
-    /// - 1.0: 100 ns shift
-    /// - 2.0: 200 ns shift
-    /// - 5.0: 500 ns shift
+    /// - 0.2: 10 ns
+    /// - 1.0: 50 ns
+    /// - 2.0: 100 ns (AdjacentNetwork θ)
+    /// - 4.0: 200 ns
+    /// - 20.0: 1 μs
     ///
-    /// - 4 patterns: Null, Shift, Tail, Bimodal
-    /// - 5 noise models: IID, AR(±0.3), AR(±0.6)
-    /// - 50 datasets per point
+    /// - 2 patterns: Shift, Tail
+    /// - 5 noise models: representative φ range
+    /// - 30 datasets per point
+    /// - 2 attacker models: SharedHardware, AdjacentNetwork
     pub fn medium() -> Self {
         Self {
             preset: BenchmarkPreset::Medium,
-            samples_per_class: 10_000,
-            datasets_per_point: 50,
-            // With σ = 100 ns: [0, 10ns, 50ns, 100ns, 200ns, 500ns]
+            samples_per_class: 5_000,
+            datasets_per_point: 30,
+            // Subset of thorough's effect sizes
+            // With σ = 50 ns: [0, 10ns, 50ns, 100ns, 200ns, 1μs]
             effect_multipliers: vec![
-                0.0, // null
-                0.1, // 10 ns
-                0.5, // 50 ns
-                1.0, // 100 ns
-                2.0, // 200 ns
-                5.0, // 500 ns
+                0.0,  // null (FPR)
+                0.2,  // 10 ns
+                1.0,  // 50 ns
+                2.0,  // 100 ns (AdjacentNetwork θ)
+                4.0,  // 200 ns
+                20.0, // 1 μs
             ],
-            effect_patterns: vec![
-                EffectPattern::Null,
-                EffectPattern::Shift,
-                EffectPattern::Tail,
-                EffectPattern::bimodal_default(),
-            ],
+            effect_patterns: vec![EffectPattern::Shift, EffectPattern::Tail],
+            // Representative subset of thorough's noise range
             noise_models: vec![
                 NoiseModel::AR1 { phi: -0.6 },
                 NoiseModel::AR1 { phi: -0.3 },
@@ -226,70 +228,73 @@ impl SweepConfig {
                 NoiseModel::AR1 { phi: 0.3 },
                 NoiseModel::AR1 { phi: 0.6 },
             ],
-            attacker_models: vec![Some(AttackerModel::SharedHardware)],
+            // Same attacker models as thorough
+            attacker_models: vec![
+                Some(AttackerModel::SharedHardware),
+                Some(AttackerModel::AdjacentNetwork),
+            ],
             use_realistic: false,
             realistic_base_ns: 1000,
-            synthetic_sigma_ns: 100.0, // 100 ns - moderate noise for broader coverage
+            synthetic_sigma_ns: 50.0, // Same as thorough
         }
     }
 
-    /// Thorough preset: comprehensive coverage for publication (~3 hours)
+    /// Thorough preset: publication-quality benchmarks (~12-18 hours per platform)
     ///
-    /// Scaled similar to SILENT paper with full granularity, extended to cover
-    /// sub-microsecond effects common in real crypto vulnerabilities.
+    /// Optimized for USENIX-style comparative analysis with:
+    /// 1. tacet decisions across noise (φ) × effect sizes (Shift pattern)
+    /// 2. All tools' decisions across effect sizes (fixed autocorrelated noise)
+    /// 3. All tools' decisions across autocorrelation levels (FPR inflation demo)
+    /// 4. Pattern robustness: Shift, Tail, Bimodal across representative noise
     ///
-    /// Effect sizes cover two ranges:
-    /// - Sub-microsecond (10ns–500ns): cache timing, branch misprediction, table lookups
-    /// - Microsecond (1μs–10μs): larger timing differences
+    /// Uses σ = 50 ns for good SNR at SharedHardware-level effects.
     ///
-    /// Uses SharedHardware attacker model (θ=0.4ns) for fair comparison with
-    /// other tools that don't have configurable thresholds.
+    /// Effect sizes (as multiples of σ = 50 ns):
+    /// - 0: null (FPR testing)
+    /// - 0.1–0.4: 5–20 ns (SharedHardware detection region)
+    /// - 1.0–4.0: 50–200 ns (cache timing, AdjacentNetwork threshold)
+    /// - 10.0–20.0: 500 ns–1 μs (large effects, diminishing returns)
     ///
-    /// - Effect sizes: 19 points from 0 to 10μs (including 1ns, 2ns, 5ns for SharedHardware)
-    /// - 6 patterns: Null, Shift, Tail, Variance, Bimodal, Quantized
-    /// - 9 noise models: IID, AR(±0.2), AR(±0.4), AR(±0.6), AR(±0.8)
-    /// - 100 datasets per point
+    /// Key design choices:
+    /// - **5,000 samples/class**: Stresses tools to work with limited data
+    /// - **3 effect patterns**: Shift (primary), Tail, Bimodal for robustness claims
+    /// - **7 noise levels**: φ ∈ [-0.6, 0.6] covers autocorrelation effects
+    /// - **Two attacker models**: SharedHardware (0.4ns) + AdjacentNetwork (100ns)
+    /// - **100 datasets/point**: Wilson 95% CI width of ~±10% at 50% rates
+    ///
+    /// Total: 9 effects × 3 patterns × 7 noise × 100 datasets × 2 attackers = 37,800 runs
+    ///
+    /// Analysis tips:
+    /// - Filter to Shift pattern for autocorrelation heatmap
+    /// - Filter to IID or AR(0.3) for cross-pattern comparison
+    /// - Filter to effect=0 for FPR analysis across all patterns
     pub fn thorough() -> Self {
         Self {
             preset: BenchmarkPreset::Thorough,
-            samples_per_class: 20_000,
+            samples_per_class: 5_000,
             datasets_per_point: 100,
-            // Sub-microsecond effects (real crypto vulns) + microsecond range
+            // Effect sizes optimized for heatmap visualization
+            // With σ = 50 ns: [0, 5, 10, 20, 50, 100, 200, 500, 1000] ns
             effect_multipliers: vec![
-                0.0, // 0ns (FPR test)
-                // Sub-10ns: SharedHardware threshold region
-                0.00001, // 1ns
-                0.00002, // 2ns
-                0.00005, // 5ns
-                // Sub-microsecond: cache timing, branches, table lookups
-                0.0001, // 10ns
-                0.0005, // 50ns
-                0.001,  // 100ns
-                0.002,  // 200ns
-                0.005,  // 500ns
-                // Microsecond range (SILENT-like)
-                0.01, // 1μs
-                0.02, // 2μs
-                0.03, // 3μs
-                0.04, // 4μs
-                0.05, // 5μs
-                0.06, // 6μs
-                0.07, // 7μs
-                0.08, // 8μs
-                0.09, // 9μs
-                0.1,  // 10μs
+                0.0,  // 0 ns (FPR test)
+                0.1,  // 5 ns (~12× SharedHardware θ)
+                0.2,  // 10 ns
+                0.4,  // 20 ns
+                1.0,  // 50 ns
+                2.0,  // 100 ns (AdjacentNetwork θ)
+                4.0,  // 200 ns
+                10.0, // 500 ns
+                20.0, // 1 μs (diminishing returns beyond)
             ],
+            // Three patterns for robustness claims
             effect_patterns: vec![
-                EffectPattern::Null,
-                EffectPattern::Shift,
-                EffectPattern::Tail,
-                EffectPattern::Variance,
-                EffectPattern::bimodal_default(),
-                EffectPattern::quantized_default(),
+                EffectPattern::Shift,             // Primary: uniform mean shift
+                EffectPattern::Tail,              // 5% of samples have 5× larger effect
+                EffectPattern::bimodal_default(), // Two-mode distribution
             ],
-            // Full autocorrelation range like SILENT: Φ ∈ [-0.8, 0.8]
+            // Autocorrelation range: φ ∈ [-0.6, 0.6] in 0.2 steps
+            // (Covers the interesting range; ±0.8 adds runtime for diminishing insight)
             noise_models: vec![
-                NoiseModel::AR1 { phi: -0.8 },
                 NoiseModel::AR1 { phi: -0.6 },
                 NoiseModel::AR1 { phi: -0.4 },
                 NoiseModel::AR1 { phi: -0.2 },
@@ -297,13 +302,15 @@ impl SweepConfig {
                 NoiseModel::AR1 { phi: 0.2 },
                 NoiseModel::AR1 { phi: 0.4 },
                 NoiseModel::AR1 { phi: 0.6 },
-                NoiseModel::AR1 { phi: 0.8 },
             ],
-            // SharedHardware for fair comparison with threshold-less tools
-            attacker_models: vec![Some(AttackerModel::SharedHardware)],
+            // Two attacker models for threshold comparison
+            attacker_models: vec![
+                Some(AttackerModel::SharedHardware),  // θ = 0.4 ns
+                Some(AttackerModel::AdjacentNetwork), // θ = 100 ns
+            ],
             use_realistic: false,
             realistic_base_ns: 1000,
-            synthetic_sigma_ns: 500.0, // 500 ns - comprehensive coverage
+            synthetic_sigma_ns: 50.0, // 50 ns - good SNR for SharedHardware detection
         }
     }
 
@@ -318,33 +325,33 @@ impl SweepConfig {
     ///
     /// Estimated runtime: ~2-4 hours with 9 tools
     ///
-    /// Effect size mapping (σ = 100μs = 100,000ns):
-    /// - 0.0001σ = 10ns
-    /// - 0.0005σ = 50ns
-    /// - 0.001σ = 100ns (tacet threshold)
-    /// - 0.002σ = 200ns
-    /// - 0.005σ = 500ns
+    /// Effect size mapping (σ = 100ns):
+    /// - 0.1σ = 10ns
+    /// - 0.5σ = 50ns
+    /// - 1.0σ = 100ns (AdjacentNetwork threshold)
+    /// - 2.0σ = 200ns
+    /// - 5.0σ = 500ns
     pub fn fine_threshold() -> Self {
         Self {
             preset: BenchmarkPreset::FineThreshold,
             samples_per_class: 10_000,
             datasets_per_point: 50,
             // Fine-grained effect sizes around 100ns threshold
-            // σ = 100,000ns, so these map to:
+            // With σ = 100ns:
             // 0ns, 10ns, 20ns, 40ns, 60ns, 80ns, 100ns, 120ns, 150ns, 200ns, 300ns, 500ns
             effect_multipliers: vec![
-                0.0,    // 0ns (FPR test)
-                0.0001, // 10ns
-                0.0002, // 20ns
-                0.0004, // 40ns
-                0.0006, // 60ns
-                0.0008, // 80ns
-                0.001,  // 100ns (threshold)
-                0.0012, // 120ns
-                0.0015, // 150ns
-                0.002,  // 200ns
-                0.003,  // 300ns
-                0.005,  // 500ns
+                0.0, // 0ns (FPR test)
+                0.1, // 10ns
+                0.2, // 20ns
+                0.4, // 40ns
+                0.6, // 60ns
+                0.8, // 80ns
+                1.0, // 100ns (AdjacentNetwork threshold)
+                1.2, // 120ns
+                1.5, // 150ns
+                2.0, // 200ns
+                3.0, // 300ns
+                5.0, // 500ns
             ],
             effect_patterns: vec![EffectPattern::Shift],
             // Both positive AND negative autocorrelation (like SILENT)
@@ -382,13 +389,19 @@ impl SweepConfig {
     /// | AdjacentNetwork  | 100ns   | 50, 100, 200, 500 ns                   |
     /// | RemoteNetwork    | 50μs    | 25μs, 50μs, 100μs, 250μs               |
     ///
-    /// With σ = 100,000ns (100μs), the effect multipliers map to:
-    /// - SharedHardware range: 0.000002σ to 0.00004σ (0.2-4ns)
-    /// - AdjacentNetwork range: 0.0005σ to 0.005σ (50-500ns)
-    /// - RemoteNetwork range: 0.25σ to 2.5σ (25-250μs)
+    /// **Note:** This preset uses σ = 100μs to cover the full RemoteNetwork range.
+    /// This means SharedHardware tests will likely return Inconclusive (as expected—
+    /// detecting 0.4ns effects in 100μs noise is physically impossible). This preset
+    /// is primarily useful for demonstrating how tacet behaves across different
+    /// threat models and validating that it correctly reports Inconclusive when
+    /// the noise floor is too high for the requested threshold.
     ///
-    /// Run with `--tools threshold-relative` to get tacet tested with
-    /// each attacker model as a separate tool instance.
+    /// For actual SharedHardware stress testing, use `shared_hardware_stress()` instead.
+    ///
+    /// With σ = 100,000ns (100μs), the effect multipliers map to:
+    /// - SharedHardware range: 0.000002σ to 0.00004σ (0.2-4ns) — expect Inconclusive
+    /// - AdjacentNetwork range: 0.0005σ to 0.005σ (50-500ns) — marginal detection
+    /// - RemoteNetwork range: 0.25σ to 2.5σ (25-250μs) — good detection
     pub fn threshold_relative() -> Self {
         Self {
             preset: BenchmarkPreset::ThresholdRelative,
@@ -459,44 +472,46 @@ impl SweepConfig {
     /// very large effects when using the SharedHardware attacker model (θ = 0.4ns).
     /// This tests whether the Bayesian prior handles extreme effect sizes correctly.
     ///
+    /// Uses σ = 50ns (realistic for PMU measurements) to ensure detectability.
+    ///
     /// Effect range: 0ns to 100μs (0 to ~250,000× threshold)
     ///
     /// | Multiplier | Effect    | Relation to θ       |
     /// |------------|-----------|---------------------|
     /// | 0.0        | 0ns       | Null (FPR)          |
-    /// | 0.000002   | 0.2ns     | 0.5× threshold      |
-    /// | 0.000004   | 0.4ns     | 1× threshold        |
-    /// | 0.00001    | 1ns       | ~2.5× threshold     |
-    /// | 0.00002    | 2ns       | ~5× threshold       |
-    /// | 0.00005    | 5ns       | ~12.5× threshold    |
-    /// | 0.0001     | 10ns      | ~25× threshold      |
-    /// | 0.0005     | 50ns      | ~125× threshold     |
-    /// | 0.001      | 100ns     | ~250× threshold     |
-    /// | 0.005      | 500ns     | ~1,250× threshold   |
-    /// | 0.01       | 1μs       | ~2,500× threshold   |
-    /// | 0.1        | 10μs      | ~25,000× threshold  |
-    /// | 1.0        | 100μs     | ~250,000× threshold |
+    /// | 0.004      | 0.2ns     | 0.5× threshold      |
+    /// | 0.008      | 0.4ns     | 1× threshold        |
+    /// | 0.02       | 1ns       | ~2.5× threshold     |
+    /// | 0.04       | 2ns       | ~5× threshold       |
+    /// | 0.1        | 5ns       | ~12.5× threshold    |
+    /// | 0.2        | 10ns      | ~25× threshold      |
+    /// | 1.0        | 50ns      | ~125× threshold     |
+    /// | 2.0        | 100ns     | ~250× threshold     |
+    /// | 10.0       | 500ns     | ~1,250× threshold   |
+    /// | 20.0       | 1μs       | ~2,500× threshold   |
+    /// | 200.0      | 10μs      | ~25,000× threshold  |
+    /// | 2000.0     | 100μs     | ~250,000× threshold |
     pub fn shared_hardware_stress() -> Self {
         Self {
             preset: BenchmarkPreset::SharedHardwareStress,
             samples_per_class: 10_000,
             datasets_per_point: 20,
             // Wide range from below threshold to far above
-            // σ = 100,000ns, SharedHardware θ = 0.4ns
+            // With σ = 50ns, SharedHardware θ = 0.4ns
             effect_multipliers: vec![
-                0.0,      // 0ns (FPR test)
-                0.000002, // 0.2ns (below threshold)
-                0.000004, // 0.4ns (at threshold)
-                0.00001,  // 1ns
-                0.00002,  // 2ns
-                0.00005,  // 5ns
-                0.0001,   // 10ns
-                0.0005,   // 50ns
-                0.001,    // 100ns
-                0.005,    // 500ns
-                0.01,     // 1μs
-                0.1,      // 10μs
-                1.0,      // 100μs
+                0.0,    // 0ns (FPR test)
+                0.004,  // 0.2ns (below threshold)
+                0.008,  // 0.4ns (at threshold)
+                0.02,   // 1ns
+                0.04,   // 2ns
+                0.1,    // 5ns
+                0.2,    // 10ns
+                1.0,    // 50ns
+                2.0,    // 100ns
+                10.0,   // 500ns
+                20.0,   // 1μs
+                200.0,  // 10μs
+                2000.0, // 100μs
             ],
             effect_patterns: vec![EffectPattern::Shift],
             noise_models: vec![
@@ -508,7 +523,7 @@ impl SweepConfig {
             attacker_models: vec![Some(AttackerModel::SharedHardware)],
             use_realistic: false,
             realistic_base_ns: 1000,
-            synthetic_sigma_ns: 100_000.0, // 100μs - legacy scale for stress testing
+            synthetic_sigma_ns: 50.0, // 50 ns - realistic for PMU measurements
         }
     }
 
@@ -702,17 +717,19 @@ impl SweepResults {
                 };
 
                 // Check if any results exist for this tool that support attacker models
-                let tool_supports_attacker = self.results.iter().any(|r| {
-                    r.tool == tool && r.attacker_threshold_ns.is_some()
-                });
+                let tool_supports_attacker = self
+                    .results
+                    .iter()
+                    .any(|r| r.tool == tool && r.attacker_threshold_ns.is_some());
 
                 // For tools that support attacker models, iterate over each model
                 // For tools that don't, create a single summary with threshold=None
-                let attacker_models_to_iterate: Vec<Option<AttackerModel>> = if tool_supports_attacker {
-                    self.config.attacker_models.clone()
-                } else {
-                    vec![None]
-                };
+                let attacker_models_to_iterate: Vec<Option<AttackerModel>> =
+                    if tool_supports_attacker {
+                        self.config.attacker_models.clone()
+                    } else {
+                        vec![None]
+                    };
 
                 for &attacker_model in &attacker_models_to_iterate {
                     let expected_threshold = attacker_threshold_ns(attacker_model);
@@ -1039,8 +1056,7 @@ impl SweepRunner {
         let num_batches = total_pending_datasets.div_ceil(batch_size);
 
         // Progress: Scale from 0% to 100% as work completes
-        let scale_progress =
-            |done: usize| -> f64 { done as f64 / total_work.max(1) as f64 };
+        let scale_progress = |done: usize| -> f64 { done as f64 / total_work.max(1) as f64 };
 
         if resumed_count > 0 {
             progress(
@@ -1156,7 +1172,8 @@ impl SweepRunner {
     ) -> GeneratedDataset {
         if config.use_realistic {
             // In realistic mode, convert sigma multiplier to nanoseconds
-            let sigma_ns = 100_000.0;
+            // Use config's synthetic_sigma_ns for consistency
+            let sigma_ns = config.synthetic_sigma_ns;
             let delay_ns = (mult * sigma_ns) as u64;
 
             let effect = match pattern {
@@ -1330,7 +1347,11 @@ impl SweepRunner {
     /// On macOS, kperf only allows single-threaded access, so we use 1 thread.
     /// On Linux, perf_event allows multi-threaded access, so we use 4 threads.
     #[cfg(feature = "parallel")]
-    fn generate_batch(&self, sweep_config: &SweepConfig, configs: &[DatasetConfig]) -> DatasetBatch {
+    fn generate_batch(
+        &self,
+        sweep_config: &SweepConfig,
+        configs: &[DatasetConfig],
+    ) -> DatasetBatch {
         let datasets: Vec<(DatasetConfig, Arc<GeneratedDataset>)> = if sweep_config.use_realistic {
             // Semaphore to limit concurrent timer creation in realistic mode
             // macOS kperf: limit to 1 (exclusive PMU access)
@@ -1387,7 +1408,11 @@ impl SweepRunner {
 
     /// Generate a batch of datasets from their configs (non-parallel version).
     #[cfg(not(feature = "parallel"))]
-    fn generate_batch(&self, sweep_config: &SweepConfig, configs: &[DatasetConfig]) -> DatasetBatch {
+    fn generate_batch(
+        &self,
+        sweep_config: &SweepConfig,
+        configs: &[DatasetConfig],
+    ) -> DatasetBatch {
         let datasets: Vec<(DatasetConfig, Arc<GeneratedDataset>)> = configs
             .iter()
             .map(|cfg| {

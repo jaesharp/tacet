@@ -51,9 +51,7 @@ impl From<MdeEstimate> for MinDetectableEffect {
 /// The minimum detectable effect in nanoseconds.
 pub fn analytical_mde(covariance: &Matrix9, alpha: f64) -> f64 {
     // Find maximum marginal variance
-    let max_var = (0..9)
-        .map(|i| covariance[(i, i)])
-        .fold(0.0_f64, f64::max);
+    let max_var = (0..9).map(|i| covariance[(i, i)]).fold(0.0_f64, f64::max);
 
     // MDE with 50% power: z_{1-α/2} × sqrt(max variance)
     let z = probit(1.0 - alpha / 2.0);

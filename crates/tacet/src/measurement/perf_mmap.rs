@@ -29,30 +29,30 @@ use super::error::{MeasurementError, MeasurementResult};
 pub struct perf_event_mmap_page {
     pub version: u32,
     pub compat_version: u32,
-    pub lock: u32,              // Sequence lock for consistency
-    pub index: u32,             // PMU index (0 = invalid)
-    pub offset: i64,            // Offset to add to raw counter
-    pub time_enabled: u64,      // Time event has been enabled
-    pub time_running: u64,      // Time event has been running
-    pub capabilities: u64,      // Capability flags
-    pub pmc_width: u16,         // Counter bit width (32/40/64)
-    pub time_shift: u16,        // Time conversion shift
-    pub time_mult: u32,         // Time conversion multiplier
-    pub time_offset: u64,       // Time conversion offset
-    pub time_zero: u64,         // Reference time
-    pub size: u32,              // Size of this structure
+    pub lock: u32,         // Sequence lock for consistency
+    pub index: u32,        // PMU index (0 = invalid)
+    pub offset: i64,       // Offset to add to raw counter
+    pub time_enabled: u64, // Time event has been enabled
+    pub time_running: u64, // Time event has been running
+    pub capabilities: u64, // Capability flags
+    pub pmc_width: u16,    // Counter bit width (32/40/64)
+    pub time_shift: u16,   // Time conversion shift
+    pub time_mult: u32,    // Time conversion multiplier
+    pub time_offset: u64,  // Time conversion offset
+    pub time_zero: u64,    // Reference time
+    pub size: u32,         // Size of this structure
     pub reserved_1: u32,
-    pub time_cycles: u64,       // Reference TSC cycles
-    pub time_mask: u64,         // Cycle wraparound mask
-    pub reserved: [u8; 928],    // Reserved space
-    pub data_head: u64,         // Ring buffer write head
-    pub data_tail: u64,         // Ring buffer read tail
-    pub data_offset: u64,       // Ring buffer offset
-    pub data_size: u64,         // Ring buffer size
-    pub aux_head: u64,          // Aux buffer write head
-    pub aux_tail: u64,          // Aux buffer read tail
-    pub aux_offset: u64,        // Aux buffer offset
-    pub aux_size: u64,          // Aux buffer size
+    pub time_cycles: u64,    // Reference TSC cycles
+    pub time_mask: u64,      // Cycle wraparound mask
+    pub reserved: [u8; 928], // Reserved space
+    pub data_head: u64,      // Ring buffer write head
+    pub data_tail: u64,      // Ring buffer read tail
+    pub data_offset: u64,    // Ring buffer offset
+    pub data_size: u64,      // Ring buffer size
+    pub aux_head: u64,       // Aux buffer write head
+    pub aux_tail: u64,       // Aux buffer read tail
+    pub aux_offset: u64,     // Aux buffer offset
+    pub aux_size: u64,       // Aux buffer size
 }
 
 /// State for mmap-based PMU counter reads.
@@ -81,15 +81,13 @@ impl MmapState {
         let pagesize = libc::sysconf(libc::_SC_PAGESIZE) as usize;
 
         // Map one page (metadata only, no ring buffer)
-        let mmap = memmap2::MmapOptions::new()
-            .len(pagesize)
-            .map_raw(fd)?;
+        let mmap = memmap2::MmapOptions::new().len(pagesize).map_raw(fd)?;
 
         let page_ptr = mmap.as_ptr() as *const perf_event_mmap_page;
 
         // Verify userspace PMU access is enabled
         let caps = (*page_ptr).capabilities;
-        const CAP_USER_RDPMC: u64 = 1 << 2;  // bit 2
+        const CAP_USER_RDPMC: u64 = 1 << 2; // bit 2
 
         if (caps & CAP_USER_RDPMC) == 0 {
             return Err(std::io::Error::new(
@@ -218,7 +216,7 @@ impl MmapState {
         // because we'd be combining offset from OUR event with PMU state from a
         // DIFFERENT event. This is the root cause of spurious overflow values.
         if index == 0 {
-            return None;  // Retry until event is rescheduled
+            return None; // Retry until event is rescheduled
         }
 
         // Validate pmc_width to prevent sign extension bugs
@@ -226,7 +224,7 @@ impl MmapState {
         // Typical ARM PMU counter widths: 32-bit (older), 40/48-bit (common), 64-bit (ARMv8.5+)
         // Invalid width (0 or >64) indicates corrupted metadata → abort read
         if pmc_width == 0 || pmc_width > 64 {
-            return None;  // Retry with valid metadata
+            return None; // Retry with valid metadata
         }
 
         // 4. Read PMU register via MRS instruction
@@ -238,7 +236,7 @@ impl MmapState {
         // 6. Verify sequence lock unchanged
         let nseq = atomic_load(&page.lock, Ordering::Acquire);
         if seq != nseq {
-            return None;  // Retry
+            return None; // Retry
         }
 
         // 7. Compute final value with sign extension
@@ -357,7 +355,7 @@ mod tests {
         // Counter wraparound (sign extension)
         assert_eq!(
             compute_counter(0, 0xFFFFFFFF, 32),
-            0xFFFFFFFFFFFFFFFF  // -1 as u64
+            0xFFFFFFFFFFFFFFFF // -1 as u64
         );
     }
 }

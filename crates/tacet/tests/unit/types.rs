@@ -10,8 +10,8 @@
 //! - Serialization round-trips
 
 use tacet::{
-    Diagnostics, EffectEstimate, Exploitability, InconclusiveReason, IssueCode,
-    MeasurementQuality, Outcome, QualityIssue, UnreliablePolicy,
+    Diagnostics, EffectEstimate, Exploitability, InconclusiveReason, IssueCode, MeasurementQuality,
+    Outcome, QualityIssue, UnreliablePolicy,
 };
 
 // ============================================================================
@@ -668,7 +668,10 @@ fn effect_estimate_json_roundtrip() {
     let deserialized: EffectEstimate = serde_json::from_str(&json).unwrap();
 
     assert_eq!(effect.max_effect_ns, deserialized.max_effect_ns);
-    assert_eq!(effect.credible_interval_ns, deserialized.credible_interval_ns);
+    assert_eq!(
+        effect.credible_interval_ns,
+        deserialized.credible_interval_ns
+    );
 }
 
 #[test]
@@ -698,7 +701,6 @@ fn measurement_quality_json_roundtrip() {
         assert_eq!(variant, deserialized);
     }
 }
-
 
 #[test]
 fn outcome_pass_json_roundtrip() {

@@ -10,7 +10,7 @@
 
 | Architecture | Instance | IP | SSH |
 |--------------|----------|-----|-----|
-| x86_64 (AMD) | c5.4xlarge | `54.92.156.192` | `ssh 54.92.156.192` |
+| x86_64 (AMD) | c5.4xlarge | `98.84.17.7` | `ssh 98.84.17.7` |
 | ARM64 (Graviton 3) | c6g.4xlarge | `13.223.200.77` | `ssh 13.223.200.77` |
 
 **Note:** Both servers have passwordless sudo configured.

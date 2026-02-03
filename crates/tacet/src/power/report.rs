@@ -209,9 +209,15 @@ impl PowerOutcome {
     /// Get the leak probability.
     pub fn leak_probability(&self) -> f64 {
         match self {
-            PowerOutcome::Pass { leak_probability, .. } => *leak_probability,
-            PowerOutcome::Fail { leak_probability, .. } => *leak_probability,
-            PowerOutcome::Inconclusive { leak_probability, .. } => *leak_probability,
+            PowerOutcome::Pass {
+                leak_probability, ..
+            } => *leak_probability,
+            PowerOutcome::Fail {
+                leak_probability, ..
+            } => *leak_probability,
+            PowerOutcome::Inconclusive {
+                leak_probability, ..
+            } => *leak_probability,
         }
     }
 }
@@ -251,15 +257,18 @@ impl Report {
     /// Create a new report with the given outcome.
     pub fn new(outcome: PowerOutcome, dimension: DimensionInfo) -> Self {
         let (leak_probability, max_effect, max_effect_ci95) = match &outcome {
-            PowerOutcome::Pass { leak_probability, max_effect } => {
-                (*leak_probability, *max_effect, (0.0, 0.0))
-            }
-            PowerOutcome::Fail { leak_probability, max_effect, max_effect_ci95 } => {
-                (*leak_probability, *max_effect, *max_effect_ci95)
-            }
-            PowerOutcome::Inconclusive { leak_probability, .. } => {
-                (*leak_probability, 0.0, (0.0, 0.0))
-            }
+            PowerOutcome::Pass {
+                leak_probability,
+                max_effect,
+            } => (*leak_probability, *max_effect, (0.0, 0.0)),
+            PowerOutcome::Fail {
+                leak_probability,
+                max_effect,
+                max_effect_ci95,
+            } => (*leak_probability, *max_effect, *max_effect_ci95),
+            PowerOutcome::Inconclusive {
+                leak_probability, ..
+            } => (*leak_probability, 0.0, (0.0, 0.0)),
         };
 
         Self {
@@ -287,7 +296,9 @@ impl Report {
     /// Get a human-readable summary.
     pub fn summary(&self) -> String {
         match &self.outcome {
-            PowerOutcome::Pass { leak_probability, .. } => {
+            PowerOutcome::Pass {
+                leak_probability, ..
+            } => {
                 format!(
                     "PASS: No power leakage detected (P={:.1}%, max_effect={:.3} {})",
                     leak_probability * 100.0,
@@ -295,7 +306,11 @@ impl Report {
                     self.units
                 )
             }
-            PowerOutcome::Fail { leak_probability, max_effect, .. } => {
+            PowerOutcome::Fail {
+                leak_probability,
+                max_effect,
+                ..
+            } => {
                 format!(
                     "FAIL: Power leakage detected (P={:.1}%, max_effect={:.3} {})",
                     leak_probability * 100.0,
@@ -303,7 +318,10 @@ impl Report {
                     self.units
                 )
             }
-            PowerOutcome::Inconclusive { reason, leak_probability } => {
+            PowerOutcome::Inconclusive {
+                reason,
+                leak_probability,
+            } => {
                 format!(
                     "INCONCLUSIVE: {} (P={:.1}%)",
                     reason,

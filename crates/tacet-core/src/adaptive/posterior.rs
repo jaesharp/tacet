@@ -229,7 +229,9 @@ mod tests {
 
         // Create some sample draws
         let delta_draws: Vec<Vector9> = (0..100)
-            .map(|_| Vector9::from_row_slice(&[10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]))
+            .map(|_| {
+                Vector9::from_row_slice(&[10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0])
+            })
             .collect();
 
         let posterior = Posterior::new(delta_post, lambda_post, delta_draws, 0.99, 5.0, 1000);

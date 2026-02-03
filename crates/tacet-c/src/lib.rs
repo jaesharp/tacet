@@ -331,7 +331,7 @@ pub unsafe extern "C" fn to_calibrate(
 
     // Convert to nanoseconds
     let ns_per_tick = if timer_freq_hz == 0 {
-        1.0  // Final fallback: assume 1 tick = 1 ns
+        1.0 // Final fallback: assume 1 tick = 1 ns
     } else {
         1e9 / timer_freq_hz as f64
     };
@@ -893,7 +893,7 @@ pub unsafe extern "C" fn to_analyze(
 
     // Convert to nanoseconds
     let ns_per_tick = if timer_freq_hz == 0 {
-        1.0  // Final fallback: assume 1 tick = 1 ns
+        1.0 // Final fallback: assume 1 tick = 1 ns
     } else {
         1e9 / timer_freq_hz as f64
     };

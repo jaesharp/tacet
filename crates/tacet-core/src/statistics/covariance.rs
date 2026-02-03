@@ -1381,11 +1381,7 @@ mod tests {
         let sigma_inv = Matrix9::identity();
         let q = compute_q_statistic(&delta, &sigma_inv);
 
-        assert!(
-            q < 1e-10,
-            "Q should be ~0 for zero delta, got {}",
-            q
-        );
+        assert!(q < 1e-10, "Q should be ~0 for zero delta, got {}", q);
     }
 
     #[test]

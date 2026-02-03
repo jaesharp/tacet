@@ -289,7 +289,9 @@ impl LinuxPerfTimer {
     /// Returns Ok(MmapState) on success, Err on any failure (graceful degradation).
     #[cfg(feature = "perf-mmap")]
     fn try_setup_mmap() -> Result<MmapState, Box<dyn std::error::Error>> {
-        use perf_event_open_sys::bindings::{perf_event_attr, PERF_COUNT_HW_CPU_CYCLES, PERF_TYPE_HARDWARE};
+        use perf_event_open_sys::bindings::{
+            perf_event_attr, PERF_COUNT_HW_CPU_CYCLES, PERF_TYPE_HARDWARE,
+        };
         use std::os::unix::io::RawFd;
 
         // Prepare perf_event_attr structure
@@ -310,7 +312,11 @@ impl LinuxPerfTimer {
         #[cfg(target_os = "linux")]
         let cpu = unsafe {
             let cpu_id = libc::sched_getcpu();
-            if cpu_id < 0 { -1 } else { cpu_id }
+            if cpu_id < 0 {
+                -1
+            } else {
+                cpu_id
+            }
         };
         #[cfg(not(target_os = "linux"))]
         let cpu = -1;
@@ -320,10 +326,10 @@ impl LinuxPerfTimer {
             libc::syscall(
                 libc::SYS_perf_event_open,
                 &attr as *const _,
-                0,  // pid (0 = current thread)
+                0,   // pid (0 = current thread)
                 cpu, // cpu (specific CPU on Linux, -1 elsewhere)
-                -1, // group_fd (-1 = no group)
-                0,  // flags
+                -1,  // group_fd (-1 = no group)
+                0,   // flags
             )
         };
 

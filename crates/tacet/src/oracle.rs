@@ -1702,7 +1702,10 @@ fn build_effect_estimate(posterior: &Posterior, _theta_ns: f64, batch_k: u32) ->
     // Scale by 1/K to convert from batch totals to per-call effects
     EffectEstimate {
         max_effect_ns: effect.max_effect_ns / k,
-        credible_interval_ns: (effect.credible_interval_ns.0 / k, effect.credible_interval_ns.1 / k),
+        credible_interval_ns: (
+            effect.credible_interval_ns.0 / k,
+            effect.credible_interval_ns.1 / k,
+        ),
         top_quantiles: effect
             .top_quantiles
             .into_iter()

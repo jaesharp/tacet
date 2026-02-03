@@ -40,8 +40,8 @@ fn main() {
             println!("Result: PASS");
             println!("Leak probability: {:.2}%", leak_probability * 100.0);
             println!(
-                "Effect size: shift={:.1}ns, tail={:.1}ns",
-                effect.shift_ns, effect.tail_ns
+                "Max effect: {:.1}ns (95% CI: {:.1}–{:.1}ns)",
+                effect.max_effect_ns, effect.credible_interval_ns.0, effect.credible_interval_ns.1
             );
         }
         Outcome::Fail {
@@ -52,7 +52,7 @@ fn main() {
         } => {
             println!("Result: FAIL");
             println!("Leak probability: {:.2}%", leak_probability * 100.0);
-            println!("Effect size: {:.1}ns", effect.shift_ns);
+            println!("Max effect: {:.1}ns", effect.max_effect_ns);
             println!("Exploitability: {:?}", exploitability);
         }
         Outcome::Inconclusive {
@@ -69,6 +69,7 @@ fn main() {
         }
         Outcome::Research(research) => {
             println!("Result: RESEARCH MODE");
+            println!("Max effect: {:.1}ns", research.max_effect_ns);
             println!("Status: {:?}", research.status);
         }
     }

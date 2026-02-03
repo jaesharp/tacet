@@ -486,10 +486,7 @@ impl GibbsSampler {
             let mut e = Vector9::zeros();
             e[j] = 1.0;
             // Solve L y = e, then L^T x = y
-            let y = self
-                .l_r
-                .solve_lower_triangular(&e)
-                .unwrap_or(e);
+            let y = self.l_r.solve_lower_triangular(&e).unwrap_or(e);
             let x = self.l_r.transpose().solve_upper_triangular(&y).unwrap_or(y);
             for i in 0..9 {
                 r_inv[(i, j)] = x[i];

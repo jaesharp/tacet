@@ -28,18 +28,21 @@ mod validation {
         // Run the same workload with mmap-enabled timer
         let mut mmap_measurements = Vec::new();
         for _ in 0..50 {
-            let cycles = mmap_timer.measure_cycles(|| {
-                let mut sum = 0u64;
-                for i in 0..1000 {
-                    sum = sum.wrapping_add(std::hint::black_box(i));
-                }
-                std::hint::black_box(sum)
-            }).unwrap();
+            let cycles = mmap_timer
+                .measure_cycles(|| {
+                    let mut sum = 0u64;
+                    for i in 0..1000 {
+                        sum = sum.wrapping_add(std::hint::black_box(i));
+                    }
+                    std::hint::black_box(sum)
+                })
+                .unwrap();
             mmap_measurements.push(cycles);
         }
 
         // Calculate statistics for mmap measurements
-        let mmap_mean = mmap_measurements.iter().sum::<u64>() as f64 / mmap_measurements.len() as f64;
+        let mmap_mean =
+            mmap_measurements.iter().sum::<u64>() as f64 / mmap_measurements.len() as f64;
         let mmap_variance = mmap_measurements
             .iter()
             .map(|&c| {
@@ -59,8 +62,15 @@ mod validation {
         println!("  Max: {} cycles", mmap_measurements.iter().max().unwrap());
 
         // Validate mmap measurements are reasonable
-        assert!(mmap_measurements.iter().all(|&c| c > 0), "All mmap measurements should be > 0");
-        assert!(mmap_cv < 0.5, "Mmap measurements too variable: CV = {}", mmap_cv);
+        assert!(
+            mmap_measurements.iter().all(|&c| c > 0),
+            "All mmap measurements should be > 0"
+        );
+        assert!(
+            mmap_cv < 0.5,
+            "Mmap measurements too variable: CV = {}",
+            mmap_cv
+        );
 
         // Expected cycles for 1000 additions on a ~2-3 GHz ARM64 CPU
         // Should be in the range of 1000-10000 cycles (very rough estimate)
@@ -82,9 +92,7 @@ mod validation {
 
         let mut measurements = Vec::new();
         for _ in 0..1000 {
-            let cycles = timer.measure_cycles(|| {
-                std::hint::black_box(42)
-            }).unwrap();
+            let cycles = timer.measure_cycles(|| std::hint::black_box(42)).unwrap();
             if cycles > 0 {
                 measurements.push(cycles);
             }
@@ -128,9 +136,7 @@ mod validation {
         // Measure empty workload
         let mut empty_cycles = Vec::new();
         for _ in 0..20 {
-            let cycles = timer.measure_cycles(|| {
-                std::hint::black_box(42)
-            }).unwrap();
+            let cycles = timer.measure_cycles(|| std::hint::black_box(42)).unwrap();
             empty_cycles.push(cycles);
         }
         let empty_mean = empty_cycles.iter().sum::<u64>() as f64 / empty_cycles.len() as f64;
@@ -138,13 +144,15 @@ mod validation {
         // Measure 100 additions
         let mut small_cycles = Vec::new();
         for _ in 0..20 {
-            let cycles = timer.measure_cycles(|| {
-                let mut sum = 0u64;
-                for i in 0..100 {
-                    sum = sum.wrapping_add(std::hint::black_box(i));
-                }
-                std::hint::black_box(sum)
-            }).unwrap();
+            let cycles = timer
+                .measure_cycles(|| {
+                    let mut sum = 0u64;
+                    for i in 0..100 {
+                        sum = sum.wrapping_add(std::hint::black_box(i));
+                    }
+                    std::hint::black_box(sum)
+                })
+                .unwrap();
             small_cycles.push(cycles);
         }
         let small_mean = small_cycles.iter().sum::<u64>() as f64 / small_cycles.len() as f64;
@@ -152,13 +160,15 @@ mod validation {
         // Measure 10000 additions
         let mut large_cycles = Vec::new();
         for _ in 0..20 {
-            let cycles = timer.measure_cycles(|| {
-                let mut sum = 0u64;
-                for i in 0..10000 {
-                    sum = sum.wrapping_add(std::hint::black_box(i));
-                }
-                std::hint::black_box(sum)
-            }).unwrap();
+            let cycles = timer
+                .measure_cycles(|| {
+                    let mut sum = 0u64;
+                    for i in 0..10000 {
+                        sum = sum.wrapping_add(std::hint::black_box(i));
+                    }
+                    std::hint::black_box(sum)
+                })
+                .unwrap();
             large_cycles.push(cycles);
         }
         let large_mean = large_cycles.iter().sum::<u64>() as f64 / large_cycles.len() as f64;
@@ -192,13 +202,15 @@ mod validation {
 
         let mut measurements = Vec::new();
         for _ in 0..10_000 {
-            let cycles = timer.measure_cycles(|| {
-                let mut sum = 0u64;
-                for i in 0..100 {
-                    sum = sum.wrapping_add(std::hint::black_box(i));
-                }
-                std::hint::black_box(sum)
-            }).unwrap();
+            let cycles = timer
+                .measure_cycles(|| {
+                    let mut sum = 0u64;
+                    for i in 0..100 {
+                        sum = sum.wrapping_add(std::hint::black_box(i));
+                    }
+                    std::hint::black_box(sum)
+                })
+                .unwrap();
             measurements.push(cycles);
         }
 
@@ -220,7 +232,11 @@ mod validation {
         );
 
         // Mean should be reasonable
-        assert!(mean > 100.0 && mean < 100_000.0, "Mean unreasonable: {}", mean);
+        assert!(
+            mean > 100.0 && mean < 100_000.0,
+            "Mean unreasonable: {}",
+            mean
+        );
     }
 }
 

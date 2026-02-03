@@ -2,7 +2,7 @@
 title: Implementation Guide
 description: Detailed algorithms and numerical procedures for implementing the tacet specification
 sidebar:
-  order: 3
+  order: 4
 ---
 
 This document provides detailed algorithms, numerical procedures, and platform-specific guidance for implementing the [tacet specification](/reference/specification). It is intended for library implementers.

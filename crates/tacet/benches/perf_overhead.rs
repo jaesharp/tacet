@@ -39,9 +39,7 @@ fn bench_measurement_overhead(c: &mut Criterion) {
     };
 
     c.bench_function("measure_cycles_empty", |b| {
-        b.iter(|| {
-            timer.measure_cycles(|| black_box(42))
-        })
+        b.iter(|| timer.measure_cycles(|| black_box(42)))
     });
 
     c.bench_function("measure_cycles_100_adds", |b| {
@@ -78,18 +76,14 @@ fn bench_raw_counter_read(c: &mut Criterion) {
 
     // Benchmark just the counter read overhead (no workload)
     c.bench_function("counter_read_only", |b| {
-        b.iter(|| {
-            timer.measure_cycles(|| {})
-        })
+        b.iter(|| timer.measure_cycles(|| {}))
     });
 }
 
 #[cfg(target_os = "linux")]
 fn bench_timer_calibration(c: &mut Criterion) {
     c.bench_function("timer_creation", |b| {
-        b.iter(|| {
-            black_box(LinuxPerfTimer::new().ok())
-        })
+        b.iter(|| black_box(LinuxPerfTimer::new().ok()))
     });
 }
 

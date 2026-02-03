@@ -55,8 +55,8 @@ fn main() {
             println!("Leak probability: {:.1}%", leak_probability * 100.0);
             println!("Exploitability: {:?}", exploitability);
             println!(
-                "Effect: shift={:.1}ns, tail={:.1}ns",
-                effect.shift_ns, effect.tail_ns
+                "Max effect: {:.1}ns (95% CI: {:.1}–{:.1}ns)",
+                effect.max_effect_ns, effect.credible_interval_ns.0, effect.credible_interval_ns.1
             );
         }
         Outcome::Inconclusive {
@@ -74,8 +74,8 @@ fn main() {
         }
         Outcome::Research(research) => {
             println!("Result: RESEARCH MODE");
-            println!("Status: {:?}", research.status);
             println!("Max effect: {:.1}ns", research.max_effect_ns);
+            println!("Status: {:?}", research.status);
             return;
         }
     }

@@ -187,7 +187,11 @@ pub struct MaxEffectCI {
 /// Compute 95% CI for max effect: max_k |δ_k|.
 ///
 /// Used by Research mode for stopping conditions.
-pub fn compute_max_effect_ci(delta_post: &Vector9, lambda_post: &Matrix9, seed: u64) -> MaxEffectCI {
+pub fn compute_max_effect_ci(
+    delta_post: &Vector9,
+    lambda_post: &Matrix9,
+    seed: u64,
+) -> MaxEffectCI {
     let chol = match Cholesky::new(*lambda_post) {
         Some(c) => c,
         None => {

@@ -129,7 +129,8 @@ fn extract_centered_square_features(partitions: &[&[f32]]) -> Vec<f64> {
 
             let n = p.len() as f64;
             let mean: f64 = p.iter().map(|v| *v as f64).sum::<f64>() / n;
-            let variance: f64 = p.iter().map(|v| (*v as f64 - mean).powi(2)).sum::<f64>() / (n - 1.0);
+            let variance: f64 =
+                p.iter().map(|v| (*v as f64 - mean).powi(2)).sum::<f64>() / (n - 1.0);
             variance
         })
         .collect()
@@ -269,8 +270,8 @@ pub fn compute_pooled_covariance(features: &ExtractedFeatures) -> Vec<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::config::PreprocessingConfig;
+    use super::*;
 
     #[test]
     fn test_partition_samples() {

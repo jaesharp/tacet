@@ -74,11 +74,11 @@ const SHARED_HARDWARE_EFFECTS: EffectSizes = EffectSizes {
     attacker_model: AttackerModel::SharedHardware,
     theta_ns: 0.4,
     effects: [
-        (15.0, 6),      // ~15×θ ≈ 6ns
-        (75.0, 30),     // ~75×θ
-        (150.0, 60),    // ~150×θ
-        (750.0, 300),   // ~750×θ
-        (1500.0, 600),  // ~1500×θ
+        (15.0, 6),     // ~15×θ ≈ 6ns
+        (75.0, 30),    // ~75×θ
+        (150.0, 60),   // ~150×θ
+        (750.0, 300),  // ~750×θ
+        (1500.0, 600), // ~1500×θ
     ],
 };
 

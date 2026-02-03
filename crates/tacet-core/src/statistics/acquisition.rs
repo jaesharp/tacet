@@ -153,7 +153,7 @@ impl AcquisitionStream {
 
     /// Convert raw u64 measurements to nanoseconds and store as stream.
     ///
-    /// Interleaves the measurements: baseline[0], sample[0], baseline[1], sample[1], ...
+    /// Interleaves the measurements: `baseline[0], sample[0], baseline[1], sample[1], ...`
     pub fn from_raw_interleaved(baseline: &[u64], sample: &[u64], ns_per_tick: f64) -> Self {
         debug_assert_eq!(
             baseline.len(),
@@ -169,7 +169,7 @@ impl AcquisitionStream {
         stream
     }
 
-    /// Convert to Vec<TimingSample> for bootstrap functions.
+    /// Convert to `Vec<TimingSample>` for bootstrap functions.
     ///
     /// This is an adapter method that converts the acquisition stream to the
     /// `TimingSample` format used by the bootstrap covariance estimation functions.

@@ -98,8 +98,7 @@ fn substitute_template(template: &str, version: &str, platform_libs: &str) -> St
 /// Generate pkg-config file from template
 fn generate_pkgconfig(crate_dir: &str) {
     let template_path = PathBuf::from(crate_dir).join("tacet.pc.in");
-    let template = fs::read_to_string(&template_path)
-        .expect("Failed to read tacet.pc.in template");
+    let template = fs::read_to_string(&template_path).expect("Failed to read tacet.pc.in template");
 
     let version = env::var("CARGO_PKG_VERSION").unwrap();
     let platform_libs = get_platform_libs();
@@ -121,8 +120,7 @@ fn generate_pkgconfig(crate_dir: &str) {
         .expect("Could not find profile directory");
 
     let pc_file = target_dir.join("tacet.pc");
-    fs::write(&pc_file, pc_content)
-        .expect("Failed to write tacet.pc file");
+    fs::write(&pc_file, pc_content).expect("Failed to write tacet.pc file");
 
     println!("cargo:rerun-if-changed=tacet.pc.in");
 }

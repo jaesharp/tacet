@@ -19,9 +19,7 @@ mod mmap_tests {
         // Should work even if mmap setup fails (graceful fallback)
         let mut timer = LinuxPerfTimer::new().unwrap();
 
-        let _cycles = timer.measure_cycles(|| {
-            std::hint::black_box(42)
-        }).unwrap();
+        let _cycles = timer.measure_cycles(|| std::hint::black_box(42)).unwrap();
 
         // Measurement succeeded (unwrap didn't panic)
     }
@@ -32,13 +30,15 @@ mod mmap_tests {
 
         // Run multiple measurements to verify stability
         for _ in 0..100 {
-            let _cycles = timer.measure_cycles(|| {
-                let mut sum = 0u64;
-                for i in 0..100 {
-                    sum = sum.wrapping_add(std::hint::black_box(i));
-                }
-                std::hint::black_box(sum)
-            }).unwrap();
+            let _cycles = timer
+                .measure_cycles(|| {
+                    let mut sum = 0u64;
+                    for i in 0..100 {
+                        sum = sum.wrapping_add(std::hint::black_box(i));
+                    }
+                    std::hint::black_box(sum)
+                })
+                .unwrap();
 
             // Measurement succeeded
         }
@@ -86,13 +86,15 @@ mod mmap_tests {
         let mut timer = LinuxPerfTimer::new().unwrap();
 
         // Verify measurements are reasonable
-        let cycles = timer.measure_cycles(|| {
-            let mut sum = 0u64;
-            for i in 0..10000 {
-                sum = sum.wrapping_add(std::hint::black_box(i));
-            }
-            std::hint::black_box(sum)
-        }).unwrap();
+        let cycles = timer
+            .measure_cycles(|| {
+                let mut sum = 0u64;
+                for i in 0..10000 {
+                    sum = sum.wrapping_add(std::hint::black_box(i));
+                }
+                std::hint::black_box(sum)
+            })
+            .unwrap();
 
         // Should measure significant cycles for 10k iterations
         assert!(
@@ -117,13 +119,15 @@ mod mmap_tests {
         // Take multiple measurements
         let mut measurements = Vec::new();
         for _ in 0..10 {
-            let cycles = timer.measure_cycles(|| {
-                let mut sum = 0u64;
-                for i in 0..1000 {
-                    sum = sum.wrapping_add(std::hint::black_box(i));
-                }
-                std::hint::black_box(sum)
-            }).unwrap();
+            let cycles = timer
+                .measure_cycles(|| {
+                    let mut sum = 0u64;
+                    for i in 0..1000 {
+                        sum = sum.wrapping_add(std::hint::black_box(i));
+                    }
+                    std::hint::black_box(sum)
+                })
+                .unwrap();
             measurements.push(cycles);
         }
 

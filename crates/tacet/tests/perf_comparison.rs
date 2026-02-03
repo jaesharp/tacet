@@ -29,13 +29,15 @@ mod comparison {
         // Run the workload many times to get stable statistics
         let mut measurements = Vec::new();
         for _ in 0..100 {
-            let cycles = timer.measure_cycles(|| {
-                let mut sum = 0u64;
-                for i in 0..1000 {
-                    sum = sum.wrapping_add(std::hint::black_box(i));
-                }
-                std::hint::black_box(sum)
-            }).unwrap();
+            let cycles = timer
+                .measure_cycles(|| {
+                    let mut sum = 0u64;
+                    for i in 0..1000 {
+                        sum = sum.wrapping_add(std::hint::black_box(i));
+                    }
+                    std::hint::black_box(sum)
+                })
+                .unwrap();
             measurements.push(cycles);
         }
 
@@ -89,13 +91,15 @@ mod comparison {
         // Smaller workload
         let mut measurements = Vec::new();
         for _ in 0..100 {
-            let cycles = timer.measure_cycles(|| {
-                let mut sum = 0u64;
-                for i in 0..100 {
-                    sum = sum.wrapping_add(std::hint::black_box(i));
-                }
-                std::hint::black_box(sum)
-            }).unwrap();
+            let cycles = timer
+                .measure_cycles(|| {
+                    let mut sum = 0u64;
+                    for i in 0..100 {
+                        sum = sum.wrapping_add(std::hint::black_box(i));
+                    }
+                    std::hint::black_box(sum)
+                })
+                .unwrap();
             measurements.push(cycles);
         }
 
@@ -146,13 +150,15 @@ mod comparison {
         // Large workload
         let mut measurements = Vec::new();
         for _ in 0..100 {
-            let cycles = timer.measure_cycles(|| {
-                let mut sum = 0u64;
-                for i in 0..10000 {
-                    sum = sum.wrapping_add(std::hint::black_box(i));
-                }
-                std::hint::black_box(sum)
-            }).unwrap();
+            let cycles = timer
+                .measure_cycles(|| {
+                    let mut sum = 0u64;
+                    for i in 0..10000 {
+                        sum = sum.wrapping_add(std::hint::black_box(i));
+                    }
+                    std::hint::black_box(sum)
+                })
+                .unwrap();
             measurements.push(cycles);
         }
 

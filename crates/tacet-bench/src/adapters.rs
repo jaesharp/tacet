@@ -407,7 +407,7 @@ impl ToolAdapter for TimingOracleAdapter {
 /// the dudect binary.
 ///
 /// Reference: "Dude, is my code constant time?" (Reparaz et al., 2016)
-/// https://eprint.iacr.org/2016/1123.pdf
+/// <https://eprint.iacr.org/2016/1123.pdf>
 #[derive(Debug, Clone)]
 pub struct DudectAdapter {
     /// Significance threshold for t-test (default: 4.5).
@@ -2088,7 +2088,7 @@ impl Default for SilentNativeAdapter {
     fn default() -> Self {
         Self {
             alpha: 0.05,
-            delta: None, // Will compute as 0.5 * pooled_std
+            delta: None,                 // Will compute as 0.5 * pooled_std
             bootstrap_iterations: 1_000, // SILENT paper uses B=1000
         }
     }
@@ -2275,7 +2275,7 @@ fn silent_bootstrap_test(
 /// Friedman test) for timing analysis. This adapter calls the Python script
 /// via subprocess.
 ///
-/// Reference: https://github.com/tlsfuzzer/tlsfuzzer
+/// Reference: <https://github.com/tlsfuzzer/tlsfuzzer>
 #[derive(Debug, Clone)]
 pub struct TlsfuzzerAdapter {
     /// Path to Python executable (default: "python3").

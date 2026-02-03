@@ -341,7 +341,11 @@ impl Timer {
     /// This implementation always succeeds (register-based timers cannot fail),
     /// but returns `Result` for API consistency with PMU-based timers.
     #[inline]
-    pub fn measure_batched_cycles<F, T>(&self, iterations: usize, mut f: F) -> super::error::MeasurementResult
+    pub fn measure_batched_cycles<F, T>(
+        &self,
+        iterations: usize,
+        mut f: F,
+    ) -> super::error::MeasurementResult
     where
         F: FnMut() -> T,
     {
@@ -366,7 +370,11 @@ impl Timer {
     /// This implementation always succeeds (register-based timers cannot fail),
     /// but returns `Result` for API consistency with PMU-based timers.
     #[inline]
-    pub fn measure_batched_ns<F, T>(&self, iterations: usize, f: F) -> Result<f64, super::error::MeasurementError>
+    pub fn measure_batched_ns<F, T>(
+        &self,
+        iterations: usize,
+        f: F,
+    ) -> Result<f64, super::error::MeasurementError>
     where
         F: FnMut() -> T,
     {
@@ -405,15 +413,17 @@ mod tests {
     #[test]
     fn test_timer_measure() {
         let timer = Timer::new();
-        let cycles = timer.measure_cycles(|| {
-            // Use enough iterations to exceed timer resolution on all platforms
-            // ARM timer resolution is ~41ns, so we need > 41ns of work
-            let mut sum = 0u64;
-            for i in 0..100_000 {
-                sum = sum.wrapping_add(black_box(i));
-            }
-            black_box(sum)
-        }).expect("measure_cycles should not fail");
+        let cycles = timer
+            .measure_cycles(|| {
+                // Use enough iterations to exceed timer resolution on all platforms
+                // ARM timer resolution is ~41ns, so we need > 41ns of work
+                let mut sum = 0u64;
+                for i in 0..100_000 {
+                    sum = sum.wrapping_add(black_box(i));
+                }
+                black_box(sum)
+            })
+            .expect("measure_cycles should not fail");
         assert!(cycles > 0, "cycles should be positive, got {}", cycles);
     }
 
@@ -455,8 +465,12 @@ mod tests {
         let timer = Timer::new();
 
         // Batched measurement should give reasonable results
-        let single = timer.measure_cycles(|| black_box(42)).expect("measure_cycles should not fail");
-        let batched = timer.measure_batched_cycles(100, || black_box(42)).expect("measure_batched_cycles should not fail");
+        let single = timer
+            .measure_cycles(|| black_box(42))
+            .expect("measure_cycles should not fail");
+        let batched = timer
+            .measure_batched_cycles(100, || black_box(42))
+            .expect("measure_batched_cycles should not fail");
 
         // Batched per-iteration should be similar to or less than single
         // (amortizes measurement overhead)

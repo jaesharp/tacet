@@ -289,12 +289,18 @@ impl Dataset {
 
     /// Get the number of Fixed class traces.
     pub fn fixed_count(&self) -> usize {
-        self.traces.iter().filter(|t| t.class == Class::Fixed).count()
+        self.traces
+            .iter()
+            .filter(|t| t.class == Class::Fixed)
+            .count()
     }
 
     /// Get the number of Random class traces.
     pub fn random_count(&self) -> usize {
-        self.traces.iter().filter(|t| t.class == Class::Random).count()
+        self.traces
+            .iter()
+            .filter(|t| t.class == Class::Random)
+            .count()
     }
 
     /// Iterate over Fixed class traces.

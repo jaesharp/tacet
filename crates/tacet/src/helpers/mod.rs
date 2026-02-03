@@ -53,7 +53,10 @@
 
 pub mod effect;
 
-pub use effect::{busy_wait_ns, init_effect_injection, min_injectable_effect_ns, timer_resolution_ns, counter_frequency_hz};
+pub use effect::{
+    busy_wait_ns, counter_frequency_hz, init_effect_injection, min_injectable_effect_ns,
+    timer_resolution_ns,
+};
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;

@@ -126,7 +126,7 @@ pub fn prepare_percentiles(durations: &[u64]) -> Vec<f64> {
 ///
 /// # Arguments
 /// * `ctx` - Optional context from a previous run (for streaming analysis)
-/// * `samples` - Tuple of (left_samples, right_samples) as Vec<u64>
+/// * `samples` - Tuple of (left_samples, right_samples) as `Vec<u64>`
 ///
 /// # Returns
 /// * `CtSummary` - Summary with max_t, max_tau, and sample_size

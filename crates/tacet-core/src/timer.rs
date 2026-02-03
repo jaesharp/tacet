@@ -356,7 +356,11 @@ fn is_reasonable_tsc_freq(freq: u64) -> bool {
 }
 
 /// Calibrate TSC frequency by measuring against std::time::Instant.
-#[cfg(all(feature = "std", target_arch = "x86_64", any(target_os = "linux", target_os = "macos")))]
+#[cfg(all(
+    feature = "std",
+    target_arch = "x86_64",
+    any(target_os = "linux", target_os = "macos")
+))]
 fn calibrate_tsc_frequency() -> u64 {
     use std::time::{Duration, Instant};
 

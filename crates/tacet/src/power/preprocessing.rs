@@ -104,7 +104,11 @@ pub fn normalize_variance(values: &mut [f32]) {
     let sum: f64 = values.iter().map(|v| *v as f64).sum();
     let mean = sum / n;
 
-    let variance: f64 = values.iter().map(|v| (*v as f64 - mean).powi(2)).sum::<f64>() / (n - 1.0);
+    let variance: f64 = values
+        .iter()
+        .map(|v| (*v as f64 - mean).powi(2))
+        .sum::<f64>()
+        / (n - 1.0);
     let std_dev = variance.sqrt() as f32;
 
     if std_dev > 1e-10 {

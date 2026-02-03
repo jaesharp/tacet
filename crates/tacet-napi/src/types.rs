@@ -6,7 +6,9 @@ use napi_derive::napi;
 use tacet_core::constants::{
     DEFAULT_FAIL_THRESHOLD, DEFAULT_MAX_SAMPLES, DEFAULT_PASS_THRESHOLD, DEFAULT_TIME_BUDGET_SECS,
 };
-use tacet_core::result::{Exploitability as CoreExploitability, MeasurementQuality as CoreMeasurementQuality};
+use tacet_core::result::{
+    Exploitability as CoreExploitability, MeasurementQuality as CoreMeasurementQuality,
+};
 use tacet_core::types::AttackerModel as CoreAttackerModel;
 
 /// Attacker model determines the minimum effect threshold (theta) for leak detection.
@@ -81,7 +83,6 @@ pub enum InconclusiveReason {
     /// Threshold was elevated due to measurement noise.
     ThresholdElevated,
 }
-
 
 /// Exploitability assessment.
 #[napi]

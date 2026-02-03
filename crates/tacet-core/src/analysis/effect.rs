@@ -116,12 +116,14 @@ pub fn compute_top_quantiles(delta_draws: &[Vector9], theta: f64) -> Vec<TopQuan
         .into_iter()
         .filter(|(_, _, _, _, exceed_prob)| *exceed_prob > 0.5)
         .take(3)
-        .map(|(_, quantile_p, mean_ns, ci95_ns, exceed_prob)| TopQuantile {
-            quantile_p,
-            mean_ns,
-            ci95_ns,
-            exceed_prob,
-        })
+        .map(
+            |(_, quantile_p, mean_ns, ci95_ns, exceed_prob)| TopQuantile {
+                quantile_p,
+                mean_ns,
+                ci95_ns,
+                exceed_prob,
+            },
+        )
         .collect()
 }
 
@@ -200,12 +202,14 @@ fn compute_top_quantiles_analytical(
         .into_iter()
         .filter(|(_, _, _, _, exceed_prob)| *exceed_prob > 0.5)
         .take(3)
-        .map(|(_, quantile_p, mean_ns, ci95_ns, exceed_prob)| TopQuantile {
-            quantile_p,
-            mean_ns,
-            ci95_ns,
-            exceed_prob,
-        })
+        .map(
+            |(_, quantile_p, mean_ns, ci95_ns, exceed_prob)| TopQuantile {
+                quantile_p,
+                mean_ns,
+                ci95_ns,
+                exceed_prob,
+            },
+        )
         .collect()
 }
 
@@ -262,7 +266,10 @@ mod tests {
         let estimate = compute_effect_estimate(&draws, 5.0);
 
         // Max effect should be around 9.9 (max draw is 99 * 0.1 = 9.9)
-        assert!(estimate.max_effect_ns > 4.0, "max effect should be significant");
+        assert!(
+            estimate.max_effect_ns > 4.0,
+            "max effect should be significant"
+        );
         assert!(
             estimate.credible_interval_ns.0 < estimate.max_effect_ns,
             "CI lower should be below mean"

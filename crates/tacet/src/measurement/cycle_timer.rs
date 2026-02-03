@@ -249,11 +249,11 @@ impl std::fmt::Debug for BoxedTimer {
 /// # Platform-Specific Variants (Power Users)
 ///
 /// For kernel developers or those who need specific timing primitives:
-/// - [`Rdtsc`](TimerSpec::Rdtsc) - x86_64 Time Stamp Counter
-/// - [`VirtualTimer`](TimerSpec::VirtualTimer) - ARM64 cntvct_el0
-/// - [`Kperf`](TimerSpec::Kperf) - macOS ARM64 cycle counter via kperf
-/// - [`PerfEvent`](TimerSpec::PerfEvent) - Linux cycle counter via perf_event
-/// - [`StdInstant`](TimerSpec::StdInstant) - std::time::Instant (portable fallback)
+/// - `Rdtsc` - x86_64 Time Stamp Counter
+/// - `VirtualTimer` - ARM64 cntvct_el0
+/// - `Kperf` - macOS ARM64 cycle counter via kperf
+/// - `PerfEvent` - Linux cycle counter via perf_event
+/// - `StdInstant` - std::time::Instant (portable fallback)
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum TimerSpec {
     /// Auto-detect the best available timer for your platform.
@@ -516,7 +516,10 @@ impl TimerSpec {
                 // On x86_64: rdtsc is already high-precision, use it directly
                 #[cfg(target_arch = "x86_64")]
                 {
-                    return (BoxedTimer::Standard(Timer::new()), TimerFallbackReason::None);
+                    return (
+                        BoxedTimer::Standard(Timer::new()),
+                        TimerFallbackReason::None,
+                    );
                 }
 
                 // On ARM64: try PMU timers first (cntvct_el0 is often coarse),
@@ -567,7 +570,10 @@ impl TimerSpec {
                     all(target_os = "linux", target_arch = "aarch64", feature = "perf")
                 )))]
                 {
-                    (BoxedTimer::Standard(Timer::new()), TimerFallbackReason::None)
+                    (
+                        BoxedTimer::Standard(Timer::new()),
+                        TimerFallbackReason::None,
+                    )
                 }
             }
 
@@ -581,7 +587,10 @@ impl TimerSpec {
                 let system_timer = Timer::new();
                 if system_timer.resolution_ns() <= HIGH_PRECISION_THRESHOLD_NS {
                     // System timer is high precision (x86_64 rdtsc, ARMv8.6+ cntvct_el0)
-                    return (BoxedTimer::Standard(system_timer), TimerFallbackReason::None);
+                    return (
+                        BoxedTimer::Standard(system_timer),
+                        TimerFallbackReason::None,
+                    );
                 }
 
                 // System timer is too coarse, try PMU timers

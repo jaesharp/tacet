@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use tacet_core::constants::{
     DEFAULT_FAIL_THRESHOLD, DEFAULT_MAX_SAMPLES, DEFAULT_PASS_THRESHOLD, DEFAULT_TIME_BUDGET_SECS,
 };
-use tacet_core::result::{Exploitability as CoreExploitability, MeasurementQuality as CoreMeasurementQuality};
+use tacet_core::result::{
+    Exploitability as CoreExploitability, MeasurementQuality as CoreMeasurementQuality,
+};
 use tacet_core::types::AttackerModel as CoreAttackerModel;
 use tsify::Tsify;
 
@@ -86,7 +88,6 @@ pub enum InconclusiveReason {
     /// Threshold was elevated due to measurement noise.
     ThresholdElevated = 7,
 }
-
 
 /// Exploitability assessment.
 #[derive(Tsify, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

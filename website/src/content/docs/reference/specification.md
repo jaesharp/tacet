@@ -7,7 +7,7 @@ sidebar:
 
 This document is the authoritative specification for tacet, a Bayesian timing side-channel detection system. It defines the statistical methodology, abstract types, and requirements that implementations MUST follow to be conformant.
 
-For implementation details (algorithms, numerical procedures), see the [Implementation Guide](/reference/implementation-guide). For language-specific APIs, see the [Rust API](/api/rust), [C API](/api/c), or [Go API](/api/go). For interpreting results, see the [User Guide](/guides/user-guide).
+For implementation details (algorithms, numerical procedures), see the [Implementation Guide](/reference/implementation-guide). For language-specific APIs, see the [Rust API](/api/rust), [C API](/api/c), or [Go API](/api/go). For interpreting results, see [Interpreting Results](/core-concepts/interpreting-results) and [Attacker Models](/core-concepts/attacker-models).
 
 ***
 

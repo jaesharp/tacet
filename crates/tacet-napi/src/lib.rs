@@ -1,5 +1,10 @@
 //! Node.js/Bun bindings for tacet.
 //!
+//! # Deprecated
+//!
+//! **This crate is deprecated.** Use [`tacet-wasm`](https://crates.io/crates/tacet-wasm) instead,
+//! which provides better cross-platform support and works in both Node.js and browsers.
+//!
 //! This crate provides native bindings via napi-rs. The design is:
 //!
 //! **Native addon exports (this crate):**
@@ -17,6 +22,10 @@
 //! This keeps FFI overhead minimal - only 2 `rdtsc()` calls per measurement,
 //! with the operation running in pure JS/TS.
 
+#![deprecated(
+    since = "0.4.0",
+    note = "tacet-napi is deprecated. Use tacet-wasm instead for better cross-platform support."
+)]
 #![deny(clippy::all)]
 
 mod oracle;

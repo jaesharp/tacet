@@ -56,13 +56,15 @@ fn test_perf_timer_measurement() {
     };
 
     // Measure a simple operation
-    let cycles = timer.measure_cycles(|| {
-        let mut sum = 0u64;
-        for i in 0..10000 {
-            sum = sum.wrapping_add(std::hint::black_box(i));
-        }
-        std::hint::black_box(sum)
-    }).unwrap();
+    let cycles = timer
+        .measure_cycles(|| {
+            let mut sum = 0u64;
+            for i in 0..10000 {
+                sum = sum.wrapping_add(std::hint::black_box(i));
+            }
+            std::hint::black_box(sum)
+        })
+        .unwrap();
 
     eprintln!("Measured {} cycles for 10k additions", cycles);
     assert!(cycles > 0, "Should measure non-zero cycles");
@@ -89,13 +91,15 @@ fn test_perf_timer_consistency() {
     // Measure the same operation 100 times to get good statistics
     let mut samples = Vec::with_capacity(100);
     for _ in 0..100 {
-        let cycles = timer.measure_cycles(|| {
-            let mut sum = 0u64;
-            for i in 0..500 {
-                sum = sum.wrapping_add(std::hint::black_box(i));
-            }
-            std::hint::black_box(sum)
-        }).unwrap();
+        let cycles = timer
+            .measure_cycles(|| {
+                let mut sum = 0u64;
+                for i in 0..500 {
+                    sum = sum.wrapping_add(std::hint::black_box(i));
+                }
+                std::hint::black_box(sum)
+            })
+            .unwrap();
         samples.push(cycles as f64);
     }
 
@@ -222,16 +226,18 @@ fn test_perf_vs_standard_timer() {
             // Perf measurements
             let mut perf_samples: Vec<u64> = Vec::with_capacity(iterations);
             for _ in 0..iterations {
-                let cycles =
-                    perf_timer.measure_cycles(|| std::hint::black_box(42u64.wrapping_mul(17))).unwrap();
+                let cycles = perf_timer
+                    .measure_cycles(|| std::hint::black_box(42u64.wrapping_mul(17)))
+                    .unwrap();
                 perf_samples.push(cycles);
             }
 
             // Standard timer measurements
             let mut std_samples: Vec<u64> = Vec::with_capacity(iterations);
             for _ in 0..iterations {
-                let cycles =
-                    std_timer.measure_cycles(|| std::hint::black_box(42u64.wrapping_mul(17))).unwrap();
+                let cycles = std_timer
+                    .measure_cycles(|| std::hint::black_box(42u64.wrapping_mul(17)))
+                    .unwrap();
                 std_samples.push(cycles);
             }
 

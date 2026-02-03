@@ -191,9 +191,9 @@ pub fn analyze(dataset: &Dataset, config: &Config) -> Report {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::config::PreprocessingConfig;
     use super::super::dataset::{Class, Trace};
+    use super::*;
 
     #[test]
     fn test_analyze_empty_dataset() {
@@ -209,7 +209,11 @@ mod tests {
         // Create traces with nearly identical values between classes
         let traces: Vec<Trace> = (0..50)
             .map(|i| {
-                let class = if i % 2 == 0 { Class::Fixed } else { Class::Random };
+                let class = if i % 2 == 0 {
+                    Class::Fixed
+                } else {
+                    Class::Random
+                };
                 Trace::new(class, vec![1.0, 2.0, 3.0, 4.0])
             })
             .collect();
@@ -222,7 +226,11 @@ mod tests {
         let report = analyze(&dataset, &config);
 
         // With identical data, max_effect should be ~0
-        assert!(report.max_effect.abs() < 1e-6, "max_effect should be ~0 for identical data, got {}", report.max_effect);
+        assert!(
+            report.max_effect.abs() < 1e-6,
+            "max_effect should be ~0 for identical data, got {}",
+            report.max_effect
+        );
     }
 
     #[test]
@@ -269,9 +277,7 @@ mod tests {
         ];
 
         let dataset = Dataset::new(traces);
-        let config = Config::new()
-            .with_partitions(2)
-            .with_floor_multiplier(3.0);
+        let config = Config::new().with_partitions(2).with_floor_multiplier(3.0);
 
         let report = analyze(&dataset, &config);
 

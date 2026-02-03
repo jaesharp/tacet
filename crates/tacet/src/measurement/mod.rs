@@ -18,8 +18,8 @@
 //! are often coarse (42ns on Apple Silicon, 40ns on Neoverse N1), so we prioritize
 //! PMU access when available for better precision.
 //!
-//! PMU-based timers are available via explicit [`TimerSpec::Kperf`] or
-//! [`TimerSpec::PerfEvent`] for microarchitectural research.
+//! PMU-based timers are available via explicit `TimerSpec::Kperf` or
+//! `TimerSpec::PerfEvent` for microarchitectural research.
 //!
 //! # ARM64 Timer Resolution
 //!

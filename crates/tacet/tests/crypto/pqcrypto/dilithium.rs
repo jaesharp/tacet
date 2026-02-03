@@ -127,7 +127,6 @@ fn pqcrypto_dilithium3_sign_ct() {
     }
 }
 
-
 /// Dilithium signing with different message patterns (informational)
 ///
 /// NOTE: Dilithium uses rejection sampling, so timing DOES vary based on message content.

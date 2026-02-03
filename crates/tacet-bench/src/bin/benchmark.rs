@@ -293,7 +293,9 @@ fn main() {
         let estimated_mem_mb = (batch_size * config.samples_per_class * 16) / (1024 * 1024);
         println!(
             "  Batched: {} batches of {} datasets (~{}MB peak memory)",
-            num_batches, batch_size, estimated_mem_mb.max(160)
+            num_batches,
+            batch_size,
+            estimated_mem_mb.max(160)
         );
     }
     println!();

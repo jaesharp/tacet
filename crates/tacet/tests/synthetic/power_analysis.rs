@@ -145,9 +145,9 @@ fn threshold_boundary_test() {
     // Above threshold: should have HIGH detection (fail)
     let test_cases: [(f64, &str, f64, f64); 4] = [
         // (multiple, label, min_power, max_power)
-        (0.0, "null (FPR)", 0.0, 0.10),      // No effect: ≤10% FPR
-        (0.5, "below θ", 0.0, 0.25),          // Below threshold: ≤25% detection
-        (2.0, "above θ (2×)", 0.80, 1.00),    // Above threshold: ≥80% detection
+        (0.0, "null (FPR)", 0.0, 0.10),         // No effect: ≤10% FPR
+        (0.5, "below θ", 0.0, 0.25),            // Below threshold: ≤25% detection
+        (2.0, "above θ (2×)", 0.80, 1.00),      // Above threshold: ≥80% detection
         (3.0, "well above θ (3×)", 0.90, 1.00), // Well above: ≥90% detection
     ];
 
@@ -165,11 +165,8 @@ fn threshold_boundary_test() {
         let effect_ns = (theta_test * multiple) as u64;
         let power = run_power_trials(theta_test, effect_ns, TRIALS);
 
-        let (ci_low, ci_high) = clopper_pearson_ci(
-            (power * TRIALS as f64).round() as usize,
-            TRIALS,
-            0.05,
-        );
+        let (ci_low, ci_high) =
+            clopper_pearson_ci((power * TRIALS as f64).round() as usize, TRIALS, 0.05);
 
         let passed = power >= min_power && power <= max_power;
         let status = if passed { "✓" } else { "✗" };
@@ -243,7 +240,11 @@ fn find_empirical_mde(theta_ns: f64, trials_per_probe: usize) -> f64 {
             high = mid;
         } else {
             // Found ~50% power point (within 30-70% range)
-            eprintln!("[mde_search]   converged at {}ns with {:.0}% power", mid, power * 100.0);
+            eprintln!(
+                "[mde_search]   converged at {}ns with {:.0}% power",
+                mid,
+                power * 100.0
+            );
             return mid as f64;
         }
 
@@ -277,7 +278,10 @@ fn power_curve_at_detection_limit() {
     let theta_ns = 500.0; // Use 500ns threshold for power curve testing
 
     eprintln!("[power_curve] Platform: timer_res={:.1}ns", timer_res);
-    eprintln!("[power_curve] Using θ={:.0}ns for power curve testing", theta_ns);
+    eprintln!(
+        "[power_curve] Using θ={:.0}ns for power curve testing",
+        theta_ns
+    );
 
     // =========================================================================
     // Phase 2: Find empirical MDE via binary search
@@ -299,11 +303,11 @@ fn power_curve_at_detection_limit() {
     // Test cases relative to empirical MDE (not θ)
     // Note: The oracle's power curve can be very sharp, so we use wide ranges
     let test_cases: [(f64, &str, f64, f64); 5] = [
-        (0.0, "null", 0.0, 0.15),        // FPR: 0-15%
-        (0.5, "MDE/2", 0.0, 0.40),       // Below MDE: low power (allow up to 40%)
-        (1.0, "MDE", 0.20, 0.80),        // At MDE: ~50% power (wide range due to sharp curve)
-        (2.0, "2×MDE", 0.70, 1.00),      // Above MDE: high power
-        (3.0, "3×MDE", 0.85, 1.00),      // Well above: very high power
+        (0.0, "null", 0.0, 0.15),   // FPR: 0-15%
+        (0.5, "MDE/2", 0.0, 0.40),  // Below MDE: low power (allow up to 40%)
+        (1.0, "MDE", 0.20, 0.80),   // At MDE: ~50% power (wide range due to sharp curve)
+        (2.0, "2×MDE", 0.70, 1.00), // Above MDE: high power
+        (3.0, "3×MDE", 0.85, 1.00), // Well above: very high power
     ];
 
     const TRIALS: usize = 50;
@@ -320,11 +324,8 @@ fn power_curve_at_detection_limit() {
         let effect_ns = (empirical_mde * multiple) as u64;
         let power = run_power_trials(theta_ns, effect_ns, TRIALS);
 
-        let (ci_low, ci_high) = clopper_pearson_ci(
-            (power * TRIALS as f64).round() as usize,
-            TRIALS,
-            0.05,
-        );
+        let (ci_low, ci_high) =
+            clopper_pearson_ci((power * TRIALS as f64).round() as usize, TRIALS, 0.05);
 
         let passed = power >= min_power && power <= max_power;
         let status = if passed { "✓" } else { "✗" };
@@ -396,7 +397,8 @@ fn large_effect_detection() {
 
     eprintln!(
         "\n[large_effect] Testing {:.0}μs effect over {} trials",
-        EFFECT_NS as f64 / 1000.0, TRIALS
+        EFFECT_NS as f64 / 1000.0,
+        TRIALS
     );
 
     let mut detections = 0;

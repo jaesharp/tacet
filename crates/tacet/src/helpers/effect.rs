@@ -51,16 +51,18 @@ use crate::measurement::perf::LinuxPerfTimer;
 // Linux ARM64: Get or initialize the effect timer
 #[cfg(all(target_os = "linux", target_arch = "aarch64", feature = "perf"))]
 fn get_effect_timer() -> Option<&'static LinuxPerfTimer> {
-    use std::sync::OnceLock;
     use crate::measurement::perf::LinuxPerfTimer;
+    use std::sync::OnceLock;
 
     static EFFECT_TIMER: OnceLock<Option<LinuxPerfTimer>> = OnceLock::new();
 
-    EFFECT_TIMER.get_or_init(|| {
-        // Try to create a perf_event timer for effect calibration
-        // This uses syscall-based reads (not mmap) so no PMU multiplexing issues
-        LinuxPerfTimer::new().ok()
-    }).as_ref()
+    EFFECT_TIMER
+        .get_or_init(|| {
+            // Try to create a perf_event timer for effect calibration
+            // This uses syscall-based reads (not mmap) so no PMU multiplexing issues
+            LinuxPerfTimer::new().ok()
+        })
+        .as_ref()
 }
 
 // =============================================================================
@@ -116,9 +118,8 @@ impl BundleCalibration {
         const LARGE_SAMPLE_COUNT: usize = 100_000;
         const MAX_REASONABLE_CYCLES: u64 = 10_000_000_000; // 10B cycles (~4s at 2.5GHz)
 
-        let mut calibration_timer = LinuxPerfTimer::new().unwrap_or_else(|_| {
-            panic!("Failed to create perf timer during calibration")
-        });
+        let mut calibration_timer = LinuxPerfTimer::new()
+            .unwrap_or_else(|_| panic!("Failed to create perf timer during calibration"));
 
         // Retry up to 3 times if we get bogus overflow values or measurement errors
         for _attempt in 0..3 {
@@ -2073,7 +2074,8 @@ mod tests {
         );
 
         // Check that individual measurements don't vary wildly from median
-        let outliers: Vec<_> = measurements.iter()
+        let outliers: Vec<_> = measurements
+            .iter()
             .filter(|&&m| {
                 let individual_ratio = m as f64 / TARGET_NS as f64;
                 !(0.3..=5.0).contains(&individual_ratio)
@@ -2202,9 +2204,12 @@ mod tests {
              Warm1: {:.0}ns total ({:.4}ns/iter)\n\
              Warm2: {:.0}ns total ({:.4}ns/iter)\n\
              Cold/Warm ratio: {:.2}x",
-            cold_ns, cold_ns / ITERATIONS as f64,
-            warm_ns, warm_ns / ITERATIONS as f64,
-            warm2_ns, warm2_ns / ITERATIONS as f64,
+            cold_ns,
+            cold_ns / ITERATIONS as f64,
+            warm_ns,
+            warm_ns / ITERATIONS as f64,
+            warm2_ns,
+            warm2_ns / ITERATIONS as f64,
             cold_ns / warm_ns
         );
 
@@ -2231,20 +2236,19 @@ mod tests {
 
         init_effect_injection();
 
-        let cal_info = BUNDLE_CALIBRATION.with(|cal| {
-            cal.as_ref().map(|c| c.cost_per_unit)
-        });
+        let cal_info = BUNDLE_CALIBRATION.with(|cal| cal.as_ref().map(|c| c.cost_per_unit));
         eprintln!("Calibration cost_per_unit: {:?}", cal_info);
 
         if let Some(cost) = cal_info {
             eprintln!("\nIteration calculations:");
             for target in [1_000u64, 5_000, 10_000, 50_000, 100_000] {
-                let iterations = BUNDLE_CALIBRATION.with(|cal| {
-                    cal.as_ref().map(|c| c.iterations_for_target(target))
-                });
+                let iterations = BUNDLE_CALIBRATION
+                    .with(|cal| cal.as_ref().map(|c| c.iterations_for_target(target)));
                 eprintln!(
                     "  {}ns → {:?} iterations (expected: {:.0})",
-                    target, iterations, target as f64 / cost
+                    target,
+                    iterations,
+                    target as f64 / cost
                 );
             }
         }
@@ -2256,7 +2260,9 @@ mod tests {
             let elapsed_ns = start.elapsed().as_nanos() as f64;
             eprintln!(
                 "  spin_bundle({}) → {:.0}ns ({:.4}ns/iter)",
-                iterations, elapsed_ns, elapsed_ns / iterations as f64
+                iterations,
+                elapsed_ns,
+                elapsed_ns / iterations as f64
             );
         }
 

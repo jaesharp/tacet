@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-X86="54.92.156.192"
+X86="98.84.17.7"
 ARM="13.223.200.77"
 
 echo "=== AWS Benchmark Server Monitor ==="
