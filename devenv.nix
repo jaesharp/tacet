@@ -83,7 +83,7 @@ let
       owner = "tlsfuzzer";
       repo = "tlsfuzzer";
       rev = "master";
-      hash = "sha256-XBXk1LsCJq+xPQecOpY862YZKg75bPpLlhSnu6VZNUY=";
+      hash = "sha256-8Bcgyvnyaxy7a9x4prx56lzbHjsSJfDfywp/HdpjqFw=";
     };
 
     propagatedBuildInputs = [
