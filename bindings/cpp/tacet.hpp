@@ -494,19 +494,6 @@ inline const char* exploitability_to_string(ToExploitability exploitability) {
 }
 
 /**
- * @brief Convert ToEffectPattern to a human-readable string.
- */
-inline const char* pattern_to_string(ToEffectPattern pattern) {
-    switch (pattern) {
-    case ToEffectPattern::UniformShift:  return "UniformShift";
-    case ToEffectPattern::TailEffect:    return "TailEffect";
-    case ToEffectPattern::Mixed:         return "Mixed";
-    case ToEffectPattern::Indeterminate: return "Indeterminate";
-    default:                             return "Unknown";
-    }
-}
-
-/**
  * @brief Convert ToAttackerModel to a human-readable string.
  */
 inline const char* attacker_model_to_string(ToAttackerModel model) {
@@ -815,13 +802,6 @@ inline std::ostream& operator<<(std::ostream& os, ToExploitability exploitabilit
 }
 
 /**
- * @brief Output operator for ToEffectPattern.
- */
-inline std::ostream& operator<<(std::ostream& os, ToEffectPattern pattern) {
-    return os << pattern_to_string(pattern);
-}
-
-/**
  * @brief Output operator for ToAttackerModel.
  */
 inline std::ostream& operator<<(std::ostream& os, ToAttackerModel model) {
@@ -840,9 +820,8 @@ inline std::ostream& operator<<(std::ostream& os, ToInconclusiveReason reason) {
  */
 inline std::ostream& operator<<(std::ostream& os, const ToEffect& effect) {
     os << std::fixed << std::setprecision(2);
-    os << effect.shift_ns << " ns (shift) + " << effect.tail_ns << " ns (tail)";
-    os << " [" << effect.ci_low_ns << ", " << effect.ci_high_ns << "] ns 95% CI";
-    os << ", pattern: " << effect.pattern;
+    os << effect.max_effect_ns << " ns";
+    os << " [" << effect.ci_low_ns << ", " << effect.ci_high_ns << "] 95% CI";
     return os;
 }
 

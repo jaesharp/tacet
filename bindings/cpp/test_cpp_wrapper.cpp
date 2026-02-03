@@ -370,13 +370,6 @@ TEST(enum_to_string_exploitability) {
     ASSERT(std::strcmp(exploitability_to_string(ToExploitability::ObviousLeak), "ObviousLeak") == 0);
 }
 
-TEST(enum_to_string_pattern) {
-    ASSERT(std::strcmp(pattern_to_string(ToEffectPattern::UniformShift), "UniformShift") == 0);
-    ASSERT(std::strcmp(pattern_to_string(ToEffectPattern::TailEffect), "TailEffect") == 0);
-    ASSERT(std::strcmp(pattern_to_string(ToEffectPattern::Mixed), "Mixed") == 0);
-    ASSERT(std::strcmp(pattern_to_string(ToEffectPattern::Indeterminate), "Indeterminate") == 0);
-}
-
 TEST(enum_to_string_attacker_model) {
     ASSERT(std::strcmp(attacker_model_to_string(ToAttackerModel::SharedHardware), "SharedHardware") == 0);
     ASSERT(std::strcmp(attacker_model_to_string(ToAttackerModel::PostQuantum), "PostQuantum") == 0);
@@ -562,12 +555,6 @@ TEST(stream_operator_exploitability) {
     ASSERT_EQ(oss.str(), std::string("StandardRemote"));
 }
 
-TEST(stream_operator_pattern) {
-    std::ostringstream oss;
-    oss << ToEffectPattern::UniformShift;
-    ASSERT_EQ(oss.str(), std::string("UniformShift"));
-}
-
 TEST(stream_operator_attacker_model) {
     std::ostringstream oss;
     oss << ToAttackerModel::AdjacentNetwork;
@@ -582,19 +569,17 @@ TEST(stream_operator_inconclusive_reason) {
 
 TEST(stream_operator_effect) {
     ToEffect effect{};
-    effect.shift_ns = 10.5;
-    effect.tail_ns = 5.25;
+    effect.max_effect_ns = 15.75;
     effect.ci_low_ns = 8.0;
     effect.ci_high_ns = 18.0;
-    effect.pattern = ToEffectPattern::Mixed;
 
     std::ostringstream oss;
     oss << effect;
     std::string s = oss.str();
 
-    ASSERT(s.find("10.5") != std::string::npos);  // shift_ns
-    ASSERT(s.find("5.25") != std::string::npos);  // tail_ns
-    ASSERT(s.find("Mixed") != std::string::npos);  // pattern
+    ASSERT(s.find("15.75") != std::string::npos);  // max_effect_ns
+    ASSERT(s.find("8.00") != std::string::npos);   // ci_low_ns
+    ASSERT(s.find("18.00") != std::string::npos);  // ci_high_ns
 }
 
 TEST(stream_operator_result) {
