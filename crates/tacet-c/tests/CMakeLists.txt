@@ -1,10 +1,10 @@
-# CMakeLists.txt for timing-oracle C API tests
+# CMakeLists.txt for tacet C API tests
 #
 # Build instructions:
 #   mkdir build && cd build
 #   cmake ..
 #   make
-#   ./timing_oracle_tests
+#   ./tacet_tests
 #
 # Or with ctest:
 #   ctest --output-on-failure
@@ -12,10 +12,10 @@
 # Prerequisites:
 #   - CMake 3.14+
 #   - cmocka library (brew install cmocka / apt install libcmocka-dev)
-#   - libtiming_oracle_c built (cargo build in parent crate)
+#   - libtacet_c built (cargo build in parent crate)
 
 cmake_minimum_required(VERSION 3.14)
-project(timing_oracle_c_tests C)
+project(tacet_c_tests C)
 
 # C standard
 set(CMAKE_C_STANDARD 11)
@@ -59,31 +59,31 @@ if(NOT CMOCKA_FOUND)
     )
 endif()
 
-# Find the timing-oracle-c library
+# Find the tacet-c library
 # Look in parent crate's target directory
-set(TIMING_ORACLE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
-set(TIMING_ORACLE_INCLUDE "${TIMING_ORACLE_ROOT}/include")
+set(TACET_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
+set(TACET_INCLUDE "${TACET_ROOT}/include")
 
 # Try to find the library in various locations
-find_library(TIMING_ORACLE_LIB
-    NAMES timing_oracle_c libtiming_oracle_c
+find_library(TACET_LIB
+    NAMES tacet_c libtacet_c
     HINTS
-        "${TIMING_ORACLE_ROOT}/../../target/release"
-        "${TIMING_ORACLE_ROOT}/../../target/debug"
+        "${TACET_ROOT}/../../target/release"
+        "${TACET_ROOT}/../../target/debug"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../target/release"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../../target/debug"
     NO_DEFAULT_PATH
 )
 
-if(NOT TIMING_ORACLE_LIB)
+if(NOT TACET_LIB)
     message(FATAL_ERROR
-        "Could not find libtiming_oracle_c. "
+        "Could not find libtacet_c. "
         "Please build the Rust library first with: cargo build --release"
     )
 endif()
 
-message(STATUS "Found timing_oracle_c: ${TIMING_ORACLE_LIB}")
-message(STATUS "Include directory: ${TIMING_ORACLE_INCLUDE}")
+message(STATUS "Found tacet_c: ${TACET_LIB}")
+message(STATUS "Include directory: ${TACET_INCLUDE}")
 message(STATUS "CMocka include: ${CMOCKA_INCLUDE_DIRS}")
 message(STATUS "CMocka libraries: ${CMOCKA_LIBRARIES}")
 
@@ -101,49 +101,49 @@ set(TEST_SOURCES
 )
 
 # Create test executable
-add_executable(timing_oracle_tests ${TEST_SOURCES})
+add_executable(tacet_tests ${TEST_SOURCES})
 
 # Include directories
-target_include_directories(timing_oracle_tests PRIVATE
-    ${TIMING_ORACLE_INCLUDE}
+target_include_directories(tacet_tests PRIVATE
+    ${TACET_INCLUDE}
     ${CMOCKA_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 # Link libraries
-target_link_libraries(timing_oracle_tests PRIVATE
-    ${TIMING_ORACLE_LIB}
+target_link_libraries(tacet_tests PRIVATE
+    ${TACET_LIB}
     ${CMOCKA_LIBRARIES}
 )
 
 # Platform-specific settings
 if(APPLE)
     # macOS: Link against system frameworks needed by Rust
-    target_link_libraries(timing_oracle_tests PRIVATE
+    target_link_libraries(tacet_tests PRIVATE
         "-framework Security"
         "-framework CoreFoundation"
     )
     # Set rpath for finding dylib
-    set_target_properties(timing_oracle_tests PROPERTIES
+    set_target_properties(tacet_tests PROPERTIES
         BUILD_RPATH "@loader_path;${CMAKE_CURRENT_SOURCE_DIR}/../../../target/release;${CMAKE_CURRENT_SOURCE_DIR}/../../../target/debug"
         INSTALL_RPATH "@loader_path"
     )
 elseif(UNIX)
     # Linux: Link against pthread and dl
-    target_link_libraries(timing_oracle_tests PRIVATE
+    target_link_libraries(tacet_tests PRIVATE
         pthread
         dl
         m
     )
     # Set rpath for finding shared library
-    set_target_properties(timing_oracle_tests PROPERTIES
+    set_target_properties(tacet_tests PROPERTIES
         BUILD_RPATH "$ORIGIN;${CMAKE_CURRENT_SOURCE_DIR}/../../../target/release;${CMAKE_CURRENT_SOURCE_DIR}/../../../target/debug"
         INSTALL_RPATH "$ORIGIN"
     )
 endif()
 
 # Compiler warnings
-target_compile_options(timing_oracle_tests PRIVATE
+target_compile_options(tacet_tests PRIVATE
     -Wall
     -Wextra
     -Wpedantic
@@ -155,11 +155,11 @@ enable_testing()
 
 # Add test target for ctest
 add_test(NAME timing_oracle_fast_tests
-    COMMAND timing_oracle_tests fast
+    COMMAND tacet_tests fast
 )
 
 add_test(NAME timing_oracle_all_tests
-    COMMAND timing_oracle_tests all
+    COMMAND tacet_tests all
 )
 
 # Set test properties
@@ -175,25 +175,25 @@ set_tests_properties(timing_oracle_all_tests PROPERTIES
 
 # Individual test group targets
 add_test(NAME timing_oracle_config_tests
-    COMMAND timing_oracle_tests config
+    COMMAND tacet_tests config
 )
 add_test(NAME timing_oracle_one_shot_tests
-    COMMAND timing_oracle_tests one_shot
+    COMMAND tacet_tests one_shot
 )
 add_test(NAME timing_oracle_adaptive_tests
-    COMMAND timing_oracle_tests adaptive
+    COMMAND tacet_tests adaptive
 )
 add_test(NAME timing_oracle_error_tests
-    COMMAND timing_oracle_tests error
+    COMMAND tacet_tests error
 )
 add_test(NAME timing_oracle_memory_tests
-    COMMAND timing_oracle_tests memory
+    COMMAND tacet_tests memory
 )
 add_test(NAME timing_oracle_known_leaky_tests
-    COMMAND timing_oracle_tests known_leaky
+    COMMAND tacet_tests known_leaky
 )
 add_test(NAME timing_oracle_known_safe_tests
-    COMMAND timing_oracle_tests known_safe
+    COMMAND tacet_tests known_safe
 )
 
 # Set labels for individual tests
@@ -208,26 +208,26 @@ set_tests_properties(timing_oracle_known_safe_tests PROPERTIES LABELS "slow" TIM
 # Custom target for fast tests
 add_custom_target(test_fast
     COMMAND ${CMAKE_CTEST_COMMAND} -L fast --output-on-failure
-    DEPENDS timing_oracle_tests
+    DEPENDS tacet_tests
     COMMENT "Running fast tests..."
 )
 
 # Custom target for all tests
 add_custom_target(test_all
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-    DEPENDS timing_oracle_tests
+    DEPENDS tacet_tests
     COMMENT "Running all tests..."
 )
 
 # Print configuration summary
 message(STATUS "")
-message(STATUS "=== timing-oracle C tests configuration ===")
-message(STATUS "Library: ${TIMING_ORACLE_LIB}")
-message(STATUS "Include: ${TIMING_ORACLE_INCLUDE}")
+message(STATUS "=== tacet C tests configuration ===")
+message(STATUS "Library: ${TACET_LIB}")
+message(STATUS "Include: ${TACET_INCLUDE}")
 message(STATUS "CMocka: ${CMOCKA_LIBRARIES}")
 message(STATUS "")
 message(STATUS "Build with: cmake --build .")
-message(STATUS "Run fast tests: ./timing_oracle_tests fast")
-message(STATUS "Run all tests: ./timing_oracle_tests all")
+message(STATUS "Run fast tests: ./tacet_tests fast")
+message(STATUS "Run all tests: ./tacet_tests all")
 message(STATUS "Or use ctest: ctest -L fast --output-on-failure")
 message(STATUS "")
