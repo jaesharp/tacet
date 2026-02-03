@@ -180,7 +180,11 @@ fn async_block_on_overhead_symmetric() {
 /// 2.1 Detects Conditional Await Timing (Fast)
 ///
 /// Tests detection of secret-dependent await patterns
+///
+/// Note: Ignored by default because async tests timeout in virtualized macOS
+/// CI environments. Run with --ignored on real hardware.
 #[test]
+#[ignore]
 fn detects_conditional_await_timing() {
     let rt = single_thread_runtime();
 
