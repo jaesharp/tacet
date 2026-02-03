@@ -165,8 +165,7 @@ static void test_no_false_positive_xor_fold(void **state) {
             case Unmeasurable: printf("UNMEASURABLE\n"); break;
         }
         printf("Leak probability: %.2f%%\n", final_result.leak_probability * 100.0);
-        printf("Effect: shift=%.2f ns, tail=%.2f ns\n",
-               final_result.effect.shift_ns, final_result.effect.tail_ns);
+        printf("Effect: max_effect=%.2f ns\n", final_result.effect.max_effect_ns);
         printf("Samples used: %llu per class\n", (unsigned long long)final_result.samples_used);
     } else {
         /* Get final state */

@@ -96,8 +96,8 @@ static void test_analyze_shifted_samples(void **state) {
     /* With 2000 tick shift at ~3GHz, that's ~600+ ns, should be detected */
     assert_true(result.leak_probability > 0.5);
 
-    /* Effect should show a shift */
-    assert_true(result.effect.shift_ns > 0.0 || result.effect.tail_ns > 0.0);
+    /* Effect should show a measurable difference */
+    assert_true(result.effect.max_effect_ns > 0.0);
 
     free(baseline);
     free(sample);
@@ -242,8 +242,9 @@ static void test_analyze_result_fields(void **state) {
     assert_true(result.samples_used > 0);
     assert_true(result.elapsed_secs >= 0.0);
 
-    /* Effect pattern should be valid */
-    assert_true(result.effect.pattern >= UniformShift && result.effect.pattern <= Indeterminate);
+    /* Effect should have valid structure */
+    assert_true(result.effect.max_effect_ns >= 0.0);
+    assert_true(result.effect.ci_low_ns <= result.effect.ci_high_ns);
 
     /* Quality should be valid */
     assert_true(result.quality >= Excellent && result.quality <= TooNoisy);
