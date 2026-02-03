@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths:
       - 'crates/tacet-c/**'
-      - 'crates/tacet-napi/**'
       - 'crates/tacet-go/**'
       - 'crates/tacet-core/**'
       - 'bindings/**'
@@ -13,7 +12,6 @@ on:
   pull_request:
     paths:
       - 'crates/tacet-c/**'
-      - 'crates/tacet-napi/**'
       - 'crates/tacet-go/**'
       - 'crates/tacet-core/**'
       - 'bindings/**'
@@ -125,45 +123,6 @@ jobs:
           LD_LIBRARY_PATH=${{ github.workspace }}/target/release \
           /tmp/test_cpp_wrapper
         shell: bash
-
-  # ============================================================
-  # Node.js/Bun (NAPI) binding tests
-  # ============================================================
-  test-napi-js:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: crates/tacet-napi
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: "crates/tacet-napi"
-          shared-key: "napi-${{ matrix.os }}"
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Build native addon
-        run: bun run build:native
-
-      - name: Build TypeScript
-        run: bun run build:ts
-
-      - name: Run tests
-        run: bun test
-        timeout-minutes: 5
 
   # ============================================================
   # Go binding tests

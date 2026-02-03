@@ -28,6 +28,10 @@
   columns=fullflexible,
 }
 
+% For URLs
+\usepackage{hyperref}
+\hypersetup{hidelinks}
+
 % Custom commands
 \newcommand{\tacet}{\textsc{Tacet}\xspace}
 \newcommand{\dudect}{\textsc{dudect}\xspace}
@@ -78,7 +82,7 @@ developers to place false confidence in potentially vulnerable code.
 %
 We present \tacet, a timing side-channel detection library that provides
 \emph{calibrated verdicts}: when evidence is insufficient, \tacet reports
-Inconclusive rather than guessing, preventing false confidence under noise.
+Inconclusive rather than guessing, indicating when evidence is insufficient.
 %
 \tacet achieves this through Bayesian inference over quantile differences,
 outputting interpretable posterior probabilities $\prob{\text{leak} > \theta \given \text{data}}$
@@ -139,7 +143,7 @@ Our contributions are:
 \begin{enumerate}
     \item \textbf{Calibrated verdicts}: We introduce a three-way decision framework
           (Pass/Fail/Inconclusive) that explicitly reports when evidence is
-          insufficient, preventing false confidence under noisy conditions.
+          insufficient, rather than forcing potentially incorrect verdicts.
 
     \item \textbf{Interpretable uncertainty}: \tacet outputs posterior probabilities
           $\prob{\text{leak} > \theta \given \text{data}}$ rather than p-values,
@@ -275,6 +279,15 @@ Integrated measurement & $\checkmark$ & $\checkmark$ & $\times$ & $\times$ & $\c
 % NOTE: Design Goals merged into section intro to save space
 % Key goals: calibrated verdicts, interpretable output, robust to real-world
 % measurement conditions, practical CI integration
+
+\paragraph{Threshold selection.}
+The threshold $\theta$ defines the minimum effect size worth detecting. There is no
+single correct value---it depends on the threat model. We provide presets based on
+published attacks: \textsc{SharedHardware} (0.4\,ns, $\approx$2 cycles at 5\,GHz) for co-resident
+attackers exploiting cache timing~\cite{bernstein05}; \textsc{AdjacentNetwork}
+(100\,ns) for LAN attackers leveraging request multiplexing~\cite{timelesstiming2020};
+\textsc{RemoteNetwork} (50\,$\mu$s) for general internet exposure. Users may
+specify custom thresholds for specialized scenarios.
 
 %-------------------------------------------------------------------------------
 \subsection{Three-Way Decisions}
@@ -477,7 +490,7 @@ Integrated measurement & $\checkmark$ & $\checkmark$ & $\times$ & $\times$ & $\c
 % Discussion of benchmark results
 % - tacet maintains calibrated verdicts across conditions
 % - Other tools: false positives under noise, false negatives under autocorrelation
-% - tacet's Inconclusive rate is the "price of honesty"
+% - tacet's Inconclusive rate is the tradeoff for reliability
 
 %-------------------------------------------------------------------------------
 \subsection{Crypto Library Validation}
