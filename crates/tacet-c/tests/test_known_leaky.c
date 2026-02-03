@@ -29,11 +29,15 @@
 /* Test parameters */
 #define CALIBRATION_SAMPLES 5000
 #define BATCH_SIZE 1000
-#define DATA_SIZE 32
+#define DATA_SIZE 512  /* Large size for better measurability */
 #define MAX_ITERATIONS 200
 
-/* Secret key for comparison tests */
-static uint8_t secret[DATA_SIZE];
+/* Secret key for comparison tests - ALL ZEROS.
+ * This creates a large timing difference:
+ * - Baseline (zeros) matches all 512 bytes → loops through ALL bytes → SLOW
+ * - Sample (random) mismatches on first non-zero byte → exits early → FAST
+ */
+static uint8_t secret[DATA_SIZE] = {0};
 
 /* Get current time in seconds */
 static double get_time(void) {
@@ -42,11 +46,10 @@ static double get_time(void) {
     return tv.tv_sec + tv.tv_usec / 1e6;
 }
 
-/* Setup function to initialize secret with random data */
+/* Setup function - secret is already initialized to zeros */
 static int setup_secret(void **state) {
     (void)state;
-    uint32_t seed = 0xDEADBEEF;
-    fill_random(secret, sizeof(secret), &seed);
+    /* Secret stays as all zeros - no need to reinitialize */
     return 0;
 }
 
@@ -58,8 +61,8 @@ static int setup_secret(void **state) {
  *
  * The leaky_compare function has a classic timing vulnerability:
  * - Returns false immediately when first mismatching byte is found
- * - All-zeros input exits quickly (first byte likely differs from secret)
- * - Random input exits later on average (matches more bytes)
+ * - All-zeros input (baseline) MATCHES all-zeros secret → loops ALL 512 bytes → SLOW
+ * - Random input (sample) MISMATCHES on first non-zero byte → exits early → FAST
  *
  * Configuration:
  * - passThreshold: 0.01 (very strict pass requirement)
@@ -227,15 +230,17 @@ static void test_detects_early_exit_comparison(void **state) {
 static void test_detects_branch_timing(void **state) {
     (void)state;
 
-    /* This test uses the same leaky_compare but with a different secret pattern
-     * to verify the detection works consistently. */
+    /* This test uses the same leaky_compare but with the same all-zeros secret.
+     * Like the first test:
+     * - Baseline (zeros) MATCHES all-zeros secret → loops ALL bytes → SLOW
+     * - Sample (random) MISMATCHES on first non-zero byte → exits early → FAST */
 
     printf("\n=== Known Leaky Test: Branch Timing ===\n");
 
-    /* Use a different secret pattern: all 0xFF bytes */
+    /* Use all-zeros secret for large timing difference */
     uint8_t branch_secret[DATA_SIZE];
     for (size_t i = 0; i < DATA_SIZE; i++) {
-        branch_secret[i] = 0xFF;
+        branch_secret[i] = 0;
     }
 
     /* Allocate sample arrays */

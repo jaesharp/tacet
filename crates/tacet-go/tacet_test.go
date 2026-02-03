@@ -625,16 +625,16 @@ func TestKnownLeakyEarlyExitComparison(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	// Use 512-byte inputs for better measurability
+	// Use 512-byte inputs for better measurability.
+	// Secret is all zeros so that:
+	// - Baseline (zeros) matches all 512 bytes → loops through ALL bytes → SLOW
+	// - Sample (random) mismatches on first non-zero byte → exits early → FAST
+	// This creates a large, easily detectable timing difference.
 	inputSize := 512
-	secret := make([]byte, inputSize)
-	for i := range secret {
-		secret[i] = byte(i * 17)
-	}
+	secret := make([]byte, inputSize) // All zeros
 
 	leakyOp := FuncOperation(func(input []byte) {
 		// Early-exit comparison - KNOWN LEAKY
-		// Zeros match secret[0..n] where n depends on secret
 		_ = leakyCompare(input, secret)
 	})
 

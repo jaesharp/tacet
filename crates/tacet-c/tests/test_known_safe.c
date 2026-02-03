@@ -29,7 +29,7 @@
 /* Test parameters */
 #define CALIBRATION_SAMPLES 5000
 #define BATCH_SIZE 1000
-#define DATA_SIZE 32
+#define DATA_SIZE 512  /* Large size for better measurability */
 #define MAX_ITERATIONS 200
 
 /* Get current time in seconds */
