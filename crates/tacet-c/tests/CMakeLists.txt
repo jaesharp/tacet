@@ -110,6 +110,11 @@ target_include_directories(tacet_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+# Link directories (needed for pkg-config found libraries)
+if(CMOCKA_LIBRARY_DIRS)
+    target_link_directories(tacet_tests PRIVATE ${CMOCKA_LIBRARY_DIRS})
+endif()
+
 # Link libraries
 target_link_libraries(tacet_tests PRIVATE
     ${TACET_LIB}
