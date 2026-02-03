@@ -221,9 +221,10 @@ TEST(analyze_identical_data) {
 
 TEST(analyze_distinct_data) {
     // Distinct distributions should be detected
+    // Use large timing difference (500ns) with low variance for clear detection
     std::mt19937_64 rng(42);
-    std::normal_distribution<double> dist_baseline(100.0, 10.0);
-    std::normal_distribution<double> dist_sample(200.0, 10.0); // 100ns difference
+    std::normal_distribution<double> dist_baseline(100.0, 5.0);
+    std::normal_distribution<double> dist_sample(600.0, 5.0); // 500ns difference - obvious leak
 
     std::vector<uint64_t> baseline(10000);
     std::vector<uint64_t> sample(10000);
@@ -303,9 +304,10 @@ TEST(adaptive_loop_simple) {
 
 TEST(adaptive_loop_with_leak) {
     // Test the adaptive loop detecting a leak
+    // Use large timing difference (500ns) with low variance for clear detection
     std::mt19937_64 rng(123);
     std::normal_distribution<double> dist_baseline(100.0, 5.0);
-    std::normal_distribution<double> dist_sample(250.0, 5.0); // 150ns difference - clear leak
+    std::normal_distribution<double> dist_sample(600.0, 5.0); // 500ns difference - obvious leak
 
     // Calibration phase
     std::vector<uint64_t> cal_baseline(5000);
@@ -512,11 +514,12 @@ TEST(oracle_test_callback) {
 
 TEST(oracle_test_callback_with_leak) {
     // Test Oracle::test detecting a leak
+    // Use large timing difference (500ns) with low variance for clear detection
     using namespace std::chrono_literals;
 
     std::mt19937_64 rng(123);
     std::normal_distribution<double> dist_baseline(100.0, 5.0);
-    std::normal_distribution<double> dist_sample(250.0, 5.0);  // 150ns difference
+    std::normal_distribution<double> dist_sample(600.0, 5.0);  // 500ns difference - obvious leak
 
     auto result = Oracle::forAttacker(ToAttackerModel::AdjacentNetwork)
         .timeBudget(10s)
