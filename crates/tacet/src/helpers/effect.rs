@@ -1834,7 +1834,12 @@ mod tests {
     /// - CNTFRQ_EL0 is incorrectly programmed by firmware
     /// - TSC frequency detection returns wrong value
     /// - Platform detection guesses wrong frequency
+    ///
+    /// Note: Ignored by default because this test fails in virtualized environments
+    /// (like macOS GitHub Actions runners) where the ARM64 counter frequency from
+    /// CNTFRQ_EL0 doesn't match the actual timer rate.
     #[test]
+    #[ignore]
     fn test_frequency_accuracy_validation() {
         let backend = timer_backend_name();
         if backend == "instant_fallback" {
