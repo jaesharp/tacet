@@ -1,6 +1,6 @@
 /**
  * @file test_cpp_wrapper.cpp
- * @brief Tests for the timing_oracle.hpp C++ wrapper.
+ * @brief Tests for the tacet.hpp C++ wrapper.
  *
  * This file tests the modern C++ wrapper over the C bindings:
  * - Version retrieval
@@ -11,15 +11,15 @@
  *
  * Build (from repo root, after building C library):
  *   clang++ -std=c++20 -c bindings/cpp/test_cpp_wrapper.cpp \
- *           -I crates/timing-oracle-c/include -I bindings/cpp
+ *           -I crates/tacet-c/include -I bindings/cpp
  *
  * Build and link (requires built library):
  *   clang++ -std=c++20 bindings/cpp/test_cpp_wrapper.cpp \
- *           -I crates/timing-oracle-c/include -I bindings/cpp \
- *           -L target/release -ltiming_oracle_c -o test_cpp_wrapper
+ *           -I crates/tacet-c/include -I bindings/cpp \
+ *           -L target/release -ltacet_c -o test_cpp_wrapper
  */
 
-#include "timing_oracle.hpp"
+#include "tacet.hpp"
 
 #include <cassert>
 #include <chrono>
@@ -30,7 +30,7 @@
 #include <sstream>
 #include <vector>
 
-using namespace timing_oracle;
+using namespace tacet;
 
 // ============================================================================
 // Test Utilities
@@ -619,7 +619,7 @@ TEST(stream_operator_result) {
 // ============================================================================
 
 int main() {
-    printf("\n=== timing_oracle.hpp C++ Wrapper Tests ===\n\n");
+    printf("\n=== tacet.hpp C++ Wrapper Tests ===\n\n");
     printf("Library version: %s\n\n", version().c_str());
 
     // Tests run automatically via static initialization
