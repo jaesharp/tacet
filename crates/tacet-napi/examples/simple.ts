@@ -34,7 +34,7 @@ const result1 = TimingOracle.forAttacker(AttackerModel.AdjacentNetwork)
 console.log("\nResult:", result1.outcomeString());
 console.log("Leak probability:", result1.leakProbabilityPercent());
 console.log("Batching:", result1.batchingInfo.rationale);
-console.log(`Effect: shift=${result1.effect.shiftNs.toFixed(2)}ns, tail=${result1.effect.tailNs.toFixed(2)}ns`);
+console.log(`Effect: max=${result1.effect.maxEffectNs.toFixed(2)}ns`);
 
 if (result1.isPass()) {
   console.log("PASS: No timing leak detected\n");
@@ -74,7 +74,7 @@ const result2 = TimingOracle.forAttacker(AttackerModel.AdjacentNetwork)
 console.log("\nResult:", result2.outcomeString());
 console.log("Leak probability:", result2.leakProbabilityPercent());
 console.log("Batching:", result2.batchingInfo.rationale);
-console.log(`Effect: shift=${result2.effect.shiftNs.toFixed(2)}ns, tail=${result2.effect.tailNs.toFixed(2)}ns`);
+console.log(`Effect: max=${result2.effect.maxEffectNs.toFixed(2)}ns`);
 
 if (result2.isPass()) {
   console.log("PASS: No timing leak detected (unexpected!)\n");

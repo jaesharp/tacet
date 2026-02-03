@@ -1,8 +1,10 @@
 name: Update Homebrew Formula
 
 on:
-  release:
-    types: [published]
+  # Wait for release artifacts to be uploaded by the Go Bindings Release workflow
+  workflow_run:
+    workflows: ["Go Bindings Release"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
@@ -17,6 +19,8 @@ jobs:
   update-formula:
     name: Update Homebrew Formula
     runs-on: macos-latest
+    # Only run on successful completion of the Go Bindings Release workflow
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout repository
@@ -27,15 +31,22 @@ jobs:
       - name: Set version
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            VERSION="${{ github.event.release.tag_name }}"
-          else
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.tag }}"
+          else
+            # For workflow_run, get the tag from the head branch or use latest release
+            VERSION=$(gh release view --json tagName -q '.tagName' 2>/dev/null || echo "")
+            if [ -z "$VERSION" ]; then
+              echo "Error: Could not determine version"
+              exit 1
+            fi
           fi
           # Remove 'v' prefix if present
           VERSION_NUMBER="${VERSION#v}"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "version_number=${VERSION_NUMBER}" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Download release artifacts
         run: |

@@ -7,7 +7,6 @@
 import {
   Outcome,
   InconclusiveReason,
-  EffectPattern,
   Exploitability,
   MeasurementQuality,
 } from "../dist/index.js";
@@ -53,24 +52,6 @@ export function inconclusiveReasonName(reason: InconclusiveReason): string {
       return "ThresholdElevated";
     default:
       return `Unknown(${reason})`;
-  }
-}
-
-/**
- * Convert EffectPattern enum value to string.
- */
-export function effectPatternName(pattern: EffectPattern): string {
-  switch (pattern) {
-    case EffectPattern.UniformShift:
-      return "UniformShift";
-    case EffectPattern.TailEffect:
-      return "TailEffect";
-    case EffectPattern.Mixed:
-      return "Mixed";
-    case EffectPattern.Indeterminate:
-      return "Indeterminate";
-    default:
-      return `Unknown(${pattern})`;
   }
 }
 

@@ -11,7 +11,6 @@ import {
   AttackerModel,
   Outcome,
   InconclusiveReason,
-  EffectPattern,
   Exploitability,
   MeasurementQuality,
 } from "../dist/index.js";
@@ -24,7 +23,6 @@ import {
   blackBox,
   outcomeName,
   inconclusiveReasonName,
-  effectPatternName,
   exploitabilityName,
   measurementQualityName,
 } from "./helpers.js";
@@ -61,9 +59,9 @@ describe("Outcome types", () => {
       expect(result.leakProbability).toBeGreaterThanOrEqual(0);
       expect(result.leakProbability).toBeLessThanOrEqual(1);
       expect(result.effect).toBeDefined();
-      expect(result.effect.shiftNs).toBeDefined();
-      expect(result.effect.tailNs).toBeDefined();
-      expect(result.effect.pattern).toBeDefined();
+      expect(result.effect.maxEffectNs).toBeDefined();
+      expect(result.effect.ciLowNs).toBeDefined();
+      expect(result.effect.ciHighNs).toBeDefined();
       expect(result.quality).toBeDefined();
       expect(result.samplesUsed).toBeGreaterThan(0);
       expect(result.elapsedSecs).toBeGreaterThan(0);
@@ -115,10 +113,7 @@ describe("Outcome types", () => {
         expect(result.leakProbability).toBeGreaterThan(0.85);
 
         // Effect should be non-trivial
-        const totalEffect = Math.sqrt(
-          result.effect.shiftNs ** 2 + result.effect.tailNs ** 2
-        );
-        expect(totalEffect).toBeGreaterThan(0);
+        expect(result.effect.maxEffectNs).toBeGreaterThan(0);
       }
     },
     30_000
@@ -209,51 +204,7 @@ describe("Outcome types", () => {
   });
 });
 
-describe("Effect patterns", () => {
-  test("all EffectPattern values are accessible", () => {
-    expect(EffectPattern.UniformShift).toBe(0);
-    expect(EffectPattern.TailEffect).toBe(1);
-    expect(EffectPattern.Mixed).toBe(2);
-    expect(EffectPattern.Indeterminate).toBe(3);
-  });
-
-  test(
-    "effect pattern is determined for detected leaks",
-    () => {
-      const secret = generateZeros(512);
-
-      const result = TimingOracle.forAttacker(AttackerModel.AdjacentNetwork)
-        .timeBudget(15_000)
-        .maxSamples(50_000)
-        .passThreshold(0.01)
-        .failThreshold(0.85)
-        .test(
-          {
-            baseline: () => generateZeros(512),
-            sample: () => generateRandom(512),
-          },
-          (input) => {
-            blackBox(leakyCompare(secret, input));
-          }
-        );
-
-      console.log("\n[effect_pattern_detection]");
-      console.log(`Outcome: ${outcomeName(result.outcome)}`);
-      console.log(`Effect pattern: ${effectPatternName(result.effect.pattern)}`);
-      console.log(`Shift: ${result.effect.shiftNs.toFixed(2)}ns`);
-      console.log(`Tail: ${result.effect.tailNs.toFixed(2)}ns`);
-
-      if (result.outcome === Outcome.Fail) {
-        // Pattern should be determined
-        expect(result.effect.pattern).toBeDefined();
-        // Credible interval should be set
-        expect(result.effect.credibleIntervalLow).toBeDefined();
-        expect(result.effect.credibleIntervalHigh).toBeDefined();
-      }
-    },
-    30_000
-  );
-
+describe("Effect estimates", () => {
   test(
     "effect has credible interval",
     () => {
@@ -273,14 +224,14 @@ describe("Effect patterns", () => {
         );
 
       console.log("\n[effect_credible_interval]");
-      console.log(`CI: [${result.effect.credibleIntervalLow.toFixed(2)}, ${result.effect.credibleIntervalHigh.toFixed(2)}]`);
+      console.log(`CI: [${result.effect.ciLowNs.toFixed(2)}, ${result.effect.ciHighNs.toFixed(2)}]`);
 
       // Credible interval fields should exist
-      expect(result.effect.credibleIntervalLow).toBeDefined();
-      expect(result.effect.credibleIntervalHigh).toBeDefined();
+      expect(result.effect.ciLowNs).toBeDefined();
+      expect(result.effect.ciHighNs).toBeDefined();
       // High should be >= low
-      expect(result.effect.credibleIntervalHigh).toBeGreaterThanOrEqual(
-        result.effect.credibleIntervalLow
+      expect(result.effect.ciHighNs).toBeGreaterThanOrEqual(
+        result.effect.ciLowNs
       );
     },
     20_000
@@ -318,16 +269,14 @@ describe("Exploitability levels", () => {
       console.log("\n[exploitability_appropriate]");
       console.log(`Outcome: ${outcomeName(result.outcome)}`);
       console.log(`Exploitability: ${exploitabilityName(result.exploitability)}`);
-      console.log(`Total effect: ${Math.sqrt(result.effect.shiftNs ** 2 + result.effect.tailNs ** 2).toFixed(2)}ns`);
+      console.log(`Total effect: ${result.effect.maxEffectNs.toFixed(2)}ns`);
 
       if (result.outcome === Outcome.Fail) {
         // Exploitability should be set for failures
         expect(result.exploitability).toBeDefined();
 
         // Exploitability should be based on effect magnitude
-        const totalEffectNs = Math.sqrt(
-          result.effect.shiftNs ** 2 + result.effect.tailNs ** 2
-        );
+        const totalEffectNs = result.effect.maxEffectNs;
 
         // Map expected exploitability based on documented thresholds
         if (totalEffectNs < 10) {
@@ -373,8 +322,7 @@ describe("Measurement quality", () => {
 
       console.log("\n[measurement_quality]");
       console.log(`Quality: ${measurementQualityName(result.quality)}`);
-      console.log(`MDE shift: ${result.mdeShiftNs.toFixed(2)}ns`);
-      console.log(`MDE tail: ${result.mdeTailNs.toFixed(2)}ns`);
+      console.log(`MDE: ${result.mdeNs.toFixed(2)}ns`);
 
       // Quality should be set
       expect(result.quality).toBeDefined();
@@ -415,12 +363,14 @@ describe("Diagnostics", () => {
       expect(result.diagnostics.effectiveSampleSize).toBeDefined();
       expect(result.diagnostics.stationarityRatio).toBeDefined();
       expect(result.diagnostics.stationarityOk).toBeDefined();
-      expect(result.diagnostics.projectionMismatchQ).toBeDefined();
-      expect(result.diagnostics.projectionMismatchOk).toBeDefined();
       expect(result.diagnostics.discreteMode).toBeDefined();
       expect(result.diagnostics.timerResolutionNs).toBeDefined();
       expect(result.diagnostics.lambdaMean).toBeDefined();
       expect(result.diagnostics.lambdaMixingOk).toBeDefined();
+      expect(result.diagnostics.kappaMean).toBeDefined();
+      expect(result.diagnostics.kappaCv).toBeDefined();
+      expect(result.diagnostics.kappaEss).toBeDefined();
+      expect(result.diagnostics.kappaMixingOk).toBeDefined();
     },
     20_000
   );

@@ -65,7 +65,6 @@ export {
   AttackerModelValues,
   OutcomeValues,
   InconclusiveReasonValues,
-  EffectPatternValues,
   ExploitabilityValues,
   MeasurementQualityValues,
   // Low-level functions
@@ -86,7 +85,6 @@ export type {
   AttackerModel,
   Outcome,
   InconclusiveReason,
-  EffectPattern,
   Exploitability,
   MeasurementQuality,
   Config,

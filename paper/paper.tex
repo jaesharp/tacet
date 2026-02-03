@@ -1,0 +1,649 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Tacet: Reliable Timing Side-Channel Detection via Bayesian Inference
+% USENIX Security 2026 Submission
+%
+% Target: USENIX Security 2026, Cycle 2
+% Submission Deadline: Thursday, February 5, 2026, 11:59 PM AoE
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[letterpaper,twocolumn,10pt]{article}
+\usepackage{usenix}
+
+% Additional packages for figures and math
+\usepackage{tikz}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{subcaption}
+\usepackage{xspace}
+
+% For code listings
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  columns=fullflexible,
+}
+
+% Custom commands
+\newcommand{\tacet}{\textsc{Tacet}\xspace}
+\newcommand{\dudect}{\textsc{dudect}\xspace}
+\newcommand{\tlsfuzzer}{\textsc{tlsfuzzer}\xspace}
+\newcommand{\rtlf}{\textsc{RTLF}\xspace}
+\newcommand{\silent}{\textsc{SILENT}\xspace}
+\newcommand{\ie}{i.e.,\xspace}
+\newcommand{\eg}{e.g.,\xspace}
+\newcommand{\etal}{et~al.\xspace}
+\newcommand{\prob}[1]{P(#1)}
+\newcommand{\given}{\,|\,}
+
+%-------------------------------------------------------------------------------
+\begin{document}
+%-------------------------------------------------------------------------------
+
+% No date on title page
+\date{}
+
+% Title (14pt bold per USENIX requirements)
+\title{\Large \bf Tacet: Reliable Timing Side-Channel Detection\\via Bayesian Inference}
+
+% Authors - ANONYMIZED for submission
+% Replace with actual author info for camera-ready
+\author{
+{\rm Anonymous}\\
+Anonymous Institution
+% Add more authors as needed:
+% \and
+% {\rm Second Author}\\
+% Second Institution
+}
+
+\maketitle
+
+%-------------------------------------------------------------------------------
+\begin{abstract}
+%-------------------------------------------------------------------------------
+% ~150-200 words summarizing the key contributions
+% Hook: existing tools give false confidence
+% Solution: calibrated Bayesian verdicts
+% Results: highlight key evaluation findings
+
+Timing side-channel attacks remain a persistent threat to cryptographic implementations.
+Existing detection tools like \dudect and \tlsfuzzer provide binary pass/fail verdicts,
+but offer no indication when measurement noise prevents reliable conclusions---leading
+developers to place false confidence in potentially vulnerable code.
+%
+We present \tacet, a timing side-channel detection library that provides
+\emph{calibrated verdicts}: when evidence is insufficient, \tacet reports
+Inconclusive rather than guessing, preventing false confidence under noise.
+%
+\tacet achieves this through Bayesian inference over quantile differences,
+outputting interpretable posterior probabilities $\prob{\text{leak} > \theta \given \text{data}}$
+rather than p-values.
+Key innovations include block bootstrap covariance estimation to handle
+autocorrelated measurements, quality gates that detect when the model
+cannot reliably distinguish signal from noise, and explicit measurement
+floor tracking.
+%
+Our evaluation on synthetic benchmarks and real cryptographic libraries demonstrates
+that \tacet maintains calibrated verdicts across varying noise levels and
+autocorrelation conditions where existing tools produce unreliable results.
+\tacet is implemented in Rust with C/C++, Go, and JavaScript bindings, designed for
+integration into continuous integration pipelines.
+
+\end{abstract}
+
+%===============================================================================
+% SECTION 1: INTRODUCTION (~1.25 pages)
+%===============================================================================
+\section{Introduction}
+\label{sec:intro}
+
+% Hook: false confidence problem
+% - Existing tools give pass/fail but no indication of uncertainty
+% - Under noisy conditions, this leads to false confidence
+% - Real-world consequence: developers trust passing results that are meaningless
+
+% TODO: Opening hook about false confidence in timing analysis
+% Example: a developer runs dudect, sees "pass", deploys code, but the test
+% was meaningless because noise swamped any potential signal
+
+% TODO: Brief background on timing side-channels and why detection matters
+% - Remote timing attacks (Timeless Timing Attacks demonstrate LAN-like precision)
+% - Local attacks (SGX, containers, hyperthreading)
+% - Importance in CI pipelines
+
+% TODO: State the problem clearly
+% - Binary verdicts conflate "safe" with "couldn't tell"
+% - No interpretable uncertainty quantification
+% - Existing tools assume iid measurements (violated in practice)
+
+% TODO: Introduce tacet as the solution
+% - Three-way decisions: Pass, Fail, Inconclusive
+% - Bayesian inference provides calibrated P(leak > theta | data)
+% - Block bootstrap handles autocorrelation
+% - Quality gates prevent false confidence
+
+%-------------------------------------------------------------------------------
+\subsection{Contributions}
+\label{sec:contributions}
+
+% Bulleted list of contributions (usually 3-5)
+% Each contribution should be concrete and verifiable
+
+Our contributions are:
+
+\begin{enumerate}
+    \item \textbf{Calibrated verdicts}: We introduce a three-way decision framework
+          (Pass/Fail/Inconclusive) that explicitly reports when evidence is
+          insufficient, preventing false confidence under noisy conditions.
+
+    \item \textbf{Interpretable uncertainty}: \tacet outputs posterior probabilities
+          $\prob{\text{leak} > \theta \given \text{data}}$ rather than p-values,
+          providing directly interpretable uncertainty quantification.
+
+    \item \textbf{Robustness to dependent data}: We employ block bootstrap on the
+          acquisition stream to handle autocorrelation in timing measurements,
+          a common violation of iid assumptions that invalidates standard
+          statistical tests.
+
+    \item \textbf{Practical tooling}: We provide a production-ready implementation
+          in Rust with C/C++, Go, and JavaScript (via WASM) bindings, designed for CI integration.
+
+    \item \textbf{Comprehensive evaluation}: We evaluate \tacet against existing
+          tools (\dudect, \tlsfuzzer, \rtlf, \silent) on synthetic benchmarks
+          with controlled effect sizes, autocorrelation, and noise levels,
+          as well as real cryptographic libraries.
+\end{enumerate}
+
+%===============================================================================
+% SECTION 2: BACKGROUND & RELATED WORK (~1.25 pages)
+%===============================================================================
+\section{Background and Related Work}
+\label{sec:background}
+
+% TODO: Timing side-channels 101
+% - What are timing side-channels
+% - Why they matter (real attacks: Lucky 13, Raccoon, MARVIN)
+% - Attacker models: remote, LAN, local/shared hardware
+
+%-------------------------------------------------------------------------------
+\subsection{Timing Side-Channel Attacks}
+\label{sec:background:attacks}
+
+% Brief overview of timing attacks and their practical impact
+% Mention specific attacks: Lucky 13, Raccoon, MARVIN, etc.
+
+%-------------------------------------------------------------------------------
+\subsection{Existing Detection Tools}
+\label{sec:background:tools}
+
+% Survey of existing tools with their approach and limitations
+
+% TODO: dudect
+% - Welch's t-test approach
+% - Simple, fast, widely used
+% - Limitations: assumes normality, no uncertainty quantification
+
+% TODO: tlsfuzzer
+% - Network-level timing analysis
+% - Multiple statistical tests
+% - Limitations: complex setup, autocorrelation handling limited
+
+% TODO: RTLF (USENIX Security 2024)
+% - Empirical iid bootstrap for bounded Type-1 error (10,000 iterations)
+% - 9-decile comparison with per-decile thresholds
+% - Binary verdict (leak/no leak based on any decile exceeding threshold)
+% - Limitations:
+%   * Uses iid bootstrap (does NOT handle autocorrelation)
+%   * Binary verdicts only, no Inconclusive
+%   * No uncertainty quantification beyond Type-I error bound
+%   * R-only, operates on pre-collected measurement files
+%   * No integrated measurement capability
+
+% TODO: SILENT (arXiv 2024)
+% - Non-parametric quantile-based test statistic (we adopt this)
+% - m-dependent block bootstrap (DOES handle autocorrelation)
+% - Bounded error rates via relevance testing
+% - Limitations: binary verdicts only, acknowledges stationarity as limitation,
+%   no active drift detection, R-only research tool
+% - Key differentiator: Tacet outputs Inconclusive when SILENT would force a verdict
+
+%-------------------------------------------------------------------------------
+\subsection{Feature Comparison}
+\label{sec:background:comparison}
+
+% Feature comparison table (from USENIX_PAPER_PLAN.md)
+% This is a key differentiator - shows tacet's unique position
+
+\begin{table*}[t]
+\centering
+\caption{Feature comparison of timing side-channel detection tools.
+         $\checkmark$ = supported, $\circ$ = partial support, $\times$ = not supported.
+         \tacet is the only tool providing calibrated three-way verdicts with interpretable posterior probabilities.}
+\label{tab:comparison}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Feature} & \textbf{\dudect} & \textbf{\tlsfuzzer} & \textbf{\rtlf} & \textbf{\silent} & \textbf{\tacet} \\
+\midrule
+Calibrated verdicts\textsuperscript{1} & $\times$ & $\times$ & $\times$ & $\times$ & $\checkmark$ \\
+Posterior probability\textsuperscript{2} & $\times$ & $\times$ & $\times$ & $\times$ & $\checkmark$ \\
+Stationarity monitoring & $\times$ & $\times$ & $\times$ & $\times$\textsuperscript{3} & $\checkmark$ \\
+Handles autocorrelation & $\times$ & $\circ$ & $\times$ & $\checkmark$\textsuperscript{4} & $\checkmark$ \\
+Model-free dependence\textsuperscript{6} & $\times$ & $\times$ & $\times$ & $\times$ & $\checkmark$ \\
+Non-parametric & $\times$ & $\circ$ & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+Bounded false positive rate & $\circ$ & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+Coarse/discrete timers & $\checkmark$ & $\times$ & $\times$ & $\checkmark$ & $\checkmark$ \\
+Effect size quantification & $\times$ & $\times$ & $\circ$\textsuperscript{5} & $\checkmark$ & $\checkmark$ \\
+Adaptive sampling & $\circ$ & $\times$ & $\times$ & $\checkmark$ & $\checkmark$ \\
+\midrule
+Language support & C/C++/Rust & Python & R & R & C/C++/Go/JS/Rust \\
+Integrated measurement & $\checkmark$ & $\checkmark$ & $\times$ & $\times$ & $\checkmark$ \\
+\bottomrule
+\end{tabular}
+\begin{flushleft}
+\small
+\textsuperscript{1}Reports Inconclusive when evidence is insufficient, rather than forcing a potentially incorrect verdict.
+\textsuperscript{2}Outputs interpretable $\prob{\text{leak} > \theta \given \text{data}}$ rather than binary verdict or p-value.
+\textsuperscript{3}\silent acknowledges stationarity as a limitation; \tacet actively detects drift via quality gates.
+\textsuperscript{4}\silent uses $m$-dependent block bootstrap but assumes a specific parametric dependence structure.
+\textsuperscript{5}\rtlf reports raw decile differences without confidence intervals.
+\textsuperscript{6}No parametric assumption on dependence structure; uses block bootstrap on acquisition stream without $m$-dependence model.
+\end{flushleft}
+\end{table*}
+
+%===============================================================================
+% SECTION 3: TACET'S APPROACH (~3.5 pages)
+%===============================================================================
+\section{Tacet's Approach}
+\label{sec:approach}
+
+% Problem-solution structure (from USENIX_PAPER_PLAN.md):
+% | Problem with existing tools              | Tacet's solution                           |
+% |------------------------------------------|-------------------------------------------|
+% | Binary verdicts conflate "safe"/"unknown"| Three-way decisions with Inconclusive     |
+% | No interpretable uncertainty             | Posterior probability P(leak > θ | data)  |
+% | Assume iid measurements                  | Block bootstrap on acquisition stream     |
+% | Can't handle drift/non-stationarity      | Condition-number monitoring, quality gates|
+% | Fixed sample sizes or invalid stopping   | Adaptive sampling (likelihood-based)      |
+% | No concept of resolution limits          | Explicit measurement floor θ_floor(n)     |
+% | Flaky in CI under noise                  | Quality gates force Inconclusive          |
+
+% NOTE: Design Goals merged into section intro to save space
+% Key goals: calibrated verdicts, interpretable output, robust to real-world
+% measurement conditions, practical CI integration
+
+%-------------------------------------------------------------------------------
+\subsection{Three-Way Decisions}
+\label{sec:approach:decisions}
+
+% Explain the Pass/Fail/Inconclusive framework
+% - Pass: P(leak > θ | data) < 0.05
+% - Fail: P(leak > θ | data) > 0.95
+% - Inconclusive: evidence insufficient to reach either threshold
+%
+% Contrast with binary verdicts that conflate "safe" with "couldn't tell"
+
+%-------------------------------------------------------------------------------
+\subsection{Quantile-Based Test Statistic}
+\label{sec:approach:quantile}
+
+% Explain why we use quantiles (adopted from SILENT)
+% - Captures both uniform shifts (branch changes) and tail effects (cache misses)
+% - Non-parametric: no distributional assumptions
+% - Uses 9 deciles and max_k decision functional
+%
+% IMPORTANT ATTRIBUTION: "We adopt the quantile-difference statistic and max-k
+% decision rule from SILENT~\cite{silent2024}, embedding them in a probabilistic
+% framework that enables calibrated uncertainty quantification. Our key
+% contribution is not the test statistic itself, but the Bayesian inference
+% framework that produces calibrated three-way verdicts with interpretable
+% posterior probabilities."
+
+%-------------------------------------------------------------------------------
+\subsection{Bayesian Inference}
+\label{sec:approach:inference}
+
+% Explain the probabilistic model
+% - Student-t likelihood (heavier tails than Gaussian for robustness)
+% - Prior specification (MDE-based from calibration)
+% - Posterior: P(leak > θ | data)
+%
+% Why Bayesian rather than frequentist?
+% - Direct probability statements
+% - Principled handling of prior information
+% - Valid adaptive sampling
+
+%-------------------------------------------------------------------------------
+\subsection{Handling Autocorrelation}
+\label{sec:approach:autocorrelation}
+
+% Block bootstrap on the acquisition stream
+% - Why standard bootstrap fails with dependent data (affects RTLF)
+% - Block size selection: n^(1/3) heuristic (Politis-White)
+% - Effective sample size calculation
+%
+% Note: SILENT also uses block bootstrap (m-dependent), so autocorrelation handling
+% is NOT a unique differentiator. The key differences are:
+% 1. Tacet doesn't assume a specific parametric m-dependence structure
+% 2. Tacet actively monitors for stationarity violations (quality gates)
+% 3. Tacet outputs Inconclusive when conditions degrade
+
+%-------------------------------------------------------------------------------
+\subsection{Quality Gates}
+\label{sec:approach:gates}
+
+% KEY DIFFERENTIATOR: This is what distinguishes tacet from ALL competitors
+%
+% Explain the quality gate mechanism:
+% - Insufficient information gain (KL divergence < 0.7 nats)
+% - Not learning (KL divergence collapse for 5+ batches)
+% - Would take too long (projected time > 10x budget)
+% - Condition drift detected (variance ratio, autocorrelation change, mean drift)
+% - Condition number κ < 0.3: triggers likelihood inflation warning
+%
+% These gates force Inconclusive when the model can't reliably distinguish
+% signal from noise - preventing false confidence.
+%
+% SILENT acknowledges stationarity as a limitation but does not actively detect
+% violations. Tacet's quality gates fill this gap: when conditions change
+% during measurement, tacet reports Inconclusive rather than producing
+% a potentially misleading verdict.
+
+%-------------------------------------------------------------------------------
+\subsection{Measurement Floor}
+\label{sec:approach:floor}
+
+% Explicit θ_floor(n_eff) as a first-class concept
+% - Shrinks with sqrt(n_eff)
+% - Pass requires θ_eff ≤ θ_user
+% - Prevents claiming "no leak" when resolution is insufficient
+
+%-------------------------------------------------------------------------------
+\subsection{Worked Example}
+\label{sec:approach:example}
+
+% ~1/3 page figure showing the same noisy dataset:
+% - dudect says "Pass" (t < 10)
+% - tacet says "Inconclusive" with posterior visualization
+%
+% This demonstrates the key value proposition: tacet doesn't give false confidence
+
+% TODO: Create figure showing:
+% 1. Timing distribution (noisy, overlapping)
+% 2. dudect output: "PASS" with t-statistic
+% 3. tacet output: "INCONCLUSIVE" with posterior P(leak > θ | data) ≈ 0.4
+
+%===============================================================================
+% SECTION 4: IMPLEMENTATION (~0.75 pages)
+%===============================================================================
+\section{Implementation}
+\label{sec:implementation}
+
+% Brief overview of the implementation
+% - Rust core with unsafe blocks for timing-critical paths
+% - Block bootstrap parallelized with rayon
+% - C/C++ and Go bindings via FFI
+% - ~X KLOC (mention size)
+
+%-------------------------------------------------------------------------------
+\subsection{Measurement Infrastructure}
+\label{sec:implementation:measurement}
+
+% Platform-specific high-resolution timing
+% - x86_64: rdtsc
+% - ARM64: cntvct_el0 (with adaptive batching for coarse resolution)
+% - Optional PMU-based timing (kperf on macOS, perf_event on Linux)
+
+%-------------------------------------------------------------------------------
+\subsection{Adaptive Batching}
+\label{sec:implementation:batching}
+
+% On platforms with coarse timer resolution (e.g., Apple Silicon's 42ns)
+% - Pilot phase to measure operation time
+% - K selection (1-20) to achieve 50+ timer ticks per measurement
+% - Automatically disabled on x86_64 or with PMU timers
+
+%-------------------------------------------------------------------------------
+\subsection{Bindings and CI Integration}
+\label{sec:implementation:bindings}
+
+% NOTE: Merged Language Bindings and CI Integration to save space
+% Single sentence in main text: "Tacet provides C/C++, Go, and JavaScript (via WASM
+% with native timers for Node.js/Deno) bindings, enabling integration into existing
+% crypto library test suites and CI pipelines."
+%
+% Key points to cover briefly:
+% - Same API surface across languages
+% - Memory-safe interop
+% - Configurable time budgets for CI
+% - Non-flaky: Inconclusive rather than random pass/fail
+% - Exit codes for CI scripts
+
+%===============================================================================
+% SECTION 5: EVALUATION (~3.5 pages)
+%===============================================================================
+\section{Evaluation}
+\label{sec:evaluation}
+
+% Key questions:
+% 1. Does tacet provide calibrated verdicts? (FPR/FNR under varying conditions)
+% 2. How does tacet compare to existing tools?
+% 3. Does tacet work on real cryptographic libraries?
+
+%-------------------------------------------------------------------------------
+\subsection{Methodology}
+\label{sec:evaluation:methodology}
+
+% Experimental setup
+% - Hardware configuration (CPU, memory, OS)
+% - Tools compared: dudect, tlsfuzzer, RTLF, SILENT, tacet
+% - Fixed sample sizes across tools for fair comparison
+% - Metrics: FPR, FNR, Inconclusive rate
+
+%-------------------------------------------------------------------------------
+\subsection{Synthetic Benchmarks}
+\label{sec:evaluation:synthetic}
+
+% Three heatmaps (key evaluation figures):
+%
+% 1. Effect size × Tool (fixed moderate noise)
+%    - Shows power comparison
+%    - tacet detects leaks when present, Inconclusive when too small
+%
+% 2. Autocorrelation × Tool (fixed small effect)
+%    - Shows robustness to dependent data
+%    - Other tools break down; tacet maintains calibration
+%
+% 3. Noise level × Tool (null hypothesis)
+%    - Shows FPR under stress
+%    - Other tools show scattered false positives
+%    - tacet shows Inconclusive transitioning to correct Pass
+
+% TODO: Include heatmap figures
+% Color scheme:
+% - Green: Pass (correct when no leak)
+% - Red: Fail/Leak detected
+% - Yellow/Amber: Inconclusive
+% - Gray: Error
+
+%-------------------------------------------------------------------------------
+\subsection{Results}
+\label{sec:evaluation:results}
+
+% Discussion of benchmark results
+% - tacet maintains calibrated verdicts across conditions
+% - Other tools: false positives under noise, false negatives under autocorrelation
+% - tacet's Inconclusive rate is the "price of honesty"
+
+%-------------------------------------------------------------------------------
+\subsection{Crypto Library Validation}
+\label{sec:evaluation:crypto}
+
+% Real-world validation against cryptographic libraries
+% - AES (constant-time implementations)
+% - RSA (potential timing leaks in implementations)
+% - ECC (Curve25519)
+% - Post-quantum (ML-KEM, ML-DSA)
+%
+% Mention: incidentally rediscovered timing behavior consistent with MARVIN (CVE-2023-49092)
+
+%-------------------------------------------------------------------------------
+\subsection{Performance}
+\label{sec:evaluation:performance}
+
+% Runtime overhead comparison
+% - tacet: ~100ms inference overhead per analysis
+% - Slower than dudect/SILENT, faster than RTLF
+% - Acceptable for CI where measurement dominates
+
+%===============================================================================
+% SECTION 6: DISCUSSION & LIMITATIONS (~0.75 pages)
+%===============================================================================
+\section{Discussion and Limitations}
+\label{sec:discussion}
+
+%-------------------------------------------------------------------------------
+\subsection{Tradeoffs}
+\label{sec:discussion:tradeoffs}
+
+% NOTE: Combined Pipeline Complexity, Lower Power, and Overhead to save space
+%
+% Pipeline Complexity:
+% - tacet's methodology is more complex than a t-test
+% - Detailed spec required (available as artifact)
+% - This complexity is the tradeoff for calibration
+%
+% Lower Power Under Noise:
+% - tacet is more conservative
+% - May require more samples to reach Pass/Fail
+% - Inconclusive rate is the "price of reliability"
+% - Feature, not bug: prevents false confidence
+%
+% Overhead:
+% - ~100ms inference overhead per analysis
+% - Acceptable for CI pipelines where measurement time typically dominates
+
+%-------------------------------------------------------------------------------
+\subsection{Future Work}
+\label{sec:discussion:future}
+
+% Power/EM side-channels
+% - Experimental support exists
+% - Different measurement infrastructure
+% - Same statistical methodology applies
+
+%===============================================================================
+% SECTION 7: CONCLUSION (~0.5 pages)
+%===============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+% Summary of contributions
+% - Calibrated verdicts prevent false confidence
+% - Interpretable posterior probabilities
+% - Robust to autocorrelation via block bootstrap
+% - Practical CI integration
+
+% Call to action
+% - Available as open source (MPL v2)
+% - Designed for adoption by cryptographic library maintainers
+
+%===============================================================================
+% ACKNOWLEDGMENTS (omit for submission, add for camera-ready)
+%===============================================================================
+% \section*{Acknowledgments}
+% Omitted for anonymous submission.
+
+%===============================================================================
+% REQUIRED APPENDICES
+%===============================================================================
+\cleardoublepage
+\appendix
+
+%-------------------------------------------------------------------------------
+\section*{Ethical Considerations}
+\label{app:ethics}
+
+% Stakeholder-based analysis following Menlo Report principles
+
+\textbf{Stakeholders.}
+We identify three primary stakeholders:
+(1) cryptographic library maintainers, who benefit from improved vulnerability detection;
+(2) end users of cryptographic software, who benefit from more secure implementations; and
+(3) potential attackers, who could misuse timing analysis techniques.
+
+\textbf{Impacts.}
+Following the Menlo Report principles:
+
+\begin{itemize}
+    \item \emph{Beneficence}: \tacet enables proactive detection of timing
+          side-channels before deployment, reducing the window of vulnerability
+          for end users.
+
+    \item \emph{Respect for Persons}: Our work does not involve human subjects
+          or personal data.
+
+    \item \emph{Justice}: By releasing \tacet as open-source software (MPL v2),
+          we ensure equal access to improved security testing across
+          organizations of all sizes.
+
+    \item \emph{Respect for Law and Public Interest}: Timing side-channel
+          detection is an established defensive practice; we are not
+          introducing novel attack capabilities.
+\end{itemize}
+
+\textbf{Potential Harms.}
+The statistical techniques underlying \tacet could theoretically help attackers
+confirm timing leaks. However, simpler tools (\eg \dudect) already provide
+this capability; \tacet's contribution is primarily in reducing false positives
+and providing calibrated uncertainty---properties more valuable to defenders
+than attackers.
+
+\textbf{Decision.}
+We concluded that publication serves the public interest: \tacet's practical
+CI integration lowers the barrier for maintainers to adopt rigorous timing
+analysis, catching vulnerabilities before they affect users. The marginal
+benefit to attackers is minimal compared to existing tools.
+
+%-------------------------------------------------------------------------------
+\cleardoublepage
+\section*{Open Science}
+\label{app:open-science}
+
+All artifacts necessary to evaluate our contributions are publicly available:
+
+\begin{itemize}
+    \item \textbf{Source code}: \url{https://anonymous.4open.science/r/tacet-75EB/}
+          (MPL v2 license)
+
+    \item \textbf{Specification}: Included in repository as
+          \texttt{website/src/content/reference/specification.md}
+
+    \item \textbf{Benchmark scripts}: \texttt{crates/tacet-bench/} directory,
+          with instructions in \texttt{README.md}
+
+    \item \textbf{Benchmark results}: Raw data available in artifact
+\end{itemize}
+
+The repository includes instructions for reproducing all experiments reported
+in Section~\ref{sec:evaluation}. Hardware configuration details are provided
+in Section~\ref{sec:evaluation:methodology}.
+
+%===============================================================================
+% OPTIONAL APPENDIX: STATISTICAL METHODOLOGY
+%===============================================================================
+\cleardoublepage
+\input{appendix_methodology}
+
+%===============================================================================
+% REFERENCES
+%===============================================================================
+\cleardoublepage
+\bibliographystyle{plain}
+\bibliography{paper}
+
+\end{document}

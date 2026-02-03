@@ -550,7 +550,6 @@ export type {
   AttackerModel,
   Outcome,
   InconclusiveReason,
-  EffectPattern,
   Exploitability,
   MeasurementQuality,
   Config,
@@ -564,7 +563,6 @@ export {
   AttackerModelValues,
   OutcomeValues,
   InconclusiveReasonValues,
-  EffectPatternValues,
   ExploitabilityValues,
   MeasurementQualityValues,
 } from "./types.js";

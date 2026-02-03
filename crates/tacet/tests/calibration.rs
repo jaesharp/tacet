@@ -16,6 +16,8 @@ mod autocorrelation;
 mod bayesian;
 #[path = "calibration/coverage.rs"]
 mod coverage;
+#[path = "calibration/discrete_mode.rs"]
+mod discrete_mode;
 #[path = "calibration/estimation.rs"]
 mod estimation;
 #[path = "calibration/fpr.rs"]

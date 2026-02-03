@@ -5,8 +5,6 @@
 
 #[path = "unit/config_validation.rs"]
 mod config_validation;
-#[path = "unit/discrete_mode.rs"]
-mod discrete_mode;
 #[path = "unit/helpers.rs"]
 mod helpers;
 #[path = "unit/integration.rs"]

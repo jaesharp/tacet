@@ -1,0 +1,19 @@
+ROBUSTNESS CHECK RESULTS
+Generated: 2026-02-03T19:30:33.876590
+============================================================
+
+completeness: PASS
+
+duplicates: PASS
+
+ci_sanity: PASS
+
+suspicious_patterns: FAIL
+  - timing-tvla: 0% detection on ALL tail patterns with effect > 0 (750 measurements)
+  - silent-native: 0% detection on ALL tail patterns with effect > 0 (750 measurements)
+  - ad-test: FPR=11.3% (>10%) on null effect across all conditions
+
+dataset_counts: PASS
+
+
+SUMMARY: 4/4 checks passed

@@ -19,7 +19,6 @@ export type {
   AttackerModel,
   Outcome,
   InconclusiveReason,
-  EffectPattern,
   Exploitability,
   MeasurementQuality,
 } from "../pkg/tacet_wasm.js";
@@ -72,18 +71,6 @@ export const InconclusiveReasonValues = {
   ConditionsChanged: "conditionsChanged" as const,
   /** Threshold was elevated due to measurement noise. */
   ThresholdElevated: "thresholdElevated" as const,
-};
-
-/** Pattern of timing effect values. */
-export const EffectPatternValues = {
-  /** Uniform shift across all quantiles. */
-  UniformShift: "uniformShift" as const,
-  /** Effect concentrated in tails (upper quantiles). */
-  TailEffect: "tailEffect" as const,
-  /** Both shift and tail components present. */
-  Mixed: "mixed" as const,
-  /** Cannot determine pattern. */
-  Indeterminate: "indeterminate" as const,
 };
 
 /** Exploitability assessment values. */

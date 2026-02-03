@@ -8,14 +8,12 @@ import type {
   InconclusiveReason,
   Exploitability,
   MeasurementQuality,
-  EffectPattern,
 } from "./types.js";
 import {
   OutcomeValues,
   ExploitabilityValues,
   MeasurementQualityValues,
   InconclusiveReasonValues,
-  EffectPatternValues,
 } from "./types.js";
 import type { BatchingInfo, TimerInfo } from "./collector.js";
 import { TimingLeakError } from "./errors.js";
@@ -51,13 +49,6 @@ const INCONCLUSIVE_DISPLAY: Record<InconclusiveReason, string> = {
   sampleBudgetExceeded: "SampleBudgetExceeded",
   conditionsChanged: "ConditionsChanged",
   thresholdElevated: "ThresholdElevated",
-};
-
-const PATTERN_DISPLAY: Record<EffectPattern, string> = {
-  uniformShift: "UniformShift",
-  tailEffect: "TailEffect",
-  mixed: "Mixed",
-  indeterminate: "Indeterminate",
 };
 
 /**
@@ -132,14 +123,9 @@ export class TimingTestResult {
     return this.raw.inconclusiveReason;
   }
 
-  /** Minimum detectable effect (shift) in nanoseconds. */
-  get mdeShiftNs(): number {
-    return this.raw.mdeShiftNs;
-  }
-
-  /** Minimum detectable effect (tail) in nanoseconds. */
-  get mdeTailNs(): number {
-    return this.raw.mdeTailNs;
+  /** Minimum detectable effect in nanoseconds. */
+  get mdeNs(): number {
+    return this.raw.mdeNs;
   }
 
   /** Timer resolution in nanoseconds. */
@@ -216,11 +202,6 @@ export class TimingTestResult {
     return INCONCLUSIVE_DISPLAY[this.inconclusiveReason];
   }
 
-  /** Get effect pattern as a string. */
-  effectPatternString(): string {
-    return PATTERN_DISPLAY[this.effect.pattern];
-  }
-
   // Helper methods
 
   /** Format leak probability as a percentage string (e.g., "12.3%"). */
@@ -228,9 +209,9 @@ export class TimingTestResult {
     return `${(this.leakProbability * 100).toFixed(1)}%`;
   }
 
-  /** Total effect magnitude in nanoseconds (sqrt of shift² + tail²). */
+  /** Total effect magnitude in nanoseconds. */
   totalEffectNs(): number {
-    return Math.sqrt(this.effect.shiftNs ** 2 + this.effect.tailNs ** 2);
+    return this.effect.maxEffectNs;
   }
 
   /**

@@ -60,7 +60,7 @@ describe("Known leaky operations", () => {
       console.log("\n[detects_early_exit_comparison]");
       console.log(`Outcome: ${outcomeName(result.outcome)}`);
       console.log(`Leak probability: ${(result.leakProbability * 100).toFixed(2)}%`);
-      console.log(`Effect: shift=${result.effect.shiftNs.toFixed(2)}ns, tail=${result.effect.tailNs.toFixed(2)}ns`);
+      console.log(`Effect: max=${result.effect.maxEffectNs.toFixed(2)}ns`);
 
       // Skip if unmeasurable (operation too fast for this platform)
       if (result.outcome === Outcome.Unmeasurable) {
@@ -186,7 +186,7 @@ describe("Known safe operations", () => {
       console.log("\n[no_false_positive_xor_fold]");
       console.log(`Outcome: ${outcomeName(result.outcome)}`);
       console.log(`Leak probability: ${(result.leakProbability * 100).toFixed(2)}%`);
-      console.log(`Effect: shift=${result.effect.shiftNs.toFixed(2)}ns, tail=${result.effect.tailNs.toFixed(2)}ns`);
+      console.log(`Effect: max=${result.effect.maxEffectNs.toFixed(2)}ns`);
 
       if (result.outcome === Outcome.Unmeasurable) {
         console.log(`[SKIPPED] Operation unmeasurable: ${result.recommendation}`);

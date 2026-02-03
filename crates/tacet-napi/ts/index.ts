@@ -57,7 +57,6 @@ export {
   AttackerModel,
   Outcome,
   InconclusiveReason,
-  EffectPattern,
   Exploitability,
   MeasurementQuality,
   // Types
