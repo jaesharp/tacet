@@ -360,12 +360,14 @@ func TestAnalyzePreCollected(t *testing.T) {
 
 // TestAnalyzeWithLeak verifies the Analyze function detects an artificial leak.
 func TestAnalyzeWithLeak(t *testing.T) {
-	// Create timing data with a clear shift
+	// Create timing data with a large shift (500+ ticks for clear detection)
+	// The library interprets raw values as cycles, so 500 cycles at ~3GHz ≈ 167ns
+	// which is above the AdjacentNetwork threshold of 100ns
 	baseline := make([]uint64, 1000)
 	sample := make([]uint64, 1000)
 	for i := range baseline {
 		baseline[i] = 100 + uint64(i%10)
-		sample[i] = 200 + uint64(i%10) // 100 tick difference
+		sample[i] = 600 + uint64(i%10) // 500 tick difference - obvious leak
 	}
 
 	result, err := Analyze(baseline, sample, WithAttacker(AdjacentNetwork))
@@ -378,9 +380,9 @@ func TestAnalyzeWithLeak(t *testing.T) {
 	t.Logf("  P(leak): %.2f%%", result.LeakProbability*100)
 	t.Logf("  Effect: %.2f ns", result.Effect.MaxEffectNs)
 
-	// With a 100-tick difference, should detect a leak
+	// With a 500-tick difference, should detect a leak
 	if result.Outcome == Pass {
-		t.Errorf("Expected non-Pass for distributions with 100-tick shift, got Pass")
+		t.Errorf("Expected non-Pass for distributions with 500-tick shift, got Pass")
 	}
 }
 
