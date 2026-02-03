@@ -140,16 +140,27 @@ pub struct SweepConfig {
     pub use_realistic: bool,
     /// Base operation time in nanoseconds (for realistic mode)
     pub realistic_base_ns: u64,
+    /// Synthetic noise standard deviation in nanoseconds.
+    /// Controls the noise level for synthetic data generation.
+    /// Default is 100_000 ns (100μs) for legacy compatibility.
+    /// For SharedHardware stress testing, use ~50 ns.
+    pub synthetic_sigma_ns: f64,
 }
 
 impl SweepConfig {
     /// Quick preset: minimal coverage for fast feedback (~5 min)
     ///
-    /// Scaled similar to SILENT paper (μ ∈ [0, 1.0] with σ=10 → [0, 0.1σ] in our terms).
-    /// With σ = 100μs: 0.02σ = 2μs, 0.05σ = 5μs, 0.1σ = 10μs
-    /// Also includes 5ns for SharedHardware threshold testing.
+    /// Designed for SharedHardware stress testing with realistic noise levels.
+    /// σ = 50 ns simulates good PMU measurements on modern hardware.
     ///
-    /// - Effect sizes: 0, 5ns, 2μs, 5μs, 10μs
+    /// Effect sizes (as multiples of σ = 50 ns):
+    /// - 0: null (FPR testing)
+    /// - 0.02: 1 ns shift
+    /// - 0.1: 5 ns shift
+    /// - 0.4: 20 ns shift
+    /// - 1.0: 50 ns shift
+    /// - 2.0: 100 ns shift
+    ///
     /// - 2 patterns: Null, Shift
     /// - 3 noise models: IID, AR(0.5), AR(-0.5)
     /// - 20 datasets per point
@@ -158,9 +169,8 @@ impl SweepConfig {
             preset: BenchmarkPreset::Quick,
             samples_per_class: 5_000,
             datasets_per_point: 20,
-            // Range focused on sub-microsecond crypto vulnerabilities
-            // With σ = 100μs: [0, 5ns, 100ns, 500ns, 2μs, 10μs]
-            effect_multipliers: vec![0.0, 0.00005, 0.001, 0.005, 0.02, 0.1],
+            // With σ = 50 ns: [0, 1ns, 5ns, 20ns, 50ns, 100ns]
+            effect_multipliers: vec![0.0, 0.02, 0.1, 0.4, 1.0, 2.0],
             effect_patterns: vec![EffectPattern::Null, EffectPattern::Shift],
             noise_models: vec![
                 NoiseModel::IID,
@@ -169,16 +179,23 @@ impl SweepConfig {
             ],
             attacker_models: vec![Some(AttackerModel::SharedHardware)],
             use_realistic: false,
-            realistic_base_ns: 1000, // 1μs default
+            realistic_base_ns: 1000,
+            synthetic_sigma_ns: 50.0, // 50 ns - realistic for PMU measurements
         }
     }
 
     /// Medium preset: good coverage for development (~30 min)
     ///
-    /// Scaled similar to SILENT paper with finer granularity.
-    /// With σ = 100μs: range [0, 0.1σ] = [0, 10μs] with 6 points
+    /// Designed for SharedHardware stress testing with moderate noise (σ = 100 ns).
     ///
-    /// - Effect sizes: 0, 1μs, 2μs, 4μs, 6μs, 8μs, 10μs (decile-like in 0-0.1σ)
+    /// Effect sizes (as multiples of σ = 100 ns):
+    /// - 0: null (FPR testing)
+    /// - 0.1: 10 ns shift
+    /// - 0.5: 50 ns shift
+    /// - 1.0: 100 ns shift
+    /// - 2.0: 200 ns shift
+    /// - 5.0: 500 ns shift
+    ///
     /// - 4 patterns: Null, Shift, Tail, Bimodal
     /// - 5 noise models: IID, AR(±0.3), AR(±0.6)
     /// - 50 datasets per point
@@ -187,18 +204,14 @@ impl SweepConfig {
             preset: BenchmarkPreset::Medium,
             samples_per_class: 10_000,
             datasets_per_point: 50,
-            // Extended range covering sub-microsecond effects common in crypto vulns
-            // With σ = 100μs: [0, 10ns, 50ns, 100ns, 200ns, 500ns, 1μs, 5μs, 10μs]
+            // With σ = 100 ns: [0, 10ns, 50ns, 100ns, 200ns, 500ns]
             effect_multipliers: vec![
-                0.0,    // null
-                0.0001, // 10ns
-                0.0005, // 50ns
-                0.001,  // 100ns
-                0.002,  // 200ns
-                0.005,  // 500ns
-                0.01,   // 1μs
-                0.05,   // 5μs
-                0.1,    // 10μs
+                0.0, // null
+                0.1, // 10 ns
+                0.5, // 50 ns
+                1.0, // 100 ns
+                2.0, // 200 ns
+                5.0, // 500 ns
             ],
             effect_patterns: vec![
                 EffectPattern::Null,
@@ -216,6 +229,7 @@ impl SweepConfig {
             attacker_models: vec![Some(AttackerModel::SharedHardware)],
             use_realistic: false,
             realistic_base_ns: 1000,
+            synthetic_sigma_ns: 100.0, // 100 ns - moderate noise for broader coverage
         }
     }
 
@@ -289,6 +303,7 @@ impl SweepConfig {
             attacker_models: vec![Some(AttackerModel::SharedHardware)],
             use_realistic: false,
             realistic_base_ns: 1000,
+            synthetic_sigma_ns: 500.0, // 500 ns - comprehensive coverage
         }
     }
 
@@ -352,6 +367,7 @@ impl SweepConfig {
             ],
             use_realistic: false,
             realistic_base_ns: 1000,
+            synthetic_sigma_ns: 100.0, // 100 ns - fine-grained threshold testing
         }
     }
 
@@ -433,6 +449,7 @@ impl SweepConfig {
             ],
             use_realistic: false,
             realistic_base_ns: 1000,
+            synthetic_sigma_ns: 100_000.0, // 100μs - legacy scale for threshold-relative testing
         }
     }
 
@@ -491,6 +508,7 @@ impl SweepConfig {
             attacker_models: vec![Some(AttackerModel::SharedHardware)],
             use_realistic: false,
             realistic_base_ns: 1000,
+            synthetic_sigma_ns: 100_000.0, // 100μs - legacy scale for stress testing
         }
     }
 
@@ -1175,13 +1193,28 @@ impl SweepRunner {
 
             realistic_to_generated(&collect_realistic_dataset(&realistic_config))
         } else {
+            // Convert synthetic_sigma_ns to log-normal parameters
+            // Assume 3 GHz reference frequency for cycle conversion
+            let freq_ghz = 3.0;
+            let sigma_cycles = config.synthetic_sigma_ns * freq_ghz;
+
+            // Use 5% coefficient of variation (CV = σ/μ)
+            // This gives mean = σ / 0.05 = 20 * σ
+            let cv = 0.05;
+            let mean_cycles = sigma_cycles / cv;
+
+            // Log-normal parameters: μ_log = ln(mean), σ_log ≈ CV for small CV
+            let base_mu = mean_cycles.ln();
+            let base_sigma = cv;
+
             let bench_config = BenchmarkConfig {
                 samples_per_class: config.samples_per_class,
                 effect_pattern: pattern,
                 effect_sigma_mult: mult,
                 noise_model: noise,
                 seed: 42 + dataset_id as u64,
-                ..Default::default()
+                base_mu,
+                base_sigma,
             };
             generate_benchmark_dataset(&bench_config)
         }
@@ -1462,6 +1495,7 @@ mod tests {
             attacker_models: vec![Some(AttackerModel::SharedHardware)],
             use_realistic: false,
             realistic_base_ns: 1000,
+            synthetic_sigma_ns: 50.0,
         };
 
         let runner = SweepRunner::new(vec![
