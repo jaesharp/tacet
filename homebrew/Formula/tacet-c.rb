@@ -1,25 +1,27 @@
 class TacetC < Formula
+  TACET_VERSION = "0.4.2"
+
   desc "C/C++ bindings for tacet timing oracle library"
   homepage "https://github.com/agucova/tacet"
-  version "0.4.2"
+  version TACET_VERSION
   license "MPL-2.0"
 
   if Hardware::CPU.arm?
-    url "https://github.com/agucova/tacet/releases/download/v#{version}/libtacet_c-darwin-arm64.a"
+    url "https://github.com/agucova/tacet/releases/download/v#{TACET_VERSION}/libtacet_c-darwin-arm64.a"
     sha256 "abc71e600a512ff4ef4c3b0db93c9dee60946ca52ce5ae8f6669c28fe910c5f8"
   else
-    url "https://github.com/agucova/tacet/releases/download/v#{version}/libtacet_c-darwin-amd64.a"
+    url "https://github.com/agucova/tacet/releases/download/v#{TACET_VERSION}/libtacet_c-darwin-amd64.a"
     sha256 "878a65e0eebbe304c5b9dc708fa248e5d1f3faaf5e44ccaf5feae1fd4b0f5b3f"
   end
 
   # Resources for additional files needed
   resource "tacet.h" do
-    url "https://github.com/agucova/tacet/releases/download/v#{version}/tacet.h"
+    url "https://github.com/agucova/tacet/releases/download/v#{TacetC::TACET_VERSION}/tacet.h"
     sha256 "5f979b23d99f6c5ddb6f522797c95fb40c3a0f1242a3573f1d639bea89323ffe"
   end
 
   resource "tacet.hpp" do
-    url "https://github.com/agucova/tacet/releases/download/v#{version}/tacet.hpp"
+    url "https://github.com/agucova/tacet/releases/download/v#{TacetC::TACET_VERSION}/tacet.hpp"
     sha256 "638a085f5bb0172cf740a5f606760da11fc501643194f952fefe1ff1ec9e31f6"
   end
 
