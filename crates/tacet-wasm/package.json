@@ -1,6 +1,6 @@
 {
   "name": "@tacet/js",
-  "version": "0.3.3",
+  "version": "0.4.1",
   "description": "Timing side-channel detection for JavaScript/TypeScript (WASM)",
   "sideEffects": false,
   "type": "module",
@@ -43,10 +43,9 @@
     "node": ">= 18"
   },
   "license": "MPL-2.0",
-  "_todo": "Restore github.com/agucova/tacet after anonymous review",
   "repository": {
     "type": "git",
-    "url": "https://anonymous.4open.science/r/tacet-75EB/"
+    "url": "https://github.com/agucova/tacet"
   },
   "homepage": "https://tacet.sh",
   "keywords": [

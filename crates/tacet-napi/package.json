@@ -67,10 +67,9 @@
     "node": ">= 18"
   },
   "license": "MPL-2.0",
-  "_todo": "Restore github.com/agucova/tacet after anonymous review",
   "repository": {
     "type": "git",
-    "url": "https://anonymous.4open.science/r/tacet-75EB/"
+    "url": "https://github.com/agucova/tacet"
   },
   "homepage": "https://tacet.sh",
   "keywords": [

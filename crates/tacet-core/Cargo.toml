@@ -8,8 +8,7 @@ readme = "README.md"
 description = "Core statistical analysis for timing side-channel detection (no_std)"
 keywords = ["security", "cryptography", "timing", "side-channel", "no_std"]
 categories = ["cryptography", "no-std"]
-# TODO: Restore github.com/agucova/tacet after anonymous review
-repository = "https://anonymous.4open.science/r/tacet-75EB/"
+repository = "https://github.com/agucova/tacet"
 documentation = "https://docs.rs/tacet-core"
 homepage = "https://tacet.sh"
 
