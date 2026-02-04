@@ -1,7 +1,7 @@
 class TacetC < Formula
   desc "C/C++ bindings for tacet timing oracle library"
   homepage "https://github.com/agucova/tacet"
-  version "0.3.2"
+  version "0.4.1"
   license "MPL-2.0"
 
   if Hardware::CPU.arm?
