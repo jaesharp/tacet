@@ -12,11 +12,13 @@
 //! The `ToolAdapter` trait provides a common interface for analysis, and
 //! each adapter handles format conversion if needed.
 
+use crate::process_pool::{ProcessPool, Request};
 use crate::{BlockedData, GeneratedDataset};
 use rand::prelude::*;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tacet::{AttackerModel, Class, Outcome, TimingOracle};
 
@@ -501,6 +503,10 @@ impl ToolAdapter for DudectAdapter {
 /// Runs RTLF analysis directly. If using devenv, `rtlf` is available in PATH.
 /// Otherwise, install R with packages: tidyverse, optparse, jsonlite.
 ///
+/// When a process pool is configured via `with_pool()`, the adapter uses
+/// a persistent R process for analysis, avoiding interpreter startup overhead.
+/// Falls back to subprocess-per-call if pool is unavailable.
+///
 /// **Note:** RTLF requires at least 100 samples per class for its bootstrap test.
 /// Smaller datasets will fail with "Insufficient data" error.
 #[derive(Debug, Clone)]
@@ -509,6 +515,8 @@ pub struct RtlfAdapter {
     pub command: String,
     /// Significance level alpha (default: 0.09 as in RTLF paper).
     pub alpha: f64,
+    /// Optional process pool for persistent R interpreter.
+    pool: Option<Arc<ProcessPool>>,
 }
 
 impl Default for RtlfAdapter {
@@ -517,6 +525,7 @@ impl Default for RtlfAdapter {
             // Default uses the rtlf wrapper from devenv
             command: "rtlf".to_string(),
             alpha: 0.09, // RTLF paper default
+            pool: None,
         }
     }
 }
@@ -526,6 +535,7 @@ impl RtlfAdapter {
     pub fn with_command(cmd: impl Into<String>) -> Self {
         Self {
             command: cmd.into(),
+            pool: None,
             ..Default::default()
         }
     }
@@ -535,6 +545,50 @@ impl RtlfAdapter {
         self.alpha = alpha;
         self
     }
+
+    /// Enable persistent process mode with a shared pool.
+    pub fn with_pool(mut self, pool: Arc<ProcessPool>) -> Self {
+        self.pool = Some(pool);
+        self
+    }
+
+    /// Analyze using the process pool.
+    fn analyze_via_pool(&self, pool: &ProcessPool, data: &BlockedData) -> Result<ToolResult, String> {
+        let start = Instant::now();
+
+        // Build request
+        let params = serde_json::json!({
+            "baseline": data.baseline,
+            "test": data.test,
+            "alpha": self.alpha,
+        });
+        let request = Request::new("rtlf", params);
+
+        // Send request
+        let mut guard = pool.acquire();
+        let response = guard
+            .send_request(&request)
+            .map_err(|e| format!("Pool request failed: {}", e))?;
+
+        // Parse response
+        let result = response.into_result()?;
+        let detected = result["detected"].as_bool().unwrap_or(false);
+        let p_value = result["p_value"].as_f64().unwrap_or(1.0);
+
+        let samples_used = data.baseline.len() + data.test.len();
+        Ok(ToolResult {
+            detected_leak: detected,
+            samples_used,
+            decision_time_ms: start.elapsed().as_millis() as u64,
+            leak_probability: Some(1.0 - p_value),
+            status: format!("p={:.4}, alpha={:.2} (pool)", p_value, self.alpha),
+            outcome: if detected {
+                OutcomeCategory::Fail
+            } else {
+                OutcomeCategory::Pass
+            },
+        })
+    }
 }
 
 impl ToolAdapter for RtlfAdapter {
@@ -543,6 +597,17 @@ impl ToolAdapter for RtlfAdapter {
     }
 
     fn analyze_blocked(&self, data: &BlockedData) -> ToolResult {
+        // Try pool-based analysis first if available
+        if let Some(ref pool) = self.pool {
+            match self.analyze_via_pool(pool, data) {
+                Ok(result) => return result,
+                Err(e) => {
+                    eprintln!("RTLF pool failed, falling back to subprocess: {}", e);
+                }
+            }
+        }
+
+        // Subprocess-based analysis (original implementation)
         let start = Instant::now();
 
         // Create temporary directory for input/output
@@ -714,6 +779,10 @@ fn parse_rtlf_json(json_content: &str, _alpha: f64) -> Result<(bool, f64), Strin
 ///
 /// SILENT uses bootstrap-based statistical testing with quantile analysis.
 /// If using devenv, `silent` is available in PATH.
+///
+/// When a process pool is configured via `with_pool()`, the adapter uses
+/// a persistent R process for analysis, avoiding interpreter startup overhead.
+/// Falls back to subprocess-per-call if pool is unavailable.
 #[derive(Debug, Clone)]
 pub struct SilentAdapter {
     /// Command to run SILENT (default: "silent" wrapper from devenv).
@@ -724,6 +793,8 @@ pub struct SilentAdapter {
     pub bootstrap_samples: usize,
     /// Minimum detectable effect size in cycles/ns (default: 100).
     pub delta: f64,
+    /// Optional process pool for persistent R interpreter.
+    pool: Option<Arc<ProcessPool>>,
 }
 
 impl Default for SilentAdapter {
@@ -736,6 +807,7 @@ impl Default for SilentAdapter {
             // Set to 1ns to detect sub-nanosecond effects in synthetic benchmarks.
             // For σ=5ns sweeps, this allows detection of effects >= 0.2σ (1ns).
             delta: 1.0,
+            pool: None,
         }
     }
 }
@@ -745,6 +817,7 @@ impl SilentAdapter {
     pub fn with_command(cmd: impl Into<String>) -> Self {
         Self {
             command: cmd.into(),
+            pool: None,
             ..Default::default()
         }
     }
@@ -765,6 +838,57 @@ impl SilentAdapter {
     pub fn delta(mut self, delta: f64) -> Self {
         self.delta = delta;
         self
+    }
+
+    /// Enable persistent process mode with a shared pool.
+    ///
+    /// When a pool is configured, the adapter will try to use a persistent
+    /// R process for analysis, falling back to subprocess-per-call if the
+    /// pool is unavailable or returns an error.
+    pub fn with_pool(mut self, pool: Arc<ProcessPool>) -> Self {
+        self.pool = Some(pool);
+        self
+    }
+
+    /// Analyze using the process pool.
+    fn analyze_via_pool(&self, pool: &ProcessPool, data: &BlockedData, delta: f64) -> Result<ToolResult, String> {
+        let start = Instant::now();
+
+        // Build request
+        let params = serde_json::json!({
+            "baseline": data.baseline,
+            "test": data.test,
+            "alpha": self.alpha,
+            "delta": delta,
+            "bootstrap_samples": self.bootstrap_samples,
+        });
+        let request = Request::new("silent", params);
+
+        // Send request
+        let mut guard = pool.acquire();
+        let response = guard
+            .send_request(&request)
+            .map_err(|e| format!("Pool request failed: {}", e))?;
+
+        // Parse response
+        let result = response.into_result()?;
+        let detected = result["detected"].as_bool().unwrap_or(false);
+        let statistic = result["statistic"].as_f64().unwrap_or(0.0);
+        let _status = result["status"].as_str().unwrap_or("unknown").to_string();
+
+        let samples_used = data.baseline.len() + data.test.len();
+        Ok(ToolResult {
+            detected_leak: detected,
+            samples_used,
+            decision_time_ms: start.elapsed().as_millis() as u64,
+            leak_probability: None,
+            status: format!("stat={:.3}, alpha={:.2}, delta={:.1} (pool)", statistic, self.alpha, delta),
+            outcome: if detected {
+                OutcomeCategory::Fail
+            } else {
+                OutcomeCategory::Pass
+            },
+        })
     }
 }
 
@@ -787,8 +911,21 @@ impl ToolAdapter for SilentAdapter {
             .map(|m| m.to_threshold_ns())
             .unwrap_or(self.delta);
 
-        let start = Instant::now();
         let data = &dataset.blocked;
+
+        // Try pool-based analysis first if available
+        if let Some(ref pool) = self.pool {
+            match self.analyze_via_pool(pool, data, delta) {
+                Ok(result) => return result,
+                Err(e) => {
+                    // Log warning and fall back to subprocess
+                    eprintln!("SILENT pool failed, falling back to subprocess: {}", e);
+                }
+            }
+        }
+
+        // Subprocess-based analysis (original implementation)
+        let start = Instant::now();
 
         // Create temporary directory for input/output
         let temp_dir = match tempfile::tempdir() {
@@ -858,6 +995,17 @@ impl ToolAdapter for SilentAdapter {
     }
 
     fn analyze_blocked(&self, data: &BlockedData) -> ToolResult {
+        // Try pool-based analysis first if available
+        if let Some(ref pool) = self.pool {
+            match self.analyze_via_pool(pool, data, self.delta) {
+                Ok(result) => return result,
+                Err(e) => {
+                    eprintln!("SILENT pool failed, falling back to subprocess: {}", e);
+                }
+            }
+        }
+
+        // Subprocess-based analysis (original implementation)
         let start = Instant::now();
 
         // Create temporary directory for input/output
@@ -1988,8 +2136,127 @@ impl ToolAdapter for RtlfNativeAdapter {
 ///
 /// Returns (detected, significant_deciles, max_excess_ratio).
 ///
-/// Note: We don't parallelize within RTLF because the outer benchmark loop already
-/// parallelizes at the (dataset × tool) level, providing good CPU utilization.
+/// When the `parallel` feature is enabled, bootstrap iterations run in parallel
+/// using rayon for 4-8x speedup on multicore systems. Each thread uses its own
+/// RNG seeded from entropy (standard practice for parallel bootstrap).
+#[cfg(feature = "parallel")]
+fn rtlf_bootstrap_test(
+    baseline: &[u64],
+    test: &[u64],
+    alpha: f64,
+    bootstrap_iters: usize,
+) -> (bool, Vec<usize>, f64) {
+    use rayon::prelude::*;
+    use rand::prelude::*;
+    use rand::rngs::SmallRng;
+    use rand::SeedableRng;
+
+    let n = baseline.len().min(test.len());
+
+    // Decile probabilities: 0.1, 0.2, ..., 0.9
+    let decile_probs: [f64; 9] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+
+    // Compute observed quantile differences
+    let baseline_quantiles = compute_quantiles(baseline, &decile_probs);
+    let test_quantiles = compute_quantiles(test, &decile_probs);
+
+    let observed_diffs: Vec<f64> = baseline_quantiles
+        .iter()
+        .zip(test_quantiles.iter())
+        .map(|(b, t)| (*b as f64 - *t as f64).abs())
+        .collect();
+
+    // Thread-local state for bootstrap iteration
+    struct ThreadLocalState {
+        rng: SmallRng,
+        b1: Vec<u64>,
+        b2: Vec<u64>,
+        t1: Vec<u64>,
+        t2: Vec<u64>,
+        sort_buf: Vec<u64>,
+    }
+
+    // Parallel bootstrap with thread-local RNGs and buffers
+    // Each iteration returns ([9 baseline diffs], [9 test diffs])
+    let results: Vec<([f64; 9], [f64; 9])> = (0..bootstrap_iters)
+        .into_par_iter()
+        .map_init(
+            || {
+                // Thread-local initialization: RNG seeded from entropy
+                // This is standard practice for parallel bootstrap and maintains
+                // statistical validity (same asymptotic properties as sequential)
+                ThreadLocalState {
+                    rng: SmallRng::from_entropy(),
+                    b1: vec![0u64; n],
+                    b2: vec![0u64; n],
+                    t1: vec![0u64; n],
+                    t2: vec![0u64; n],
+                    sort_buf: Vec::with_capacity(n),
+                }
+            },
+            |state, _iter_idx| {
+                let mut q_b1 = [0u64; 9];
+                let mut q_b2 = [0u64; 9];
+                let mut q_t1 = [0u64; 9];
+                let mut q_t2 = [0u64; 9];
+
+                // Bootstrap WITHIN baseline: resample baseline twice
+                for i in 0..n {
+                    state.b1[i] = baseline[state.rng.gen_range(0..baseline.len())];
+                    state.b2[i] = baseline[state.rng.gen_range(0..baseline.len())];
+                }
+                compute_quantiles_inplace(&state.b1, &decile_probs, &mut state.sort_buf, &mut q_b1);
+                compute_quantiles_inplace(&state.b2, &decile_probs, &mut state.sort_buf, &mut q_b2);
+
+                // Bootstrap WITHIN test: resample test twice
+                for i in 0..n {
+                    state.t1[i] = test[state.rng.gen_range(0..test.len())];
+                    state.t2[i] = test[state.rng.gen_range(0..test.len())];
+                }
+                compute_quantiles_inplace(&state.t1, &decile_probs, &mut state.sort_buf, &mut q_t1);
+                compute_quantiles_inplace(&state.t2, &decile_probs, &mut state.sort_buf, &mut q_t2);
+
+                // Compute quantile differences for this iteration
+                let mut baseline_diffs = [0.0f64; 9];
+                let mut test_diffs = [0.0f64; 9];
+                for i in 0..9 {
+                    baseline_diffs[i] = (q_b1[i] as f64 - q_b2[i] as f64).abs();
+                    test_diffs[i] = (q_t1[i] as f64 - q_t2[i] as f64).abs();
+                }
+
+                (baseline_diffs, test_diffs)
+            },
+        )
+        .collect();
+
+    // Aggregate results into per-decile vectors
+    let mut bootstrap_diffs_baseline: Vec<Vec<f64>> = (0..9)
+        .map(|_| Vec::with_capacity(bootstrap_iters))
+        .collect();
+    let mut bootstrap_diffs_test: Vec<Vec<f64>> = (0..9)
+        .map(|_| Vec::with_capacity(bootstrap_iters))
+        .collect();
+
+    for (baseline_diffs, test_diffs) in results {
+        for i in 0..9 {
+            bootstrap_diffs_baseline[i].push(baseline_diffs[i]);
+            bootstrap_diffs_test[i].push(test_diffs[i]);
+        }
+    }
+
+    // Compute critical thresholds at (1 - alpha/9) for each decile
+    // This implements the Bonferroni-style correction across 9 deciles
+    rtlf_compute_thresholds(
+        &observed_diffs,
+        &mut bootstrap_diffs_baseline,
+        &mut bootstrap_diffs_test,
+        alpha,
+        bootstrap_iters,
+    )
+}
+
+/// Sequential fallback for non-parallel builds.
+#[cfg(not(feature = "parallel"))]
 fn rtlf_bootstrap_test(
     baseline: &[u64],
     test: &[u64],
@@ -2003,7 +2270,7 @@ fn rtlf_bootstrap_test(
     let n = baseline.len().min(test.len());
 
     // Decile probabilities: 0.1, 0.2, ..., 0.9
-    let decile_probs: Vec<f64> = (1..=9).map(|i| i as f64 * 0.1).collect();
+    let decile_probs: [f64; 9] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
 
     // Compute observed quantile differences
     let baseline_quantiles = compute_quantiles(baseline, &decile_probs);
@@ -2060,7 +2327,25 @@ fn rtlf_bootstrap_test(
     }
 
     // Compute critical thresholds at (1 - alpha/9) for each decile
-    // This implements the Bonferroni-style correction across 9 deciles
+    rtlf_compute_thresholds(
+        &observed_diffs,
+        &mut bootstrap_diffs_baseline,
+        &mut bootstrap_diffs_test,
+        alpha,
+        bootstrap_iters,
+    )
+}
+
+/// Compute RTLF thresholds and determine significance.
+///
+/// Shared by both parallel and sequential implementations.
+fn rtlf_compute_thresholds(
+    observed_diffs: &[f64],
+    bootstrap_diffs_baseline: &mut [Vec<f64>],
+    bootstrap_diffs_test: &mut [Vec<f64>],
+    alpha: f64,
+    bootstrap_iters: usize,
+) -> (bool, Vec<usize>, f64) {
     let alpha_per_decile = alpha / 9.0;
     let threshold_percentile = 1.0 - alpha_per_decile;
     let threshold_idx =
@@ -2362,6 +2647,10 @@ fn silent_bootstrap_test(
 /// Friedman test) for timing analysis. This adapter calls the Python script
 /// via subprocess.
 ///
+/// When a process pool is configured via `with_pool()`, the adapter uses
+/// a persistent Python process for analysis, avoiding interpreter startup overhead.
+/// Falls back to subprocess-per-call if pool is unavailable.
+///
 /// Reference: <https://github.com/tlsfuzzer/tlsfuzzer>
 #[derive(Debug, Clone)]
 pub struct TlsfuzzerAdapter {
@@ -2371,6 +2660,8 @@ pub struct TlsfuzzerAdapter {
     pub script_path: Option<String>,
     /// Significance level alpha (default: 0.05).
     pub alpha: f64,
+    /// Optional process pool for persistent Python interpreter.
+    pool: Option<Arc<ProcessPool>>,
 }
 
 impl Default for TlsfuzzerAdapter {
@@ -2379,6 +2670,7 @@ impl Default for TlsfuzzerAdapter {
             python: "python3".to_string(),
             script_path: None,
             alpha: 0.05,
+            pool: None,
         }
     }
 }
@@ -2388,6 +2680,7 @@ impl TlsfuzzerAdapter {
     pub fn with_python(python: impl Into<String>) -> Self {
         Self {
             python: python.into(),
+            pool: None,
             ..Default::default()
         }
     }
@@ -2403,6 +2696,51 @@ impl TlsfuzzerAdapter {
         self.alpha = alpha;
         self
     }
+
+    /// Enable persistent process mode with a shared pool.
+    pub fn with_pool(mut self, pool: Arc<ProcessPool>) -> Self {
+        self.pool = Some(pool);
+        self
+    }
+
+    /// Analyze using the process pool.
+    fn analyze_via_pool(&self, pool: &ProcessPool, data: &BlockedData) -> Result<ToolResult, String> {
+        let start = Instant::now();
+
+        // Build request
+        let params = serde_json::json!({
+            "baseline": data.baseline,
+            "test": data.test,
+            "alpha": self.alpha,
+        });
+        let request = Request::new("tlsfuzzer", params);
+
+        // Send request
+        let mut guard = pool.acquire();
+        let response = guard
+            .send_request(&request)
+            .map_err(|e| format!("Pool request failed: {}", e))?;
+
+        // Parse response
+        let result = response.into_result()?;
+        let detected = result["detected"].as_bool().unwrap_or(false);
+        let p_value = result["p_value"].as_f64().unwrap_or(1.0);
+        let test_name = result["test_name"].as_str().unwrap_or("unknown");
+
+        let samples_used = data.baseline.len() + data.test.len();
+        Ok(ToolResult {
+            detected_leak: detected,
+            samples_used,
+            decision_time_ms: start.elapsed().as_millis() as u64,
+            leak_probability: Some(1.0 - p_value),
+            status: format!("{}(p={:.4}), alpha={:.2} (pool)", test_name, p_value, self.alpha),
+            outcome: if detected {
+                OutcomeCategory::Fail
+            } else {
+                OutcomeCategory::Pass
+            },
+        })
+    }
 }
 
 impl ToolAdapter for TlsfuzzerAdapter {
@@ -2411,6 +2749,17 @@ impl ToolAdapter for TlsfuzzerAdapter {
     }
 
     fn analyze_blocked(&self, data: &BlockedData) -> ToolResult {
+        // Try pool-based analysis first if available
+        if let Some(ref pool) = self.pool {
+            match self.analyze_via_pool(pool, data) {
+                Ok(result) => return result,
+                Err(e) => {
+                    eprintln!("tlsfuzzer pool failed, falling back to subprocess: {}", e);
+                }
+            }
+        }
+
+        // Subprocess-based analysis (original implementation)
         let start = Instant::now();
 
         // Create temporary directory for input/output

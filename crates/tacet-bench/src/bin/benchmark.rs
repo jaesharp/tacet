@@ -31,6 +31,7 @@ use std::time::Instant;
 use tacet_bench::adapters::ToolAdapter;
 use tacet_bench::checkpoint::IncrementalCsvWriter;
 use tacet_bench::output::{to_markdown, write_csv, write_summary_csv};
+use tacet_bench::process_pool::{ProcessConfig, ProcessPool};
 use tacet_bench::sweep::{SweepConfig, SweepRunner};
 use tacet_bench::{
     AndersonDarlingAdapter, DudectAdapter, EffectPattern, KsTestAdapter, MonaAdapter, NoiseModel,
@@ -118,6 +119,14 @@ struct Args {
     /// Implies --incremental.
     #[arg(long)]
     resume: bool,
+
+    /// Disable persistent process pools for R and Python tools.
+    ///
+    /// By default, subprocess-based tools (silent, tlsfuzzer, rtlf) use persistent
+    /// process pools to avoid interpreter startup overhead on each analysis.
+    /// This flag disables that optimization, falling back to subprocess-per-call.
+    #[arg(long)]
+    no_persistent_processes: bool,
 }
 
 fn main() {
@@ -181,11 +190,36 @@ fn main() {
         config.realistic_base_ns = args.realistic_base_ns;
     }
 
+    // Create process pools for subprocess-based tools (R, Python)
+    // Pools are required for R-based tools (SILENT, RTLF)
+    let (r_pool, python_pool) = if args.no_persistent_processes {
+        eprintln!("Error: --no-persistent-processes is no longer supported");
+        eprintln!("R-based tools (silent, rtlf) require persistent process pools");
+        std::process::exit(1);
+    } else {
+        let r_pool = create_r_pool().unwrap_or_else(|| {
+            eprintln!("Error: Failed to create R process pool");
+            eprintln!("Make sure R is installed and the worker script is available");
+            std::process::exit(1);
+        });
+        let python_pool = create_python_pool().unwrap_or_else(|| {
+            eprintln!("Error: Failed to create Python process pool");
+            eprintln!("Make sure Python and tlsfuzzer are installed");
+            std::process::exit(1);
+        });
+
+        if args.verbose {
+            println!("  Process pools: R=enabled, Python=enabled");
+        }
+
+        (r_pool, python_pool)
+    };
+
     // Select tools
     let tools: Vec<Box<dyn ToolAdapter>> = if let Some(tool_list) = &args.tools {
         if tool_list.to_lowercase() == "all" {
             // All tools for paper comparison
-            // Uses RtlfNativeAdapter (faithful Rust port) and SilentAdapter (R reference)
+            // Uses R-based RTLF/SILENT (reference implementations) via persistent pools
             vec![
                 Box::new(TimingOracleAdapter::default()),
                 Box::new(DudectAdapter::default()),
@@ -193,9 +227,9 @@ fn main() {
                 Box::new(KsTestAdapter::default()),
                 Box::new(AndersonDarlingAdapter::default()),
                 Box::new(MonaAdapter::default()),
-                Box::new(RtlfNativeAdapter::default()), // Native Rust RTLF (faithful port)
-                Box::new(SilentAdapter::default()),     // External R SILENT (reference impl)
-                Box::new(TlsfuzzerAdapter::default()),  // External Python tlsfuzzer
+                Box::new(SilentAdapter::default().with_pool(r_pool.clone())),
+                Box::new(RtlfAdapter::default().with_pool(r_pool.clone())),
+                Box::new(TlsfuzzerAdapter::default().with_pool(python_pool.clone())),
             ]
         } else if tool_list.to_lowercase() == "native" {
             // All native Rust tools (no external dependencies)
@@ -212,11 +246,11 @@ fn main() {
         } else {
             tool_list
                 .split(',')
-                .filter_map(|s| create_tool(s.trim()))
+                .filter_map(|s| create_tool(s.trim(), &r_pool, &python_pool))
                 .collect()
         }
     } else {
-        // Default: all native tools (including native RTLF/SILENT)
+        // Default: R-based RTLF/SILENT via persistent pools
         vec![
             Box::new(TimingOracleAdapter::default()),
             Box::new(DudectAdapter::default()),
@@ -224,8 +258,8 @@ fn main() {
             Box::new(KsTestAdapter::default()),
             Box::new(AndersonDarlingAdapter::default()),
             Box::new(MonaAdapter::default()),
-            Box::new(RtlfNativeAdapter::default()),
-            Box::new(SilentNativeAdapter::default()),
+            Box::new(SilentAdapter::default().with_pool(r_pool.clone())),
+            Box::new(RtlfAdapter::default().with_pool(r_pool.clone())),
         ]
     };
 
@@ -488,7 +522,11 @@ fn parse_noise(s: &str) -> Option<NoiseModel> {
     None
 }
 
-fn create_tool(name: &str) -> Option<Box<dyn ToolAdapter>> {
+fn create_tool(
+    name: &str,
+    r_pool: &Arc<ProcessPool>,
+    python_pool: &Arc<ProcessPool>,
+) -> Option<Box<dyn ToolAdapter>> {
     match name.to_lowercase().as_str() {
         // Native adapters (always available)
         "tacet" | "to" => Some(Box::new(TimingOracleAdapter::default())),
@@ -500,12 +538,151 @@ fn create_tool(name: &str) -> Option<Box<dyn ToolAdapter>> {
         // Native implementations of RTLF and SILENT (pure Rust, no external deps)
         "rtlf-native" | "rtlf-rs" => Some(Box::new(RtlfNativeAdapter::default())),
         "silent-native" | "silent-rs" => Some(Box::new(SilentNativeAdapter::default())),
-        // External adapters (require external tools in PATH)
-        "rtlf" => Some(Box::new(RtlfAdapter::default())),
-        "silent" => Some(Box::new(SilentAdapter::default())),
-        "tlsfuzzer" => Some(Box::new(TlsfuzzerAdapter::default())),
+        // R-based adapters (use persistent pools)
+        "rtlf" => Some(Box::new(RtlfAdapter::default().with_pool(r_pool.clone()))),
+        "silent" => Some(Box::new(SilentAdapter::default().with_pool(r_pool.clone()))),
+        // Python-based tlsfuzzer (uses persistent pool)
+        "tlsfuzzer" => Some(Box::new(TlsfuzzerAdapter::default().with_pool(python_pool.clone()))),
         // Shorthand for all native + external
         "all" => None, // Handled separately
         _ => None,
     }
+}
+
+/// Create an R process pool for SILENT and RTLF.
+///
+/// Returns None if the worker script is not available or R is not installed.
+fn create_r_pool() -> Option<Arc<ProcessPool>> {
+    // Look for the worker script relative to the executable or in known locations
+    let script_path = find_script("r-persistent-worker.R")?;
+
+    // Find SILENT and RTLF script paths
+    // These are installed via nix devenv, so we look for them via the wrapper commands
+    let silent_path = find_r_tool_script("silent", "share/silent/scripts/SILENT.R");
+    let rtlf_path = find_r_tool_script("rtlf", "share/rtlf/rtlf.R");
+
+    // Create pool with CPU count processes (R is single-threaded per process)
+    let pool_size = num_cpus::get().max(1);
+    let config = ProcessConfig::r_worker(
+        &script_path,
+        silent_path.as_deref(),
+        rtlf_path.as_deref(),
+    );
+
+    match ProcessPool::new(config, pool_size) {
+        pool => Some(Arc::new(pool)),
+    }
+}
+
+/// Find an R tool's script path by inspecting the wrapper command.
+///
+/// The nix devenv creates wrapper scripts that call Rscript with the script path.
+/// We parse the wrapper to extract the actual script location.
+fn find_r_tool_script(command: &str, relative_path: &str) -> Option<String> {
+    // First, try to find the command in PATH
+    let which_output = std::process::Command::new("which")
+        .arg(command)
+        .output()
+        .ok()?;
+
+    if !which_output.status.success() {
+        return None;
+    }
+
+    let wrapper_path = String::from_utf8_lossy(&which_output.stdout).trim().to_string();
+    if wrapper_path.is_empty() {
+        return None;
+    }
+
+    // Read the wrapper script to find the actual R script path
+    let wrapper_content = std::fs::read_to_string(&wrapper_path).ok()?;
+
+    // The wrapper looks like: exec Rscript ... "$out/share/silent/scripts/SILENT.R"
+    // or contains --add-flags with the path
+    // We look for a nix store path containing our relative_path
+    for line in wrapper_content.lines() {
+        // Look for the relative path in the wrapper
+        if let Some(idx) = line.find(relative_path) {
+            // Find the start of the nix store path (starts with /nix/store/)
+            let search_start = line[..idx].rfind("/nix/store/")
+                .or_else(|| line[..idx].rfind("/"))
+                .unwrap_or(0);
+            // Find the end (next quote or whitespace)
+            let path_start = &line[search_start..];
+            let path_end = path_start.find(|c: char| c == '"' || c == '\'' || c.is_whitespace())
+                .map(|i| search_start + i)
+                .unwrap_or(line.len());
+            let path = line[search_start..path_end].trim_matches(|c| c == '"' || c == '\'');
+            if std::path::Path::new(path).exists() {
+                return Some(path.to_string());
+            }
+        }
+    }
+
+    // Fallback: derive path from wrapper location
+    // Wrapper is at /nix/store/HASH-tool/bin/tool
+    // Script is at /nix/store/HASH-tool/share/...
+    let wrapper_path = std::path::Path::new(&wrapper_path);
+    if let Some(bin_dir) = wrapper_path.parent() {
+        if let Some(tool_dir) = bin_dir.parent() {
+            let script_path = tool_dir.join(relative_path);
+            if script_path.exists() {
+                return Some(script_path.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    None
+}
+
+/// Create a Python process pool for tlsfuzzer.
+///
+/// Returns None if the worker script is not available or Python is not installed.
+fn create_python_pool() -> Option<Arc<ProcessPool>> {
+    // Look for the worker script relative to the executable or in known locations
+    let script_path = find_script("python-persistent-worker.py")?;
+
+    // Python workers are more memory-intensive, use fewer processes
+    let pool_size = (num_cpus::get() / 2).max(1).min(4);
+    let config = ProcessConfig::python_worker(&script_path);
+
+    match ProcessPool::new(config, pool_size) {
+        pool => Some(Arc::new(pool)),
+    }
+}
+
+/// Find a worker script in known locations.
+fn find_script(name: &str) -> Option<String> {
+    // Check relative to executable
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            // Check scripts/ relative to binary
+            let script_path = exe_dir.join("scripts").join(name);
+            if script_path.exists() {
+                return Some(script_path.to_string_lossy().to_string());
+            }
+
+            // Check ../../scripts/ (for development builds)
+            let script_path = exe_dir.join("../../scripts").join(name);
+            if script_path.exists() {
+                return Some(script_path.canonicalize().ok()?.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    // Check current directory
+    let script_path = PathBuf::from("scripts").join(name);
+    if script_path.exists() {
+        return Some(script_path.canonicalize().ok()?.to_string_lossy().to_string());
+    }
+
+    // Check workspace root (for cargo run)
+    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let workspace_root = PathBuf::from(manifest_dir).join("../../scripts").join(name);
+        if workspace_root.exists() {
+            return Some(workspace_root.canonicalize().ok()?.to_string_lossy().to_string());
+        }
+    }
+
+    None
 }

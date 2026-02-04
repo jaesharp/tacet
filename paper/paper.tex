@@ -76,28 +76,25 @@ Anonymous Institution
 % Solution: calibrated Bayesian verdicts
 % Results: highlight key evaluation findings
 
-Timing side-channel attacks remain a persistent threat to cryptographic implementations.
-Existing detection tools like \dudect and \tlsfuzzer provide binary pass/fail verdicts,
-but offer no indication when measurement noise prevents reliable conclusions---leading
-developers to place false confidence in potentially vulnerable code.
+Timing side-channel attacks remain a real threat to cryptographic implementations.
+Existing detection tools like \dudect and \tlsfuzzer provide binary pass/fail verdicts
+but don't indicate when measurement noise makes the result unreliable. Developers
+see ``pass'' and assume their code is safe, unaware the test lacked sufficient
+statistical power to detect exploitable leaks.
 %
-We present \tacet, a timing side-channel detection library that provides
-\emph{calibrated verdicts}: when evidence is insufficient, \tacet reports
-Inconclusive rather than guessing, indicating when evidence is insufficient.
+We present \tacet, a timing side-channel detection library that reports
+\emph{Inconclusive} when evidence is insufficient rather than forcing a verdict.
+This three-way decision framework (Pass/Fail/Inconclusive) prevents false confidence.
 %
-\tacet achieves this through Bayesian inference over quantile differences,
-outputting interpretable posterior probabilities $\prob{\text{leak} > \theta \given \text{data}}$
-rather than p-values.
-Key innovations include block bootstrap covariance estimation to handle
-autocorrelated measurements, quality gates that detect when the model
-cannot reliably distinguish signal from noise, and explicit measurement
-floor tracking.
+\tacet uses Bayesian inference over quantile differences, outputting posterior
+probabilities $\prob{\text{leak} > \theta \given \text{data}}$ instead of p-values.
+The system handles autocorrelated measurements via block bootstrap, detects degraded
+conditions through quality gates, and tracks an explicit measurement floor.
 %
-Our evaluation on synthetic benchmarks and real cryptographic libraries demonstrates
-that \tacet maintains calibrated verdicts across varying noise levels and
-autocorrelation conditions where existing tools produce unreliable results.
-\tacet is implemented in Rust with C/C++, Go, and JavaScript bindings, designed for
-integration into continuous integration pipelines.
+We evaluate \tacet on synthetic benchmarks and real cryptographic libraries.
+Where other tools produce unreliable results under noise and autocorrelation,
+\tacet maintains calibrated verdicts by returning Inconclusive when appropriate.
+The library is implemented in Rust with C/C++, Go, and JavaScript bindings.
 
 \end{abstract}
 
@@ -107,54 +104,53 @@ integration into continuous integration pipelines.
 \section{Introduction}
 \label{sec:intro}
 
-Timing side-channel detection is a critical part of validating cryptographic
-implementations, yet existing tools provide binary pass/fail verdicts without
-indicating when measurement conditions prevent reliable conclusions. When noise
-or autocorrelation degrades data quality, these tools may output ``pass'' when
-evidence is genuinely insufficient---a problem we term \emph{false confidence}.
-A developer who sees a passing result naturally assumes their code is safe,
-unaware that the test lacked the statistical power to detect a real vulnerability.
+Timing side-channel detection is part of validating cryptographic implementations.
+Existing tools provide binary pass/fail verdicts without indicating when measurement
+conditions make the result unreliable. When noise or autocorrelation degrades data
+quality, these tools may output ``pass'' even when the evidence is insufficient.
+A developer sees a passing result and assumes their code has no exploitable leak,
+unaware the test couldn't actually detect anything.
 
-Timing side-channels remain a serious threat to deployed cryptographic systems.
-Recent attacks have demonstrated practical exploitation across diverse settings:
-Lucky~Thirteen~\cite{lucky13} exploited CBC padding timing in TLS, requiring only
-a few thousand queries; the Raccoon Attack~\cite{raccoon} recovered DH secrets
-via microsecond-level timing differences; and the MARVIN attack~\cite{marvin}
-showed that RSA PKCS\#1 v1.5 implementations in major libraries leak plaintext
-through timing. These attacks span network-accessible APIs (where Timeless Timing
-Attacks~\cite{timeless} enable LAN-like precision via request multiplexing) to
-co-located adversaries in SGX enclaves and containerized environments.
+Timing side-channels remain a real threat. Lucky~Thirteen~\cite{lucky13} exploited
+CBC padding timing in TLS with just a few thousand queries. The Raccoon Attack~\cite{raccoon}
+recovered DH secrets from timing differences on the order of microseconds. The MARVIN
+attack~\cite{marvin} showed that RSA PKCS\#1 v1.5 implementations in over 40 libraries
+leak plaintext through nanosecond-scale timing differences in big-integer arithmetic. These attacks work across different settings: network-accessible APIs (where
+Timeless Timing Attacks~\cite{timeless} achieve LAN-like precision via HTTP/2 request
+multiplexing), and co-located adversaries in SGX enclaves or containers.
 
-The standard approach to timing validation uses statistical tests that compare
-execution time distributions between fixed and random inputs. \dudect~\cite{dudect},
-the most widely adopted tool, applies Welch's t-test and reports a binary verdict.
-More recent tools like \rtlf~\cite{rtlf} and \silent~\cite{silent} use quantile
-comparisons with bootstrap-based inference. However, all existing tools share
-a fundamental limitation: they output binary verdicts (leak detected / no leak
-detected) without distinguishing between ``the implementation is safe'' and
-``we couldn't tell.'' Under noisy conditions---common in CI environments with
-shared resources and variable system load---this conflation leads to unreliable
-results: false positives that waste developer time, and worse, false negatives
-that provide unwarranted confidence in vulnerable code.
+The standard approach compares execution time distributions between fixed and
+random inputs. \dudect~\cite{dudect}, the most widely used tool, applies Welch's
+t-test and reports a binary verdict. More recent tools like \rtlf~\cite{rtlf} and
+\silent~\cite{silent} use quantile comparisons with bootstrap-based inference.
+But all existing tools share the same limitation: they output binary verdicts
+without distinguishing between ``no leak above threshold'' and ``we couldn't tell.''
 
-We present \tacet, a timing side-channel detection tool that provides
-\emph{calibrated verdicts}. Rather than forcing a binary decision, \tacet
-outputs three possible verdicts: \textsc{Pass} (high confidence of no leak),
-\textsc{Fail} (high confidence of leak), or \textsc{Inconclusive} (insufficient
-evidence). This calibration is achieved through Bayesian inference: \tacet
+This limitation is well-documented by practitioners. Trail of Bits notes that
+dudect's ``time measurements are as reliable as the conditions allow''—noise from
+concurrent processes can mask leakage signals, results may not reproduce across
+machines, and critically, ``even if Dudect finds no leakages, it doesn't guarantee
+that the code is free from timing vulnerabilities''~\cite{trailofbits-dudect}.
+Under noisy conditions (common in CI with shared resources and variable load),
+binary tools may output ``pass'' when the evidence is genuinely insufficient.
+False positives waste developer time; false negatives give unwarranted confidence
+in vulnerable code.
+
+We present \tacet, a timing side-channel detection tool with three possible
+verdicts: \textsc{Pass} (high confidence of no leak), \textsc{Fail} (high
+confidence of leak), or \textsc{Inconclusive} (insufficient evidence). \tacet
 computes the posterior probability $\prob{\text{leak} > \theta \given \text{data}}$
-and only emits Pass or Fail when this probability crosses a decision threshold
-(default 5\% or 95\%). When evidence is insufficient, quality gates detect this
-condition and return Inconclusive rather than guessing.
+through Bayesian inference and only emits Pass or Fail when this probability
+crosses a decision threshold (5\% or 95\%). When evidence is insufficient,
+quality gates detect this and return Inconclusive rather than guessing.
 
 \tacet adopts the quantile-difference test statistic from \silent~\cite{silent},
-which compares timing distributions via their deciles rather than means. This
-captures both uniform timing shifts (from branch differences) and tail effects
-(from cache behavior). Our contribution is not the test statistic itself, but
-the probabilistic framework that enables calibrated uncertainty quantification:
-a robust Bayesian model, quality gates that detect degraded measurement conditions,
-and an explicit measurement floor that prevents claiming ``no leak'' when the
-system cannot resolve effects at the requested threshold.
+which compares timing distributions via deciles rather than means, capturing both
+uniform shifts (from branches) and tail effects (from cache behavior). Our contribution
+is the probabilistic framework around this statistic: a robust Bayesian model,
+quality gates that detect degraded measurement conditions, and an explicit measurement
+floor that prevents claiming ``no leak'' when the system can't actually resolve
+effects at the requested threshold.
 
 %-------------------------------------------------------------------------------
 \subsection{Contributions}
@@ -198,18 +194,16 @@ Our contributions are:
 \subsection{Timing Side-Channel Attacks}
 \label{sec:background:attacks}
 
-Timing side-channels arise when a cryptographic implementation's execution time
-depends on secret data. An attacker who can measure this timing---either directly
-or through statistical analysis of many queries---may recover secret keys or
+Timing side-channels exist when a cryptographic implementation's execution time
+depends on secret data. An attacker who can measure this timing (either directly
+or through statistical analysis of many queries) may recover secret keys or
 plaintext. The threat model varies by attacker capability:
 
 \paragraph{Remote network attackers.}
-Traditional timing attacks over the internet face millisecond-level jitter,
-limiting exploitability. However, Van~Goethem~\etal~\cite{timeless} demonstrated
-that HTTP/2 request multiplexing enables \emph{timeless timing attacks}, where
-relative timing between concurrent requests eliminates network jitter. This
-effectively gives remote attackers LAN-like precision ($\sim$100\,ns), making
-previously unexploitable leaks dangerous.
+Traditional timing attacks over the internet face millisecond-level jitter.
+Van~Goethem~\etal~\cite{timeless} showed that HTTP/2 request multiplexing
+enables timeless timing attacks: relative timing between concurrent requests
+eliminates network jitter, giving remote attackers LAN-like precision ($\sim$100\,ns).
 
 \paragraph{Adjacent network attackers.}
 Attackers on the same LAN or in the same data center can achieve microsecond
@@ -230,17 +224,17 @@ by co-located adversaries.
 Several tools exist for detecting timing side-channels during development.
 
 \paragraph{\dudect~\cite{dudect}.}
-The most widely used tool, \dudect applies Welch's t-test to compare timing
-distributions between fixed and random inputs. It is simple, fast, and available
-in C with Rust bindings. However, it compares only means (missing tail effects),
+The most widely used tool. \dudect applies Welch's t-test to compare timing
+distributions between fixed and random inputs. It's simple, fast, and available
+in C with Rust bindings. But it compares only means (missing tail effects),
 assumes normality (violated by timing data), outputs only a t-statistic (not
-interpretable as a probability), and provides no indication when measurement
-noise makes the result unreliable.
+a probability), and gives no indication when measurement noise makes the result
+unreliable.
 
 \paragraph{\tlsfuzzer~\cite{tlsfuzzer}.}
 A network-level timing analysis tool that applies multiple statistical tests
-(Wilcoxon, Friedman, etc.) to TLS implementations. It handles some forms of
-autocorrelation and provides bounded Type-I error, but requires complex setup
+(Wilcoxon, Friedman, etc.) to TLS implementations. It mitigates autocorrelation
+via paired sampling and provides bounded Type-I error, but requires complex setup
 for protocol fuzzing and outputs binary verdicts without uncertainty quantification.
 
 \paragraph{\rtlf~\cite{rtlf}.}
@@ -252,13 +246,12 @@ from cache state or CPU frequency scaling. \rtlf outputs binary verdicts and
 operates only on pre-collected measurement files (no integrated measurement).
 
 \paragraph{\silent~\cite{silent}.}
-The most statistically sophisticated prior work, \silent uses a quantile-based
-test statistic with $m$-dependent block bootstrap that correctly handles
-autocorrelated data. It provides bounded Type-I error via ``relevance testing''
-against a user-defined threshold $\Delta$. However, \silent outputs binary
-verdicts only: when evidence is marginal, it must choose Pass or Fail rather
-than reporting uncertainty. The paper explicitly acknowledges stationarity as
-a limitation but does not actively detect violations.
+The most statistically sophisticated prior work. \silent uses a quantile-based
+test statistic with $m$-dependent block bootstrap that handles autocorrelated data.
+It provides bounded Type-I error via relevance testing against a user-defined
+threshold $\Delta$. But \silent only outputs binary verdicts: when evidence is
+marginal, it must choose Pass or Fail rather than reporting uncertainty. The paper
+acknowledges stationarity as a limitation but doesn't actively detect violations.
 
 %-------------------------------------------------------------------------------
 \subsection{Feature Comparison}
@@ -284,7 +277,7 @@ Handles autocorrelation & $\times$ & $\circ$ & $\times$ & $\checkmark$\textsuper
 Model-free dependence\textsuperscript{6} & $\times$ & $\times$ & $\times$ & $\times$ & $\checkmark$ \\
 Non-parametric & $\times$ & $\circ$ & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
 Bounded false positive rate & $\circ$ & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
-Coarse/discrete timers & $\checkmark$ & $\times$ & $\times$ & $\checkmark$ & $\checkmark$ \\
+Coarse/discrete timers & $\checkmark$ & $\times$ & $\circ$ & $\checkmark$ & $\checkmark$ \\
 Effect size quantification & $\times$ & $\times$ & $\circ$\textsuperscript{5} & $\checkmark$ & $\checkmark$ \\
 Adaptive sampling & $\circ$ & $\times$ & $\times$ & $\checkmark$ & $\checkmark$ \\
 \midrule
@@ -297,9 +290,9 @@ Integrated measurement & $\checkmark$ & $\checkmark$ & $\times$ & $\times$ & $\c
 \textsuperscript{1}Reports Inconclusive when evidence is insufficient, rather than forcing a potentially incorrect verdict.
 \textsuperscript{2}Outputs interpretable $\prob{\text{leak} > \theta \given \text{data}}$ rather than binary verdict or p-value.
 \textsuperscript{3}\silent acknowledges stationarity as a limitation; \tacet actively detects drift via quality gates.
-\textsuperscript{4}\silent uses $m$-dependent block bootstrap but assumes a specific parametric dependence structure.
+\textsuperscript{4}\silent uses $m$-dependent block bootstrap on per-class samples.
 \textsuperscript{5}\rtlf reports raw decile differences without confidence intervals.
-\textsuperscript{6}No parametric assumption on dependence structure; uses block bootstrap on acquisition stream without $m$-dependence model.
+\textsuperscript{6}Stream-based block bootstrap preserves cross-class temporal dependencies (e.g., cache state carrying from Fixed to Random samples).
 \end{flushleft}
 \end{table*}
 
@@ -309,17 +302,26 @@ Integrated measurement & $\checkmark$ & $\checkmark$ & $\times$ & $\times$ & $\c
 \section{Tacet's Approach}
 \label{sec:approach}
 
-\tacet is designed around a core principle: when measurement conditions cannot
-support a confident conclusion, the tool should say so rather than guess. This
-section describes the statistical methodology that enables calibrated verdicts.
+\tacet is designed around one principle: when measurement conditions can't support
+a confident conclusion, say so rather than guess. This section describes the
+statistical methodology.
+
+\tacet operates in two phases. During \emph{calibration}, it collects an initial
+sample (default 5,000 per class) to estimate the covariance structure via block
+bootstrap and set up the Bayesian prior. During \emph{adaptive sampling}, it
+collects batches (default 1,000 samples) and updates the posterior probability
+after each batch, continuing until a decision threshold is crossed or a quality
+gate triggers Inconclusive.
 
 \paragraph{Threshold selection.}
-The threshold $\theta$ defines the minimum effect size worth detecting. There is no
-single correct value---it depends on the threat model. We provide presets based on
+The threshold $\theta$ defines the minimum effect size worth detecting. There's no
+single correct value—it depends on the threat model. We provide presets based on
 published attacks: \textsc{SharedHardware} (0.4\,ns, $\approx$2 cycles at 5\,GHz)
-for co-resident attackers; \textsc{AdjacentNetwork} (100\,ns) for LAN attackers
-leveraging HTTP/2 multiplexing~\cite{timeless}; \textsc{RemoteNetwork} (50\,$\mu$s)
-for general internet exposure. Users may specify custom thresholds.
+for co-resident attackers~\cite{sgxtiming}; \textsc{PostQuantumSentinel} (2.0\,ns,
+$\approx$10 cycles at 5\,GHz) for lattice-based cryptography~\cite{kyberslash};
+\textsc{AdjacentNetwork} (100\,ns) for LAN attackers using HTTP/2
+multiplexing~\cite{timeless}; \textsc{RemoteNetwork} (50\,$\mu$s) for general
+internet attackers~\cite{crosby2009}. Users can specify custom thresholds.
 
 %-------------------------------------------------------------------------------
 \subsection{Calibrated Verdicts}
@@ -330,7 +332,8 @@ Unlike binary pass/fail tools, \tacet outputs three possible verdicts:
 \begin{itemize}
     \item \textbf{Pass}: The posterior probability of a timing leak exceeding
           the threshold is below 5\%: $\prob{\text{leak} > \theta \given \text{data}} < 0.05$.
-          High confidence that no exploitable leak exists.
+          High confidence that no timing leak exceeding $\theta$ exists under the tested
+          input distribution.
 
     \item \textbf{Fail}: The posterior probability exceeds 95\%:
           $\prob{\text{leak} > \theta \given \text{data}} > 0.95$.
@@ -341,27 +344,35 @@ Unlike binary pass/fail tools, \tacet outputs three possible verdicts:
           measurement conditions cannot support a reliable verdict.
 \end{itemize}
 
-This three-way structure resolves a fundamental problem with binary tools:
-they conflate ``the implementation is safe'' with ``we couldn't tell.'' When
-\dudect reports ``Pass'' under noisy conditions, this may reflect genuine
-constant-time behavior or simply insufficient statistical power. \tacet makes
-this distinction explicit---Inconclusive means the test should be re-run under
-better conditions or with more samples, not that the code is safe.
+This resolves a fundamental problem with binary tools: they conflate ``no leak
+above threshold'' with ``we couldn't tell.'' When \dudect reports ``Pass'' under
+noisy conditions, this may reflect genuine constant-time behavior or just
+insufficient statistical power. \tacet makes this explicit—Inconclusive means
+the test should be re-run under better conditions or with more samples, not that
+the implementation has no exploitable leak.
 
-For CI integration, this calibration prevents flaky tests: rather than
-randomly passing or failing based on environmental noise, \tacet returns
-Inconclusive when conditions are poor. Developers can configure how to handle
-Inconclusive results (retry, warn, or fail-closed) based on their security requirements.
+For CI integration, this prevents flaky tests. Rather than randomly passing or
+failing based on environmental noise, \tacet returns Inconclusive when conditions
+are poor. Developers can configure how to handle this (retry, warn, or fail-closed)
+based on their security requirements.
+
+\paragraph{Example.}
+Suppose \tacet tests an AES implementation with threshold $\theta = 100$\,ns.
+After collecting 50,000 samples, it observes a maximum quantile difference of
+30\,ns. The posterior probability $\prob{\text{leak} > 100\text{ns} \given
+\text{data}} = 0.03$, well below the 5\% Pass threshold. Quality gates confirm:
+KL divergence is 1.4 nats (sufficient learning), no condition drift detected,
+and the measurement floor is 15\,ns (below $\theta$). \tacet returns
+\textsc{Pass}.
 
 %-------------------------------------------------------------------------------
 \subsection{Quantile-Based Test Statistic}
 \label{sec:approach:quantile}
 
 We adopt the quantile-difference test statistic and max-$k$ decision rule from
-\silent~\cite{silent}, embedding them in a probabilistic framework that enables
-calibrated uncertainty quantification. Our contribution is not the test statistic
-itself, but the Bayesian inference framework that produces calibrated verdicts
-with interpretable posterior probabilities.
+\silent~\cite{silent}, embedding them in a probabilistic framework. Our contribution
+is not the test statistic itself but the Bayesian inference framework that produces
+calibrated verdicts with interpretable posterior probabilities.
 
 Rather than comparing means (as in \dudect's t-test), we compare timing
 distributions via their deciles. For fixed-input samples $F$ and random-input
@@ -375,99 +386,102 @@ The decision functional is $m(\delta) = \max_k |\delta_k|$---a timing leak is
 declared when the maximum absolute quantile difference exceeds the threshold $\theta$.
 
 \paragraph{Why quantiles?}
-Timing leaks manifest in different patterns. A branch that depends on secret
-data causes a \emph{uniform shift}: all quantiles move by approximately the
-same amount. A cache-timing leak causes a \emph{tail effect}: only some operations
-experience cache misses, shifting upper quantiles while leaving lower quantiles
-unchanged. A mean-comparison test like \dudect would detect uniform shifts but
-may miss tail effects. Quantile differences capture both patterns.
+Timing leaks have different patterns. A branch that depends on secret data causes
+a uniform shift: all quantiles move by roughly the same amount. A cache-timing
+leak causes a tail effect: only some operations experience cache misses, shifting
+upper quantiles while leaving lower ones unchanged. A mean-comparison test like
+\dudect detects uniform shifts but may miss tail effects. Quantile differences
+capture both.
 
 %-------------------------------------------------------------------------------
 \subsection{Bayesian Inference}
 \label{sec:approach:inference}
 
-\tacet uses Bayesian inference to compute posterior probabilities rather than
-p-values. This provides several advantages:
+\tacet uses Bayesian inference to compute posterior probabilities instead of
+p-values. This has several advantages:
 
 \paragraph{Interpretable output.}
-When \tacet reports ``72\% probability of a leak,'' this means exactly what it
-says: given the observed data and our model, 72\% of the posterior probability
-mass corresponds to effects exceeding the threshold. Contrast this with a p-value,
-which answers a different question (``if there were no leak, how likely is data
-this extreme?'') and is routinely misinterpreted.
+When \tacet reports ``72\% probability of a leak,'' this means what it says:
+given the observed data and our model, 72\% of the posterior probability mass
+corresponds to effects exceeding the threshold. A p-value answers a different
+question (``if there were no leak, how likely is data this extreme?'') and is
+routinely misinterpreted.
 
 \paragraph{Valid adaptive sampling.}
-Frequentist methods suffer from \emph{optional stopping}: if you keep sampling
-until you get a significant result, you inflate your false positive rate.
-Bayesian inference does not have this problem---the posterior probability is
-valid regardless of when you stop, a consequence of the likelihood principle.
-This enables \tacet's adaptive sampling: collect data until confident, then stop.
+Frequentist methods suffer from optional stopping: if you keep sampling until
+you get a significant result, you inflate your false positive rate. Bayesian
+inference avoids this issue via the likelihood principle—the posterior is valid
+regardless of when you stop, provided the prior and likelihood are specified
+before seeing data (as \tacet does during calibration). This lets \tacet sample
+adaptively: collect data until confident, then stop.
 
-\paragraph{Principled handling of prior information.}
+\paragraph{Principled use of prior information.}
 The prior encodes what we know before seeing data. \tacet calibrates the prior
-so that it expresses genuine uncertainty: neither strongly favoring ``leak''
-nor ``no leak.'' This prevents the prior from dominating when data is limited
-while allowing confident conclusions when evidence is strong.
+to express genuine uncertainty: neither strongly favoring ``leak'' nor ``no leak.''
+This prevents the prior from dominating when data is limited while allowing
+confident conclusions when evidence is strong.
 
-The full model specification (likelihood, prior, Gibbs sampler) is provided in
-Appendix~\ref{app:methodology}. At a high level: we model the observed quantile
-differences with a robust Student-$t$ likelihood that automatically inflates
-uncertainty when the covariance estimate is too small, and place a Student-$t$
-prior on the true effect that adapts its scale based on the threshold. The
-posterior is approximated via MCMC, with $<$1\,ms computational overhead.
+The full model specification is in Appendix~\ref{app:methodology}. At a high
+level: we model the observed quantile differences with a robust Student-$t$
+likelihood that automatically inflates uncertainty when the covariance estimate
+is too small, and place a Student-$t$ prior on the true effect that adapts its
+scale based on the threshold. The posterior is approximated via MCMC with
+$<$1\,ms computational overhead.
 
 %-------------------------------------------------------------------------------
 \subsection{Handling Autocorrelation}
 \label{sec:approach:autocorrelation}
 
-Timing measurements exhibit \emph{autocorrelation}: nearby samples are more
-similar than distant ones due to cache state, CPU frequency scaling, and OS
-scheduling. Standard statistical methods assume independent samples; violating
-this assumption causes underestimated variance and inflated false positive rates.
+Timing measurements exhibit autocorrelation: nearby samples are more similar than
+distant ones due to cache state, CPU frequency scaling, and OS scheduling. Standard
+statistical methods assume independent samples. Violating this assumption causes
+underestimated variance and inflated false positive rates.
 
-\tacet addresses this through block bootstrap on the \emph{acquisition stream}---the
+\tacet addresses this through block bootstrap on the acquisition stream—the
 interleaved sequence of (class, timing) pairs in measurement order. Rather than
-resampling individual measurements (which would destroy the dependence structure),
+resampling individual measurements (which destroys the dependence structure),
 we resample contiguous blocks and reconstruct timing distributions from each
 bootstrap replicate. This preserves temporal dependence within blocks while
 estimating the variance inflation caused by autocorrelation.
 
 Block length is selected automatically using the Politis-White algorithm~\cite{politiswhite},
 which estimates the optimal block size from the autocorrelation structure. We
-also compute the \emph{integrated autocorrelation time} (IACT), which quantifies
-how many nominal samples equal one independent observation. The effective sample
-size $n_{\text{eff}} = n / \hat{\tau}$ may be substantially smaller than the
-nominal count when autocorrelation is strong.
+also compute the integrated autocorrelation time (IACT), which quantifies how
+many nominal samples equal one independent observation. The effective sample size
+$n_{\text{eff}} = n / \hat{\tau}$ may be much smaller than the nominal count when
+autocorrelation is strong.
 
-\silent also uses block bootstrap with $m$-dependence, so autocorrelation handling
-per se is not a unique differentiator. The key differences are: (1) \tacet does
-not assume a specific parametric dependence structure; (2) \tacet actively monitors
-for stationarity violations via quality gates; (3) \tacet outputs Inconclusive
-when autocorrelation is too severe to handle, rather than forcing a verdict.
+\silent also uses block bootstrap to handle autocorrelation. The key distinction
+is that \tacet uses \emph{stream-based bootstrap}—resampling the interleaved
+acquisition stream rather than per-class samples. This preserves cross-class
+temporal dependencies (e.g., cache state carrying from a Fixed measurement to
+the next Random measurement). Additionally, \tacet actively monitors for
+stationarity violations via quality gates, and outputs Inconclusive when
+autocorrelation is too severe to handle, rather than forcing a verdict.
 
 %-------------------------------------------------------------------------------
 \subsection{Quality Gates}
 \label{sec:approach:gates}
 
-Quality gates are the mechanism that enables calibrated verdicts. They detect
-when measurement conditions are too poor to support a confident conclusion,
-triggering Inconclusive rather than an unreliable Pass or Fail.
+Quality gates enable calibrated verdicts. They detect when measurement conditions
+are too poor to support a confident conclusion, triggering Inconclusive rather
+than an unreliable Pass or Fail.
 
 \paragraph{Gate 1: Insufficient information gain.}
 After calibration, \tacet computes the KL divergence between the prior and
 posterior distributions. If KL $<$ 0.7 nats, the posterior has barely moved
-from the prior---the data is too noisy to distinguish signal from noise.
-This triggers Inconclusive with reason \textsc{DataTooNoisy}.
+from the prior—the data is too noisy to distinguish signal from noise. This
+triggers Inconclusive with reason \textsc{DataTooNoisy}.
 
 During adaptive sampling, if the KL divergence between successive posteriors
-collapses (total $<$ 0.001 nats over 5+ batches), the model has stopped
-learning from new data. More samples will not help. This triggers Inconclusive
-with reason \textsc{NotLearning}.
+collapses (total $<$ 0.001 nats over 5+ batches), the model has stopped learning
+from new data. More samples won't help. This triggers Inconclusive with reason
+\textsc{NotLearning}.
 
 \paragraph{Gate 2: Would take too long.}
 \tacet extrapolates time to decision based on the current convergence rate. If
 projected time exceeds 10$\times$ the configured budget, it stops early with
-Inconclusive rather than wasting resources on a test that cannot conclude within
+Inconclusive rather than wasting resources on a test that can't conclude within
 practical limits.
 
 \paragraph{Gate 3: Resource budget exceeded.}
@@ -480,28 +494,28 @@ The covariance estimate from calibration assumes stationary conditions. If
 measurement statistics change during the adaptive loop (variance ratio outside
 $[0.5, 2.0]$, lag-1 autocorrelation change $>0.3$, or mean drift $>3\sigma$),
 this indicates non-stationarity. \tacet reports Inconclusive with reason
-\textsc{ConditionsChanged} rather than producing a verdict based on invalid assumptions.
+\textsc{ConditionsChanged} rather than producing a verdict based on invalid
+assumptions.
 
-\silent acknowledges stationarity as a limitation but does not actively detect
+\silent acknowledges stationarity as a limitation but doesn't actively detect
 violations. \tacet's quality gates fill this gap: when conditions change during
-measurement, \tacet reports Inconclusive rather than producing a potentially
-misleading verdict.
+measurement, \tacet reports Inconclusive rather than producing a misleading verdict.
 
 %-------------------------------------------------------------------------------
 \subsection{Measurement Floor}
 \label{sec:approach:floor}
 
-A subtle failure mode of timing analysis is claiming ``no leak'' when the
-measurement system cannot actually resolve effects at the requested threshold.
-\tacet makes this explicit through the \emph{measurement floor} $\theta_{\text{floor}}$.
+A subtle failure mode: claiming ``no leak'' when the measurement system can't
+actually resolve effects at the requested threshold. \tacet makes this explicit
+through the measurement floor $\theta_{\text{floor}}$.
 
 The measurement floor is the smallest effect the system can reliably detect given
-current conditions. It has two components: (1) a statistical component that
-shrinks as $\theta_{\text{floor,stat}}(n) = c_{\text{floor}} / \sqrt{n_{\text{eff}}}$,
+current conditions. It has two components: (1) a statistical component that shrinks
+as $\theta_{\text{floor,stat}}(n) = c_{\text{floor}} / \sqrt{n_{\text{eff}}}$,
 where $c_{\text{floor}}$ is calibrated from the noise structure; and (2) a timer
 resolution component $\theta_{\text{tick}}$ based on quantization.
 
-The \emph{effective threshold} used for inference is:
+The effective threshold used for inference is:
 \begin{equation}
     \theta_{\text{eff}} = \max(\theta_{\text{user}}, \theta_{\text{floor}})
 \end{equation}
@@ -515,9 +529,9 @@ When $\theta_{\text{eff}} > \theta_{\text{user}}$:
           \tacet returns Inconclusive with reason \textsc{ThresholdElevated}.
 \end{itemize}
 
-This prevents false confidence: \tacet never claims ``safe at 100\,ns'' when
-it can only resolve effects down to 500\,ns. As sampling continues, the floor
-decreases; if it drops to $\theta_{\text{user}}$ or below, Pass becomes possible.
+This prevents false confidence: \tacet never claims ``safe at 100\,ns'' when it
+can only resolve effects down to 500\,ns. As sampling continues, the floor decreases.
+If it drops to $\theta_{\text{user}}$ or below, Pass becomes possible.
 
 %===============================================================================
 % SECTION 4: IMPLEMENTATION (~0.75 pages)
@@ -525,27 +539,25 @@ decreases; if it drops to $\theta_{\text{user}}$ or below, Pass becomes possible
 \section{Implementation}
 \label{sec:implementation}
 
-\tacet is implemented in Rust, with the statistical core comprising approximately
+\tacet is implemented in Rust. The statistical core is approximately
 % TODO: count actual KLOC
-5,000 lines of code. The block bootstrap is parallelized using Rayon, providing
-4--8$\times$ speedup on multi-core systems. Foreign function interfaces expose
-the same API surface to C, C++, Go, and JavaScript (via WebAssembly with native
-timer bindings for Node.js, Deno, and Bun).
+5,000 lines of code. The block bootstrap is parallelized using Rayon (4--8$\times$
+speedup on multi-core systems). Foreign function interfaces expose the same API
+to C, C++, Go, and JavaScript (via WebAssembly with native timer bindings for
+Node.js, Deno, and Bun).
 
 %-------------------------------------------------------------------------------
 \subsection{Measurement Infrastructure}
 \label{sec:implementation:measurement}
 
 High-resolution timing is platform-specific. On x86\_64, we use the \texttt{rdtsc}
-instruction, which provides cycle-level resolution. On ARM64, we use the
-\texttt{cntvct\_el0} counter, which has coarser resolution (typically 24\,MHz
-on Apple Silicon, corresponding to $\sim$42\,ns ticks).
+instruction (cycle-level resolution). On ARM64, we use the \texttt{cntvct\_el0}
+counter (coarser resolution: typically 24\,MHz on Apple Silicon, $\sim$42\,ns ticks).
 
-For scenarios requiring cycle-level precision on ARM64, \tacet optionally supports
-Performance Monitoring Unit (PMU) counters: \texttt{kperf} on macOS (requires
-elevated privileges) and \texttt{perf\_event} on Linux (requires \texttt{CAP\_PERFMON}
-or root). These provide sub-nanosecond resolution but are opt-in due to privilege
-requirements.
+For cycle-level precision on ARM64, \tacet optionally supports Performance Monitoring
+Unit (PMU) counters: \texttt{kperf} on macOS (requires elevated privileges) and
+\texttt{perf\_event} on Linux (requires \texttt{CAP\_PERFMON} or root). These provide
+sub-nanosecond resolution but are opt-in due to privilege requirements.
 
 Measurements are collected as an interleaved acquisition stream: fixed and random
 inputs are alternated to minimize systematic bias from CPU state changes. All
@@ -557,38 +569,36 @@ from random number generation.
 \label{sec:implementation:batching}
 
 On platforms with coarse timer resolution, individual operation timing may be
-dominated by quantization noise. \tacet automatically detects this condition
-during a pilot phase and enables \emph{adaptive batching}: rather than timing
-single operations, it times batches of $K$ operations and divides by $K$.
+dominated by quantization noise. \tacet automatically detects this during a pilot
+phase and enables adaptive batching: rather than timing single operations, it
+times batches of $K$ operations and divides by $K$.
 
 The batch size is selected to achieve at least 50 timer ticks per measurement,
-clamped to $K \in [1, 20]$ to avoid microarchitectural artifacts from excessive
-repetition. Batching is automatically disabled on x86\_64 (where \texttt{rdtsc}
-provides sufficient resolution) or when PMU timers are used.
+clamped to $K \in [1, 20]$ to avoid microarchitectural artifacts. Batching is
+automatically disabled on x86\_64 (where \texttt{rdtsc} provides sufficient
+resolution) or when PMU timers are used.
 
 %-------------------------------------------------------------------------------
 \subsection{CI Integration}
 \label{sec:implementation:bindings}
 
-\tacet is designed for continuous integration pipelines. Key properties:
+\tacet is designed for CI pipelines:
 
 \begin{itemize}
-    \item \textbf{Non-flaky}: The three-way verdict system means tests return
-          Inconclusive under poor conditions rather than randomly passing or
-          failing. This eliminates the ``rerun until green'' problem.
+    \item \textbf{Non-flaky}: Tests return Inconclusive under poor conditions
+          rather than randomly passing or failing. This eliminates the ``rerun
+          until green'' problem.
 
     \item \textbf{Configurable budgets}: Time and sample budgets can be set per
           test, allowing quick checks during development (10\,s) and thorough
           validation before release (60\,s+).
 
     \item \textbf{Exit codes}: The CLI returns distinct exit codes for Pass (0),
-          Fail (1), and Inconclusive (2), enabling CI scripts to handle each
-          case appropriately. Organizations can configure fail-closed (treat
-          Inconclusive as failure) or fail-open (treat as warning) policies.
+          Fail (1), and Inconclusive (2). Organizations can configure fail-closed
+          (treat Inconclusive as failure) or fail-open (treat as warning) policies.
 
     \item \textbf{Structured output}: JSON output includes the posterior probability,
-          effect size estimate with credible intervals, and diagnostic information,
-          enabling automated analysis and trend tracking.
+          effect size estimate with credible intervals, and diagnostics.
 \end{itemize}
 
 %===============================================================================
@@ -608,17 +618,17 @@ under varying measurement conditions? (2) How does it compare to existing tools?
 \paragraph{Synthetic benchmarks.}
 Synthetic experiments use generated timing distributions with controlled effect
 sizes, autocorrelation structures, and noise levels. This allows precise ground-truth
-evaluation independent of hardware. We inject effects as shifts in the mean timing
+evaluation independent of hardware. We inject effects as shifts in mean timing
 (simulating branch differences) or shifts in upper quantiles only (simulating
 cache effects), with autocorrelation modeled as AR(1) processes at varying
 correlation coefficients $\rho \in \{-0.6, -0.3, 0, 0.3, 0.6\}$.
 
 \paragraph{Cryptographic library tests.}
 Real-world tests run on AWS EC2 instances: \texttt{c8g.4xlarge} (ARM64 Graviton3,
-16 vCPUs) and \texttt{c8a.4xlarge} (x86\_64 AMD EPYC, 16 vCPUs). These represent
-typical CI infrastructure. We test against cryptographic implementations from
-multiple Rust libraries (RustCrypto, ring, dalek, pqcrypto) covering symmetric,
-asymmetric, hash, AEAD, and post-quantum algorithms.
+16 vCPUs) and \texttt{c8a.4xlarge} (x86\_64 AMD EPYC, 16 vCPUs)—typical CI
+infrastructure. We test cryptographic implementations from multiple Rust libraries
+(RustCrypto, ring, dalek, pqcrypto) covering symmetric, asymmetric, hash, AEAD,
+and post-quantum algorithms.
 
 \paragraph{Tools compared.}
 We compare \tacet against \dudect, \silent, \rtlf, and several additional
@@ -644,24 +654,23 @@ category, all verdicts are either Pass or Fail.
 
 \paragraph{False positive rate under autocorrelation.}
 Figure~\ref{fig:fpr_heatmap} shows verdict distributions under the null hypothesis
-(no injected effect) across varying autocorrelation structures. Each cell shows
-the proportion of trials yielding each verdict type.
+(no injected effect) across varying autocorrelation structures.
 
 Under i.i.d.\ conditions ($\rho = 0$), most tools correctly return ``no effect
-found'' with low false positive rates. However, as positive autocorrelation
-increases ($\rho = 0.3, 0.6$), tools that assume independence show elevated
-false positive rates: the i.i.d.\ bootstrap underestimates variance, causing
-tests to reject the null hypothesis when they should not.
+found'' with low false positive rates. As positive autocorrelation increases
+($\rho = 0.3, 0.6$), tools that assume independence show elevated false positive
+rates: the i.i.d.\ bootstrap underestimates variance, causing tests to reject
+the null when they shouldn't.
 
-\tacet shows a distinctive pattern: under high autocorrelation, it returns
-Inconclusive (orange) rather than incorrect Pass or Fail verdicts. This is the
-calibration property in action---when the effective sample size drops due to
-autocorrelation, \tacet's quality gates detect that the posterior hasn't moved
-sufficiently from the prior and refuse to commit to a verdict.
+\tacet shows a different pattern: under high autocorrelation, it returns Inconclusive
+(orange) rather than incorrect Pass or Fail verdicts. This reflects the calibrated
+verdict system. When the effective sample size drops due to autocorrelation,
+\tacet's quality gates detect that the posterior hasn't moved sufficiently from
+the prior and refuse to commit to a verdict.
 
 \silent also handles autocorrelation correctly via $m$-dependent bootstrap, showing
-consistently low false positive rates. The key difference is that \silent must
-still output Pass or Fail, while \tacet can report uncertainty explicitly.
+consistently low false positive rates. The key difference: \silent must still output
+Pass or Fail, while \tacet can report uncertainty explicitly.
 
 % CHECK: Verify these numbers match the actual benchmark data
 \begin{figure*}[t]
@@ -677,18 +686,17 @@ still output Pass or Fail, while \tacet can report uncertainty explicitly.
 \end{figure*}
 
 \paragraph{Detection power across effect sizes.}
-Figure~\ref{fig:power_heatmap} shows detection rates as a function of effect
-size under moderate autocorrelation (AR(1) with $\rho = 0.6$). At large effect
-sizes ($\geq 5\sigma$), all tools reliably detect the timing difference. At
-smaller effect sizes, tools diverge: some show reduced detection (insufficient
-power) while others show inflated detection (false positives from underestimated
-variance).
+Figure~\ref{fig:power_heatmap} shows detection rates as a function of effect size
+under moderate autocorrelation (AR(1) with $\rho = 0.6$). At large effect sizes
+($\geq 5\sigma$), all tools reliably detect the timing difference. At smaller
+effect sizes, tools diverge: some show reduced detection (insufficient power)
+while others show inflated detection (false positives from underestimated variance).
 
-\tacet shows a characteristic transition: at effect sizes near or below the
-threshold, it returns Inconclusive rather than committing to Pass or Fail. As
-effect size increases, the posterior shifts toward Fail, eventually crossing
-the 95\% threshold. This gradual transition reflects the underlying probability
-rather than a sharp binary cutoff.
+\tacet shows a characteristic transition: at effect sizes near or below the threshold,
+it returns Inconclusive rather than committing to Pass or Fail. As effect size
+increases, the posterior shifts toward Fail, eventually crossing the 95\% threshold.
+This gradual transition reflects the underlying probability rather than a sharp
+binary cutoff.
 
 \begin{figure*}[t]
     \centering
@@ -749,58 +757,54 @@ Post-quantum & ML-KEM, ML-DSA, Falcon, SPHINCS+ & 11 \\
 \end{table}
 
 \paragraph{Zero false positives on constant-time implementations.}
-Across all 48 tests on known constant-time implementations, \tacet returned
-zero false positives (Pass or Inconclusive, never Fail on safe code). This
-validates the calibration: \tacet correctly identifies implementations that
-exhibit no exploitable timing differences.
+Across all 48 tests on known constant-time implementations, \tacet returned zero
+false positives (Pass or Inconclusive, never Fail on safe code). This validates
+the calibration.
 
 \paragraph{Accidental MARVIN discovery.}
-While building our test corpus of ``known safe'' implementations, we \emph{accidentally}
-rediscovered the MARVIN attack (CVE-2023-49092)~\cite{marvin} in the RustCrypto
-\texttt{rsa} crate (v0.9.9). \tacet detected a $\sim$250\,ns timing difference
-in RSA-1024 decryption, exceeding the \textsc{AdjacentNetwork} threshold (100\,ns).
+While constructing our test corpus, we tested implementations documented as
+constant-time in their respective library changelogs and release notes. We did
+not set out to replicate known vulnerabilities. However, when testing the
+RustCrypto \texttt{rsa} crate (v0.9.9), \tacet detected a $\sim$250\,ns timing
+difference in RSA-1024 decryption, exceeding the \textsc{AdjacentNetwork}
+threshold (100\,ns). This turned out to be the MARVIN attack
+(CVE-2023-49092)~\cite{marvin}, which we were unaware of when adding RSA to our
+test suite.
 
-This was not an intentional attempt to replicate a known vulnerability---we were
-unaware of the issue when adding RSA to our test suite. \tacet identified the
-leak from first principles: the timing difference originated from data-dependent
-branching in big-integer arithmetic during modular exponentiation.
-
-This accidental discovery demonstrates \tacet's practical utility: the tool can
-detect real vulnerabilities without prior knowledge of implementation details,
-making it valuable for routine validation of cryptographic code.
+\tacet identified the leak from first principles: the timing difference came from
+data-dependent branching in big-integer arithmetic during modular exponentiation.
+This demonstrates the tool's practical utility—it can detect real vulnerabilities
+without prior knowledge of specific attack patterns.
 
 \paragraph{Post-quantum considerations.}
-Post-quantum tests use the \textsc{PostQuantumSentinel} threshold (2\,ns,
-$\sim$10 cycles at 5\,GHz), reflecting the sensitivity demonstrated by
-KyberSlash-class attacks~\cite{kyberslash}. ML-KEM (Kyber-768) and ML-DSA
-(Dilithium3) encapsulation/signing passed all tests. Falcon-512 signing
-exhibits intentional timing variation from rejection sampling (the message
-is public, and rejection is independent of the secret key), which we document
-as expected behavior rather than a vulnerability.
+Post-quantum tests use the \textsc{PostQuantumSentinel} threshold (2\,ns, $\sim$10
+cycles at 5\,GHz), reflecting the sensitivity of KyberSlash-class attacks~\cite{kyberslash}.
+ML-KEM (Kyber-768) and ML-DSA (Dilithium3) encapsulation/signing passed all tests.
+Falcon-512 signing has intentional timing variation from rejection sampling (the
+message is public, and rejection is independent of the secret key)—we document
+this as expected behavior, not a vulnerability.
 
 %-------------------------------------------------------------------------------
 \subsection{Performance}
 \label{sec:evaluation:performance}
 
-\tacet's computational overhead is dominated by the block bootstrap during
-calibration and the Gibbs sampler during posterior updates.
+\tacet's computational overhead comes from the block bootstrap during calibration
+and the Gibbs sampler during posterior updates.
 
 % TODO: Include actual timing measurements
 \paragraph{Inference overhead.}
-The statistical inference pipeline adds approximately 100\,ms per analysis,
-comprising: block bootstrap covariance estimation ($\sim$50\,ms with 2,000
-iterations parallelized across 8 cores), Gibbs sampler ($<$1\,ms for 256
-iterations), and quality gate checks ($\sim$5\,ms). This is slower than
-\dudect (which computes only a t-statistic) but faster than \rtlf (which
-runs 10,000 bootstrap iterations in single-threaded R).
+The statistical inference pipeline adds approximately 100\,ms per analysis: block
+bootstrap covariance estimation ($\sim$50\,ms with 2,000 iterations parallelized
+across 8 cores), Gibbs sampler ($<$1\,ms for 256 iterations), and quality gate
+checks ($\sim$5\,ms). This is slower than \dudect (which computes only a t-statistic)
+but faster than \rtlf (which runs 10,000 bootstrap iterations in single-threaded R).
 
 \paragraph{Practical impact.}
-For CI integration, the inference overhead is typically negligible compared
-to measurement time. A test collecting 50,000 samples of a cryptographic
-operation at 1\,$\mu$s/operation spends $\sim$100\,ms on measurement and
-$\sim$100\,ms on inference---a 2$\times$ overhead that is acceptable for
-pre-deployment validation. For development iteration, shorter time budgets
-(10\,s) provide rapid feedback.
+For CI integration, the inference overhead is typically negligible compared to
+measurement time. A test collecting 50,000 samples of a cryptographic operation
+at 1\,$\mu$s/operation spends $\sim$100\,ms on measurement and $\sim$100\,ms on
+inference—a 2$\times$ overhead that's acceptable for pre-deployment validation.
+For development iteration, shorter time budgets (10\,s) provide rapid feedback.
 
 %===============================================================================
 % SECTION 6: DISCUSSION & LIMITATIONS (~0.75 pages)
@@ -813,49 +817,48 @@ pre-deployment validation. For development iteration, shorter time budgets
 \label{sec:discussion:tradeoffs}
 
 \paragraph{Methodological complexity.}
-\tacet's statistical methodology is substantially more complex than a t-test.
-The full specification (provided as an artifact) runs to approximately 30 pages,
-covering the Bayesian model, bootstrap procedures, quality gates, and measurement
-floor calculations. This complexity is the price of calibration: simpler methods
-cannot provide the same guarantees about when results are reliable.
+\tacet's statistical methodology is more complex than a t-test. The full specification
+(provided as an artifact) runs to approximately 30 pages, covering the Bayesian
+model, bootstrap procedures, quality gates, and measurement floor calculations.
+This complexity is the price of calibration: simpler methods can't provide the
+same guarantees about when results are reliable.
 
-For practitioners, this complexity is encapsulated in the library---users need
-not understand the statistical details to use \tacet effectively. The API is
-intentionally simple: specify a threshold (or attacker model), run the test,
-interpret the three-way verdict.
+For practitioners, this complexity is encapsulated in the library—users don't
+need to understand the statistical details. The API is simple: specify a threshold
+(or attacker model), run the test, interpret the verdict.
 
 \paragraph{Lower power under noise.}
 \tacet is deliberately conservative. When measurement conditions are marginal,
 it returns Inconclusive rather than committing to Pass or Fail. This may require
-more samples or better conditions to reach a definitive verdict compared to
-tools that always produce binary output.
+more samples or better conditions to reach a definitive verdict compared to tools
+that always produce binary output.
 
-We view this as a feature rather than a limitation. The Inconclusive rate is
-the ``price of honesty''---it reflects genuine uncertainty rather than hiding
-it behind a confident-sounding verdict. A tool that reports Pass under noisy
-conditions is not more powerful; it is overconfident.
+We view this as a feature, not a limitation. The Inconclusive rate reflects
+genuine uncertainty rather than hiding it behind a confident-sounding verdict
+when evidence is marginal. A tool that reports Pass under noisy conditions isn't
+more powerful; it's overconfident.
 
 \paragraph{Overhead.}
 The $\sim$100\,ms inference overhead is acceptable for CI validation but may be
 prohibitive for extremely fast feedback loops (e.g., running on every file save).
-For development iteration, we recommend using shorter time budgets (10\,s) that
-sacrifice some precision for speed.
+For development iteration, shorter time budgets (10\,s) sacrifice some precision
+for speed.
 
 %-------------------------------------------------------------------------------
 \subsection{Limitations}
 \label{sec:discussion:limitations}
 
 \paragraph{Stationarity assumption.}
-Like all timing analysis tools, \tacet assumes measurements are drawn from a
-stationary process (the distribution does not change over time). While quality
-gates detect gross violations, subtle drift may go undetected. Long-running
-tests should be periodically restarted to refresh the calibration baseline.
+Like all timing analysis tools, \tacet assumes measurements come from a stationary
+process (the distribution doesn't change over time). While quality gates detect
+gross violations, subtle drift may go undetected. Long-running tests should be
+periodically restarted to refresh the calibration baseline.
 
 \paragraph{Model specification.}
-The Bayesian model makes specific choices (Student-$t$ distributions, nine
-deciles, fixed degrees of freedom) that were validated on our benchmark suite.
-Different application domains may benefit from alternative specifications.
-The modular design allows researchers to experiment with variants.
+The Bayesian model makes specific choices (Student-$t$ distributions, nine deciles,
+fixed degrees of freedom) validated on our benchmark suite. Different application
+domains may benefit from alternative specifications. The modular design allows
+researchers to experiment with variants.
 
 %-------------------------------------------------------------------------------
 \subsection{Future Work}
@@ -874,36 +877,34 @@ benchmarks in future work.
 \section{Conclusion}
 \label{sec:conclusion}
 
-We have presented \tacet, a timing side-channel detection tool that provides
-\emph{calibrated verdicts}. Unlike existing tools that output binary pass/fail
-decisions, \tacet explicitly reports when evidence is insufficient, returning
-Inconclusive rather than guessing. This calibration is achieved through Bayesian
-inference over quantile differences, outputting interpretable posterior probabilities
-rather than p-values.
+We present \tacet, a timing side-channel detection tool that provides calibrated
+verdicts. Unlike existing tools that output binary pass/fail decisions, \tacet
+explicitly reports when evidence is insufficient, returning Inconclusive rather
+than guessing. This is achieved through Bayesian inference over quantile differences,
+outputting interpretable posterior probabilities instead of p-values.
 
-Our evaluation demonstrates that \tacet maintains calibrated verdicts across
-varying noise levels and autocorrelation conditions where existing tools produce
-unreliable results. On a test suite of 48 cryptographic implementations, \tacet
-showed zero false positives while successfully detecting a real vulnerability
-(MARVIN/CVE-2023-49092) that was discovered accidentally during corpus construction.
+Our evaluation shows that \tacet maintains calibrated verdicts across varying
+noise levels and autocorrelation conditions where existing tools produce unreliable
+results. On a test suite of 48 cryptographic implementations, \tacet had zero false
+positives while successfully detecting a real vulnerability (MARVIN/CVE-2023-49092)
+that we discovered accidentally during corpus construction.
 
-The key innovations enabling calibrated verdicts are: (1) quality gates that
-detect when the posterior has not sufficiently separated from the prior; (2) a
-robust likelihood that automatically inflates uncertainty when covariance is
-underestimated; (3) explicit measurement floor tracking that prevents claiming
-``safe'' when resolution is insufficient; and (4) block bootstrap on the acquisition
-stream to handle autocorrelated measurements.
+The key innovations: (1) quality gates that detect when the posterior hasn't
+sufficiently separated from the prior; (2) a robust likelihood that automatically
+inflates uncertainty when covariance is underestimated; (3) explicit measurement
+floor tracking that prevents claiming ``no leak'' when resolution is insufficient;
+and (4) block bootstrap on the acquisition stream to handle autocorrelated
+measurements.
 
 \tacet is available as open-source software under the MPL~v2 license, with native
-support for Rust, C, C++, Go, and JavaScript. It is designed for integration into
-continuous integration pipelines, where the three-way verdict system eliminates
-flaky tests by returning Inconclusive rather than randomly passing or failing
-under variable conditions.
+support for Rust, C, C++, Go, and JavaScript. It's designed for CI pipelines,
+where the three-way verdict system eliminates flaky tests by returning Inconclusive
+rather than randomly passing or failing under variable conditions.
 
-We hope \tacet will help cryptographic library maintainers validate their
-implementations with appropriate confidence: not the false confidence of a
-binary tool that always produces an answer, but the calibrated confidence of
-a tool that knows when to say ``I don't know.''
+We hope \tacet helps cryptographic library maintainers validate their implementations
+with appropriate confidence: not the false confidence of a binary tool that always
+produces an answer, but the calibrated confidence of a tool that knows when to say
+``I don't know.''
 
 %===============================================================================
 % ACKNOWLEDGMENTS (omit for submission, add for camera-ready)

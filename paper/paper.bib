@@ -16,8 +16,16 @@
   doi       = {10.23919/DATE.2017.7927267},
 }
 
+@misc{trailofbits-dudect,
+  author       = {{Trail of Bits}},
+  title        = {{Constant-Time Toolkit: dudect}},
+  year         = {2024},
+  url          = {https://appsec.guide/docs/crypto/constant_time_tool/dudect/},
+  note         = {Application Security Knowledge Base},
+}
+
 @inproceedings{rtlf,
-  author    = {Dunsche, Marcel and Sieck, Niklas and Timmermann, Jonas and Young, Eric and Somorovsky, Juraj},
+  author    = {Dunsche, Martin and Maehren, Marcel and Erinola, Nurullah and Merget, Robert and Bissantz, Nicolai and Somorovsky, Juraj and Schwenk, J{\"o}rg},
   title     = {{RTLF: Statistical Timing Leakage Detection with Empirical Bootstrap}},
   booktitle = {33rd USENIX Security Symposium (USENIX Security 24)},
   year      = {2024},
@@ -26,10 +34,10 @@
 }
 
 @article{silent,
-  author    = {Sieck, Niklas and Dunsche, Marcel and Timmermann, Jonas and Somorovsky, Juraj},
+  author    = {Dunsche, Martin and Bastian, Patrick and Maehren, Marcel and Erinola, Nurullah and Merget, Robert and Bissantz, Nicolai and Dette, Holger and Schwenk, J{\"o}rg},
   title     = {{SILENT: Scalable and Independent LEakage detection with iNfinite Type-1 error control}},
   journal   = {arXiv preprint arXiv:2504.19821},
-  year      = {2024},
+  year      = {2025},
   url       = {https://arxiv.org/abs/2504.19821},
 }
 
@@ -54,6 +62,18 @@
   doi       = {10.1109/SP.2013.42},
 }
 
+@article{crosby2009,
+  author    = {Crosby, Scott A. and Wallach, Dan S. and Riedi, Rudolf H.},
+  title     = {{Opportunities and Limits of Remote Timing Attacks}},
+  journal   = {ACM Transactions on Information and System Security},
+  volume    = {12},
+  number    = {3},
+  article   = {17},
+  year      = {2009},
+  month     = jan,
+  doi       = {10.1145/1455526.1455530},
+}
+
 @inproceedings{raccoon,
   author    = {Merget, Robert and Brinkmann, Marcus and Aviram, Nimrod and Somorovsky, Juraj and Mittmann, Johannes and Schwenk, J{\"o}rg},
   title     = {{Raccoon Attack: Finding and Exploiting Most-Significant-Bit-Oracles in TLS-DH(E)}},
@@ -65,14 +85,17 @@
 
 @inproceedings{marvin,
   author    = {Kario, Hubert},
-  title     = {{MARVIN Attack: Return of the Bleichenbacher's Oracle Threat}},
-  booktitle = {33rd USENIX Security Symposium (USENIX Security 24)},
-  year      = {2024},
-  publisher = {USENIX Association},
+  title     = {{Everlasting ROBOT: The Marvin Attack}},
+  booktitle = {Computer Security -- ESORICS 2023},
+  series    = {Lecture Notes in Computer Science},
+  volume    = {14346},
+  year      = {2023},
+  publisher = {Springer},
+  doi       = {10.1007/978-3-031-51479-1_13},
 }
 
 @inproceedings{timeless,
-  author    = {Van Goethem, Tom and Piessens, Frank and Joosen, Wouter and Somorovsky, Juraj},
+  author    = {Van Goethem, Tom and P{\"o}pper, Christina and Joosen, Wouter and Vanhoef, Mathy},
   title     = {{Timeless Timing Attacks: Exploiting Concurrency to Leak Secrets over Remote Connections}},
   booktitle = {29th USENIX Security Symposium (USENIX Security 20)},
   year      = {2020},
@@ -80,12 +103,16 @@
   publisher = {USENIX Association},
 }
 
-@inproceedings{kyberslash,
-  author    = {Guo, Qian and Johansson, Thomas and Nilsson, Alexander},
-  title     = {{A Key-Recovery Side-Channel Attack on Kyber}},
-  booktitle = {CHES 2024},
-  year      = {2024},
-  note      = {CVE-2023-49092},
+@article{kyberslash,
+  author    = {Bernstein, Daniel J. and Bhargavan, Karthikeyan and Bhasin, Shivam and Chattopadhyay, Anupam and Chia, Tee Kiah and Kannwischer, Matthias J. and Kiefer, Franziskus and Paiva, Thales and Ravi, Prasanna and Tamvada, Goutam},
+  title     = {{KyberSlash: Exploiting secret-dependent division timings in Kyber implementations}},
+  journal   = {IACR Transactions on Cryptographic Hardware and Embedded Systems},
+  volume    = {2025},
+  number    = {2},
+  pages     = {209--234},
+  year      = {2025},
+  url       = {https://eprint.iacr.org/2024/1049},
+  note      = {CHES 2025 Best Paper Award},
 }
 
 %-------------------------------------------------------------------------------
@@ -109,6 +136,17 @@
   publisher = {Chapman \& Hall/CRC},
   year      = {1993},
   isbn      = {978-0412042317},
+}
+
+@article{geyer1992,
+  author    = {Geyer, Charles J.},
+  title     = {{Practical Markov Chain Monte Carlo}},
+  journal   = {Statistical Science},
+  volume    = {7},
+  number    = {4},
+  pages     = {473--483},
+  year      = {1992},
+  doi       = {10.1214/ss/1177011137},
 }
 
 @article{iact,

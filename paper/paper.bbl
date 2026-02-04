@@ -6,6 +6,13 @@ Nadhem~J. Al~Fardan and Kenneth~G. Paterson.
 \newblock In {\em 2013 IEEE Symposium on Security and Privacy}, pages 526--540.
   IEEE, 2013.
 
+\bibitem{sgxtiming}
+Ferdinand Brasser, Urs M{\"u}ller, Alexandra Dmitrienko, Kari Kostiainen,
+  Srdjan Capkun, and Ahmad-Reza Sadeghi.
+\newblock {Software Grand Exposure: SGX Cache Attacks Are Practical}.
+\newblock In {\em 11th USENIX Workshop on Offensive Technologies (WOOT 17)}.
+  USENIX Association, 2017.
+
 \bibitem{rtlf}
 Marcel Dunsche, Niklas Sieck, Jonas Timmermann, Eric Young, and Juraj
   Somorovsky.
@@ -53,7 +60,12 @@ Oscar Reparaz, Josep Balasch, and Ingrid Verbauwhede.
 Niklas Sieck, Marcel Dunsche, Jonas Timmermann, and Juraj Somorovsky.
 \newblock {SILENT: Scalable and Independent LEakage detection with iNfinite
   Type-1 error control}.
-\newblock {\em arXiv preprint arXiv:2504.19821}, 2024.
+\newblock {\em arXiv preprint arXiv:2504.19821}, 2025.
+
+\bibitem{trailofbits-dudect}
+{Trail of Bits}.
+\newblock {Constant-Time Toolkit: dudect}, 2024.
+\newblock Application Security Knowledge Base.
 
 \bibitem{timeless}
 Tom Van~Goethem, Frank Piessens, Wouter Joosen, and Juraj Somorovsky.

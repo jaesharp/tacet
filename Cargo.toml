@@ -23,3 +23,8 @@ homepage = "https://tacet.sh"
 
 [profile.release]
 debug = true
+lto = "fat"              # Link-time optimization: inline across crates
+codegen-units = 1        # Better optimization at cost of compile time
+
+[profile.bench]
+inherits = "release"
