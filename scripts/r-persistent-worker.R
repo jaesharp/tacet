@@ -118,8 +118,21 @@ run_silent <- function(params) {
     threshold <- test_result$threshold
     adjusted <- test_result$test_adjusted
 
-    # Decision: reject if adjusted test stat > 0 (i.e., test_stat > threshold)
-    detected <- adjusted > 0
+    # Debug: log what we got from the algorithm
+    message("SILENT result: test_stat=", test_stat, " threshold=", threshold, " adjusted=", adjusted)
+
+    # Handle NA values - if adjusted is NA, check test_stat vs threshold directly
+    if (is.null(adjusted) || is.na(adjusted)) {
+      if (is.null(test_stat) || is.na(test_stat) || is.null(threshold) || is.na(threshold)) {
+        stop("SILENT algorithm returned NA for test_stat or threshold")
+      }
+      # Fallback: compare test_stat to threshold
+      detected <- isTRUE(test_stat > threshold)
+      adjusted <- test_stat - threshold
+    } else {
+      # Decision: reject if adjusted test stat > 0 (i.e., test_stat > threshold)
+      detected <- isTRUE(adjusted > 0)
+    }
 
     list(
       detected = detected,

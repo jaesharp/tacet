@@ -157,22 +157,22 @@ impl AttackerModel {
 ///
 /// Two methods are available:
 ///
-/// - **PolitisWhite**: Uses the Politis-White block length as a proxy for IACT.
-///   This is the current default and has been empirically validated.
 /// - **GeyersIMS**: Implements Geyer's Initial Monotone Sequence algorithm
-///   per specification §3.3.2. This is the spec-compliant method.
+///   per specification §3.3.2. This is the spec-compliant method and the default.
+/// - **PolitisWhite**: Uses the Politis-White block length as a proxy for IACT.
+///   This was the previous default and remains available for backward compatibility.
 ///
 /// Both methods maintain type-1 error control under autocorrelation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IactMethod {
-    /// Geyer's Initial Monotone Sequence (spec-compliant)
+    /// Geyer's Initial Monotone Sequence (spec-compliant, default)
     GeyersIMS,
-    /// Politis-White block length (current default)
+    /// Politis-White block length (legacy)
     PolitisWhite,
 }
 
 impl Default for IactMethod {
     fn default() -> Self {
-        Self::PolitisWhite // Backward compatibility
+        Self::GeyersIMS
     }
 }
