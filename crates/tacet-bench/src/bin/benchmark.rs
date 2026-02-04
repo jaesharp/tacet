@@ -561,9 +561,9 @@ fn create_r_pool() -> Option<Arc<ProcessPool>> {
     let silent_path = find_r_tool_script("silent", "share/silent/scripts/SILENT.R");
     let rtlf_path = find_r_tool_script("rtlf", "share/rtlf/rtlf.R");
 
-    // Create pool with ~85% of CPU count (leave headroom for system, rayon, I/O)
+    // Create pool with ~92% of CPU count (leave headroom for system, rayon, I/O)
     let cpus = num_cpus::get();
-    let pool_size = ((cpus * 85) / 100).max(2);
+    let pool_size = ((cpus * 92) / 100).max(2);
     let config = ProcessConfig::r_worker(
         &script_path,
         silent_path.as_deref(),
