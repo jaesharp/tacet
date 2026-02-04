@@ -4,7 +4,7 @@ from pathlib import Path
 
 # Project paths
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "medium-v2"
+DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "medium-aws"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
 FIGURES_DIR = OUTPUT_DIR / "figures"
 
@@ -31,7 +31,8 @@ TOOL_NAMES = {
     "dudect": "dudect",
     "ks-test": "KS Test",
     "mona": "MONA",
-    "rtlf-native": "RTLF",
+    "rtlf": "RTLF",           # R-based reference implementation
+    "rtlf-native": "RTLF",    # Native Rust implementation (alias)
     "silent": "SILENT",
     "tacet": "Tacet",
     "timing-tvla": "TVLA",
@@ -92,10 +93,10 @@ EFFECT_NAMES = {
 TOOL_ORDER = [
     "tacet",
     "silent",
-    "rtlf-native",
+    "rtlf",
+    "tlsfuzzer",
     "dudect",
     "timing-tvla",
-    "tlsfuzzer",
     "ad-test",
     "ks-test",
     "mona",

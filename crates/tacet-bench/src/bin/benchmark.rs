@@ -250,7 +250,7 @@ fn main() {
                 .collect()
         }
     } else {
-        // Default: R-based RTLF/SILENT via persistent pools
+        // Default: all tools (same as --tools all)
         vec![
             Box::new(TimingOracleAdapter::default()),
             Box::new(DudectAdapter::default()),
@@ -260,6 +260,7 @@ fn main() {
             Box::new(MonaAdapter::default()),
             Box::new(SilentAdapter::default().with_pool(r_pool.clone())),
             Box::new(RtlfAdapter::default().with_pool(r_pool.clone())),
+            Box::new(TlsfuzzerAdapter::default().with_pool(python_pool.clone())),
         ]
     };
 
