@@ -82,11 +82,19 @@ PREFIX=$HOME/.local bash -c "$(curl -fsSL https://raw.githubusercontent.com/aguc
 
 **Homebrew (macOS):**
 ```bash
-brew install https://raw.githubusercontent.com/agucova/tacet/main/homebrew/Formula/tacet-c.rb
+HOMEBREW_DEVELOPER=1 brew install --formula \
+  https://raw.githubusercontent.com/agucova/tacet/main/homebrew/Formula/tacet-c.rb
 ```
+
+<Aside type="note">
+The `HOMEBREW_DEVELOPER=1` flag is required because Homebrew no longer allows installing formulas directly from URLs without a tap. This is a safe workaround for formulas from trusted sources.
+</Aside>
 
 **Verify Installation:**
 ```bash
+# Add Homebrew's pkgconfig to your path (add to ~/.zshrc or ~/.bashrc)
+export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:$PKG_CONFIG_PATH"
+
 pkg-config --modversion tacet
 pkg-config --cflags --libs tacet
 ```
@@ -113,8 +121,8 @@ target_link_libraries(my_test PRIVATE ${TACET_LIBRARIES})
 #include <tacet/tacet.h>
 
 ToConfig cfg = to_config_adjacent_network();
-// ... use configuration
-to_config_free(cfg);
+cfg.time_budget_secs = 30.0;  // Customize as needed
+// ToConfig is a value type - no need to free
 ```
 
 See [C API](/api/c) for full documentation.
@@ -151,11 +159,19 @@ PREFIX=$HOME/.local bash -c "$(curl -fsSL https://raw.githubusercontent.com/aguc
 
 **Homebrew (macOS):**
 ```bash
-brew install https://raw.githubusercontent.com/agucova/tacet/main/homebrew/Formula/tacet-c.rb
+HOMEBREW_DEVELOPER=1 brew install --formula \
+  https://raw.githubusercontent.com/agucova/tacet/main/homebrew/Formula/tacet-c.rb
 ```
+
+<Aside type="note">
+The `HOMEBREW_DEVELOPER=1` flag is required because Homebrew no longer allows installing formulas directly from URLs without a tap. This is a safe workaround for formulas from trusted sources.
+</Aside>
 
 **Verify Installation:**
 ```bash
+# Add Homebrew's pkgconfig to your path (add to ~/.zshrc or ~/.bashrc)
+export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:$PKG_CONFIG_PATH"
+
 pkg-config --modversion tacet
 pkg-config --cflags --libs tacet
 ```
