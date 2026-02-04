@@ -299,29 +299,24 @@ pub fn check_quality_gates(
 /// This is NOT a verdict-blocking gate in v5.5. It's used by the decision logic
 /// to populate the `achievable_at_max` field in ThresholdElevated outcomes.
 ///
-/// v5.6: Uses n_eff = max(1, floor(max_samples / block_length)) for proper
-/// scaling under temporal dependence.
+/// v6.0: Uses √n scaling (block bootstrap already accounts for dependence).
 pub fn compute_achievable_at_max(
     c_floor: f64,
     theta_tick: f64,
     theta_user: f64,
     max_samples: usize,
-    block_length: usize,
+    _block_length: usize, // Kept for API compatibility, no longer used
 ) -> bool {
     // Research mode (theta_user = 0) is always "achievable" (no user target)
     if theta_user <= 0.0 {
         return true;
     }
 
-    // v5.6: Use n_eff for achievability check (spec §3.3.4)
-    let n_eff_max = if block_length > 0 {
-        (max_samples / block_length).max(1)
-    } else {
-        max_samples.max(1)
-    };
+    // v6.0: Use raw n for achievability check (spec §3.3.3)
+    // Block bootstrap already accounts for autocorrelation, so no n_eff scaling needed
 
-    // Compute theta_floor at max_samples using n_eff
-    let theta_floor_at_max = libm::fmax(c_floor / libm::sqrt(n_eff_max as f64), theta_tick);
+    // Compute theta_floor at max_samples using √n (not √n_eff)
+    let theta_floor_at_max = libm::fmax(c_floor / libm::sqrt(max_samples as f64), theta_tick);
 
     // Compute epsilon: max(theta_tick, 1e-6 * theta_user)
     let epsilon = libm::fmax(theta_tick, 1e-6 * theta_user);

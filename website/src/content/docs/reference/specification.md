@@ -441,26 +441,28 @@ $$
 
 **Effective sample size via IACT:**
 
-Under strong temporal dependence, n samples do not provide n independent observations. Implementations MUST define effective sample size using integrated autocorrelation time (IACT):
+Under strong temporal dependence, n samples do not provide n independent observations. Implementations SHOULD compute integrated autocorrelation time (IACT) for diagnostic purposes:
 
 $$
 n_{\text{eff}} := \frac{n}{\hat{\tau}}
 $$
 
-where $\hat{\tau}$ is estimated via the Geyer Initial Monotone Sequence (IMS) method. See the [Implementation Guide](/reference/implementation-guide#3-iact-computation) for the algorithm.
+where $\hat{\tau}$ is estimated via the Geyer Initial Monotone Sequence (IMS) method or equivalent. See the [Implementation Guide](/reference/implementation-guide#3-iact-computation) for algorithms.
 
-Implementations MUST report:
-- `Diagnostics.dependence_length` = $\hat{b}$ (for bootstrap)
-- `Diagnostics.iact_combined` = $\hat{\tau}$
-- `Diagnostics.effective_sample_size` = $n_{\text{eff}}$
+Implementations SHOULD report as diagnostics:
+- `Diagnostics.dependence_length` = $\hat{b}$ (block length from bootstrap)
+- `Diagnostics.iact_combined` = $\hat{\tau}$ (IACT estimate)
+- `Diagnostics.effective_sample_size` = $n_{\text{eff}}$ (for diagnostics only)
 
 **Covariance scaling during adaptive loop:**
 
-During inference with $n$ samples and IACT estimates $\hat{\tau}$ (current) and $\hat{\tau}_{\text{cal}}$ (at calibration):
+Since $V_{\text{cal}}$ is computed via block bootstrap (which preserves temporal dependence structure), it already represents the long-run covariance rate. During inference with $n$ samples:
 
 $$
-\Sigma_n = V_{\text{cal}} \cdot \frac{\hat{\tau}}{\hat{\tau}_{\text{cal}}} \cdot \frac{1}{n}
+\Sigma_n = \frac{V_{\text{cal}}}{n}
 $$
+
+**No additional IACT scaling is applied** to the covariance—the block bootstrap already accounts for autocorrelation. IACT estimates are computed and reported as diagnostics but do not affect inference.
 
 **Numerical stability:**
 
@@ -485,7 +487,7 @@ via Monte Carlo (SHOULD use 50,000 samples).
 During the adaptive loop:
 
 $$
-\theta_{\text{floor,stat}}(n) = \frac{c_{\text{floor}}}{\sqrt{n_{\text{eff}}}}
+\theta_{\text{floor,stat}}(n) = \frac{c_{\text{floor}}}{\sqrt{n}}
 $$
 
 The tick floor is fixed once batching is determined:

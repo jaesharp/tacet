@@ -314,30 +314,28 @@ impl Calibration {
         }
     }
 
-    /// Scale sigma_rate to get covariance for n samples using effective sample size (v5.6).
+    /// Scale sigma_rate to get covariance for n samples (v6.0).
     ///
-    /// Σ_n = Σ_rate / n_eff
+    /// Σ_n = Σ_rate / n
     ///
-    /// where n_eff = max(1, floor(n / block_length)) to correctly account for reduced
-    /// information under temporal dependence.
+    /// Since sigma_rate is computed via block bootstrap (which preserves temporal
+    /// dependence), it already represents the long-run covariance rate. No additional
+    /// IACT scaling is needed—the block bootstrap already accounts for autocorrelation.
     pub fn covariance_for_n(&self, n: usize) -> Matrix9 {
         if n == 0 {
             return self.sigma_rate; // Avoid division by zero
         }
-        let n_eff = self.n_eff(n);
-        self.sigma_rate / (n_eff as f64)
+        self.sigma_rate / (n as f64)
     }
 
-    /// Scale sigma_rate to get covariance using raw n samples (ignoring dependence).
+    /// Scale sigma_rate to get covariance using raw n samples.
     ///
     /// Σ_n = Σ_rate / n
     ///
-    /// Use this only when you need the raw scaling without n_eff correction.
+    /// This is now identical to `covariance_for_n()` (as of v6.0). Kept for API compatibility.
+    #[deprecated(since = "6.0.0", note = "Use covariance_for_n() instead (now identical)")]
     pub fn covariance_for_n_raw(&self, n: usize) -> Matrix9 {
-        if n == 0 {
-            return self.sigma_rate; // Avoid division by zero
-        }
-        self.sigma_rate / (n as f64)
+        self.covariance_for_n(n)
     }
 
     /// Estimate time to collect `n` additional samples based on calibration throughput.
@@ -562,6 +560,20 @@ pub fn calibrate(
 
     // Compute sigma rate: Sigma_rate = Sigma_cal * n_cal
     let sigma_rate = cov_estimate.matrix * (n as f64);
+
+    // Invariant check: sigma_rate / n should equal cov_estimate.matrix
+    // This validates that our covariance scaling is consistent (v6.0)
+    #[cfg(debug_assertions)]
+    {
+        let sigma_n_at_cal = sigma_rate / (n as f64);
+        let max_diff = (sigma_n_at_cal - cov_estimate.matrix).abs().max();
+        assert!(
+            max_diff < 1e-6,
+            "Covariance scaling invariant violated: max difference = {} (expected < 1e-6). \
+             This indicates sigma_rate scaling is incorrect.",
+            max_diff
+        );
+    }
 
     // Compute IACT based on method
     let (block_length, iact, iact_method) = match config.iact_method {
@@ -1081,24 +1093,22 @@ mod tests {
     #[test]
     fn test_covariance_scaling() {
         let cal = make_test_calibration();
-        // make_test_calibration uses sigma_rate[(0,0)] = 1000.0 and block_length = 10
+        // make_test_calibration uses sigma_rate[(0,0)] = 1000.0
 
-        // v5.6: covariance_for_n uses n_eff = n / block_length
-        // At n=1000 with block_length=10: n_eff = 100
-        // sigma_n[(0,0)] = sigma_rate[(0,0)] / n_eff = 1000 / 100 = 10.0
+        // v6.0: covariance_for_n uses raw n (block bootstrap already accounts for dependence)
+        // At n=1000: sigma_n[(0,0)] = sigma_rate[(0,0)] / n = 1000 / 1000 = 1.0
         let cov_1000 = cal.covariance_for_n(1000);
         assert!(
-            (cov_1000[(0, 0)] - 10.0).abs() < 1e-10,
-            "expected 10.0, got {}",
+            (cov_1000[(0, 0)] - 1.0).abs() < 1e-10,
+            "expected 1.0, got {}",
             cov_1000[(0, 0)]
         );
 
-        // At n=2000 with block_length=10: n_eff = 200
-        // sigma_n[(0,0)] = 1000 / 200 = 5.0
+        // At n=2000: sigma_n[(0,0)] = 1000 / 2000 = 0.5
         let cov_2000 = cal.covariance_for_n(2000);
         assert!(
-            (cov_2000[(0, 0)] - 5.0).abs() < 1e-10,
-            "expected 5.0, got {}",
+            (cov_2000[(0, 0)] - 0.5).abs() < 1e-10,
+            "expected 0.5, got {}",
             cov_2000[(0, 0)]
         );
     }
