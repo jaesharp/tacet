@@ -90,18 +90,38 @@ jobs:
         run: |
           FORMULA_PATH="homebrew/Formula/tacet-c.rb"
           VERSION_NUMBER="${{ steps.version.outputs.version_number }}"
+          SHA256_ARM64="${{ steps.checksums.outputs.sha256_arm64 }}"
+          SHA256_AMD64="${{ steps.checksums.outputs.sha256_amd64 }}"
+          SHA256_HEADER="${{ steps.checksums.outputs.sha256_header }}"
+          SHA256_CPP_HEADER="${{ steps.checksums.outputs.sha256_cpp_header }}"
 
           # Update version
           sed -i '' "s/version \".*\"/version \"${VERSION_NUMBER}\"/" "$FORMULA_PATH"
 
-          # Update SHA256 checksums
-          sed -i '' "s/sha256 \"SHA256_ARM64_PLACEHOLDER\".*/sha256 \"${{ steps.checksums.outputs.sha256_arm64 }}\"/" "$FORMULA_PATH"
-          sed -i '' "s/sha256 \"SHA256_AMD64_PLACEHOLDER\".*/sha256 \"${{ steps.checksums.outputs.sha256_amd64 }}\"/" "$FORMULA_PATH"
-          sed -i '' "s/sha256 \"SHA256_HEADER_PLACEHOLDER\".*/sha256 \"${{ steps.checksums.outputs.sha256_header }}\"/" "$FORMULA_PATH"
-          sed -i '' "s/sha256 \"SHA256_CPP_HEADER_PLACEHOLDER\".*/sha256 \"${{ steps.checksums.outputs.sha256_cpp_header }}\"/" "$FORMULA_PATH"
+          # Update SHA256 checksums using awk to target each line by context
+          # ARM64 checksum (line after darwin-arm64.a URL)
+          awk -v sha="$SHA256_ARM64" '
+            /darwin-arm64\.a/ { print; getline; sub(/sha256 "[a-f0-9]+"/, "sha256 \"" sha "\""); print; next }
+            { print }
+          ' "$FORMULA_PATH" > "$FORMULA_PATH.tmp" && mv "$FORMULA_PATH.tmp" "$FORMULA_PATH"
 
-          # Also update any existing checksums (for subsequent releases)
-          sed -i '' -E "0,/sha256 \"[a-f0-9]{64}\"/s//sha256 \"${{ steps.checksums.outputs.sha256_arm64 }}\"/" "$FORMULA_PATH"
+          # AMD64 checksum (line after darwin-amd64.a URL)
+          awk -v sha="$SHA256_AMD64" '
+            /darwin-amd64\.a/ { print; getline; sub(/sha256 "[a-f0-9]+"/, "sha256 \"" sha "\""); print; next }
+            { print }
+          ' "$FORMULA_PATH" > "$FORMULA_PATH.tmp" && mv "$FORMULA_PATH.tmp" "$FORMULA_PATH"
+
+          # tacet.h checksum (line after tacet.h URL inside resource block)
+          awk -v sha="$SHA256_HEADER" '
+            /\/tacet\.h"$/ { print; getline; sub(/sha256 "[a-f0-9]+"/, "sha256 \"" sha "\""); print; next }
+            { print }
+          ' "$FORMULA_PATH" > "$FORMULA_PATH.tmp" && mv "$FORMULA_PATH.tmp" "$FORMULA_PATH"
+
+          # tacet.hpp checksum (line after tacet.hpp URL inside resource block)
+          awk -v sha="$SHA256_CPP_HEADER" '
+            /\/tacet\.hpp"$/ { print; getline; sub(/sha256 "[a-f0-9]+"/, "sha256 \"" sha "\""); print; next }
+            { print }
+          ' "$FORMULA_PATH" > "$FORMULA_PATH.tmp" && mv "$FORMULA_PATH.tmp" "$FORMULA_PATH"
 
           echo "Formula updated:"
           git diff "$FORMULA_PATH"

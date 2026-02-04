@@ -6,21 +6,21 @@ class TacetC < Formula
 
   if Hardware::CPU.arm?
     url "https://github.com/agucova/tacet/releases/download/v#{version}/libtacet_c-darwin-arm64.a"
-    sha256 "84d9c7dfdd487b94d8d44084fe0a32436b6212cb903684a39686d92dff6525f5"
+    sha256 "abc71e600a512ff4ef4c3b0db93c9dee60946ca52ce5ae8f6669c28fe910c5f8"
   else
     url "https://github.com/agucova/tacet/releases/download/v#{version}/libtacet_c-darwin-amd64.a"
-    sha256 "f8143284bdd3013e33f555fb0fd91a0d4ebf0c5c26390c42f45672d9900f7b54"
+    sha256 "878a65e0eebbe304c5b9dc708fa248e5d1f3faaf5e44ccaf5feae1fd4b0f5b3f"
   end
 
   # Resources for additional files needed
   resource "tacet.h" do
     url "https://github.com/agucova/tacet/releases/download/v#{version}/tacet.h"
-    sha256 "d748c1b6676ba54f9e14226ab9f1606fa64cb5bcca032d99b9edfc42701cce46"
+    sha256 "5f979b23d99f6c5ddb6f522797c95fb40c3a0f1242a3573f1d639bea89323ffe"
   end
 
   resource "tacet.hpp" do
     url "https://github.com/agucova/tacet/releases/download/v#{version}/tacet.hpp"
-    sha256 "ec210a8025045bec859bda4a0ff96458fd91a6c39f026184401af3f0576d794e"
+    sha256 "638a085f5bb0172cf740a5f606760da11fc501643194f952fefe1ff1ec9e31f6"
   end
 
   def install
@@ -46,7 +46,7 @@ class TacetC < Formula
       prefix=#{prefix}
       exec_prefix=${prefix}
       libdir=#{lib}
-      includedir=#{include}/tacet
+      includedir=#{include}
 
       Name: tacet
       Description: Statistical timing side-channel detection library
@@ -73,7 +73,7 @@ class TacetC < Formula
           printf("tacet version: %s\\n", version);
 
           ToConfig cfg = to_config_adjacent_network();
-          to_config_free(cfg);
+          printf("threshold: %.1f ns\\n", to_attacker_threshold_ns(cfg.attacker_model));
 
           return 0;
       }
@@ -89,13 +89,14 @@ class TacetC < Formula
     (testpath/"test.cpp").write <<~EOS
       #include <tacet/tacet.hpp>
       #include <iostream>
+      #include <chrono>
+      using namespace std::chrono_literals;
 
       int main() {
           std::cout << "tacet C++ wrapper test" << std::endl;
 
-          auto oracle = tacet::Oracle()
-              .attacker_model(tacet::AttackerModel::AdjacentNetwork)
-              .build();
+          auto oracle = tacet::Oracle::forAttacker(ToAttackerModel::AdjacentNetwork)
+              .timeBudget(10s);
 
           return 0;
       }
