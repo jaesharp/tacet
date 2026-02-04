@@ -561,8 +561,9 @@ fn create_r_pool() -> Option<Arc<ProcessPool>> {
     let silent_path = find_r_tool_script("silent", "share/silent/scripts/SILENT.R");
     let rtlf_path = find_r_tool_script("rtlf", "share/rtlf/rtlf.R");
 
-    // Create pool with CPU count processes (R is single-threaded per process)
-    let pool_size = num_cpus::get().max(1);
+    // Create pool with ~85% of CPU count (leave headroom for system, rayon, I/O)
+    let cpus = num_cpus::get();
+    let pool_size = ((cpus * 85) / 100).max(2);
     let config = ProcessConfig::r_worker(
         &script_path,
         silent_path.as_deref(),
@@ -642,8 +643,10 @@ fn create_python_pool() -> Option<Arc<ProcessPool>> {
     // Look for the worker script relative to the executable or in known locations
     let script_path = find_script("python-persistent-worker.py")?;
 
-    // Python workers are more memory-intensive, use fewer processes
-    let pool_size = (num_cpus::get() / 2).max(1).min(4);
+    // Python workers use ~150-200MB each with numpy/pandas/tlsfuzzer loaded
+    // Use 1/3 of CPUs for Python (R tools like SILENT/RTLF run more frequently)
+    // No cap - on large instances with enough RAM, scale up
+    let pool_size = (num_cpus::get() / 3).max(2);
     let config = ProcessConfig::python_worker(&script_path);
 
     match ProcessPool::new(config, pool_size) {
