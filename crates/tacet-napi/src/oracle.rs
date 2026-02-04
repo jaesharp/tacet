@@ -129,6 +129,7 @@ pub fn calibrate_samples(
         seed,
         skip_preflight: true,
         force_discrete_mode: false,
+        iact_method: tacet_core::types::IactMethod::default(),
     };
 
     match calibrate(&baseline, &sample, ns_per_tick, &cal_config) {
@@ -136,6 +137,8 @@ pub fn calibrate_samples(
             let core_cal = CoreCalibration::new(
                 cal.sigma_rate,
                 cal.block_length,
+                cal.iact,
+                cal.iact_method,
                 cal.sigma_t,
                 cal.l_r,
                 cal.theta_ns,
@@ -263,6 +266,7 @@ pub fn analyze(
         seed,
         skip_preflight: true,
         force_discrete_mode: false,
+        iact_method: tacet_core::types::IactMethod::default(),
     };
 
     // Run calibration
@@ -282,6 +286,8 @@ pub fn analyze(
     let core_cal = CoreCalibration::new(
         cal.sigma_rate,
         cal.block_length,
+        cal.iact,
+        cal.iact_method,
         cal.sigma_t,
         cal.l_r,
         cal.theta_ns,

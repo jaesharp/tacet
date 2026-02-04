@@ -16,6 +16,7 @@ mod block_length;
 mod bootstrap;
 mod covariance;
 mod detection;
+mod iact;
 mod online_stats;
 mod quantile;
 
@@ -35,6 +36,7 @@ pub use covariance::{
     scale_covariance_for_inference, scale_covariance_rate, CovarianceEstimate,
 };
 pub use detection::{compute_min_uniqueness_ratio, DISCRETE_MODE_THRESHOLD};
+pub use iact::{geyer_ims_iact, timing_iact_combined, IactResult, IactWarning};
 pub use online_stats::{OnlineStats, StatsSnapshot};
 pub use quantile::{
     compute_deciles, compute_deciles_fast, compute_deciles_inplace, compute_deciles_sorted,

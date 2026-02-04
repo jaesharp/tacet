@@ -28,3 +28,5 @@ mod power;
 mod power_curve;
 #[path = "calibration/stress.rs"]
 mod stress;
+#[path = "calibration/iact_methods.rs"]
+mod iact_methods;

@@ -594,6 +594,8 @@ mod tests {
         Calibration {
             sigma_rate: Matrix9::identity() * 1000.0,
             block_length: 10,
+            iact: 1.0,
+            iact_method: tacet_core::types::IactMethod::PolitisWhite,
             sigma_t: 100.0,     // t-prior scale
             l_r,                // Cholesky of R
             prior_cov_marginal, // marginal prior cov

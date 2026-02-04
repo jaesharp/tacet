@@ -397,6 +397,8 @@ pub unsafe extern "C" fn to_calibrate(
     let calibration = Calibration::new(
         sigma_rate,
         block_length,
+        1.0, // iact (default for PolitisWhite mode)
+        tacet_core::types::IactMethod::PolitisWhite, // iact_method
         sigma_t,
         l_r,
         theta_ns,

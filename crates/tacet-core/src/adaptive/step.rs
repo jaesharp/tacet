@@ -774,6 +774,8 @@ mod tests {
         Calibration::new(
             Matrix9::identity() * 1000.0, // sigma_rate
             10,                           // block_length
+            1.0,                          // iact
+            crate::types::IactMethod::PolitisWhite, // iact_method
             100.0,                        // sigma_t
             Matrix9::identity(),          // l_r (identity for tests)
             100.0,                        // theta_ns

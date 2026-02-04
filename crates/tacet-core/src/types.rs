@@ -149,3 +149,30 @@ impl AttackerModel {
         }
     }
 }
+
+/// Method for computing Integrated Autocorrelation Time (IACT).
+///
+/// IACT estimates the effective sample size under autocorrelation,
+/// which affects statistical precision and the minimum detectable effect.
+///
+/// Two methods are available:
+///
+/// - **PolitisWhite**: Uses the Politis-White block length as a proxy for IACT.
+///   This is the current default and has been empirically validated.
+/// - **GeyersIMS**: Implements Geyer's Initial Monotone Sequence algorithm
+///   per specification §3.3.2. This is the spec-compliant method.
+///
+/// Both methods maintain type-1 error control under autocorrelation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IactMethod {
+    /// Geyer's Initial Monotone Sequence (spec-compliant)
+    GeyersIMS,
+    /// Politis-White block length (current default)
+    PolitisWhite,
+}
+
+impl Default for IactMethod {
+    fn default() -> Self {
+        Self::PolitisWhite // Backward compatibility
+    }
+}

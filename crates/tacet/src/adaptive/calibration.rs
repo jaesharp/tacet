@@ -140,6 +140,7 @@ mod tests {
             seed: 42,
             skip_preflight: true, // Skip in tests for speed
             force_discrete_mode: false,
+            iact_method: tacet_core::types::IactMethod::PolitisWhite,
         };
 
         let result = calibrate(&baseline, &sample, 1.0, &config);

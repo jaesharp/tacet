@@ -8,7 +8,7 @@ use crate::constants::{
     DEFAULT_BATCH_SIZE, DEFAULT_BOOTSTRAP_ITERATIONS, DEFAULT_CALIBRATION_SAMPLES,
     DEFAULT_FAIL_THRESHOLD, DEFAULT_MAX_SAMPLES, DEFAULT_PASS_THRESHOLD, DEFAULT_TIME_BUDGET_SECS,
 };
-use crate::types::AttackerModel;
+use crate::types::{AttackerModel, IactMethod};
 
 /// Configuration options for `TimingOracle`.
 ///
@@ -184,6 +184,14 @@ pub struct Config {
     /// Default: 2,000.
     pub cov_bootstrap_iterations: usize,
 
+    /// Method for computing Integrated Autocorrelation Time (IACT).
+    ///
+    /// Controls how effective sample size is computed under autocorrelation.
+    /// See [`IactMethod`] for available methods.
+    ///
+    /// Default: PolitisWhite (backward compatibility).
+    pub iact_method: IactMethod,
+
     // =========================================================================
     // Sample splitting
     // =========================================================================
@@ -257,6 +265,7 @@ impl Default for Config {
             // Bayesian inference
             prior_no_leak: 0.75,
             cov_bootstrap_iterations: DEFAULT_BOOTSTRAP_ITERATIONS,
+            iact_method: IactMethod::default(),
 
             // Sample splitting
             calibration_fraction: 0.3,
@@ -417,6 +426,15 @@ impl Config {
     pub fn cov_bootstrap_iterations(mut self, iterations: usize) -> Self {
         assert!(iterations > 0, "cov_bootstrap_iterations must be positive");
         self.cov_bootstrap_iterations = iterations;
+        self
+    }
+
+    /// Set the IACT computation method.
+    ///
+    /// Choose between Politis-White block length (default) and Geyer's IMS (spec-compliant).
+    /// See [`IactMethod`] for details on each method.
+    pub fn iact_method(mut self, method: IactMethod) -> Self {
+        self.iact_method = method;
         self
     }
 

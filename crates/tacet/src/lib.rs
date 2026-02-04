@@ -94,7 +94,7 @@ pub use result::{
     MeasurementQuality, Metadata, MinDetectableEffect, Outcome, QualityIssue, TopQuantile,
     UnmeasurableInfo, UnreliablePolicy,
 };
-pub use types::{AttackerModel, Class, TimingSample};
+pub use types::{AttackerModel, Class, IactMethod, TimingSample};
 
 // Re-export helpers for convenience
 pub use helpers::InputPair;

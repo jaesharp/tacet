@@ -399,6 +399,30 @@ impl TimingOracle {
         self
     }
 
+    /// Set the IACT (Integrated Autocorrelation Time) computation method.
+    ///
+    /// The IACT method determines how autocorrelation is estimated for block
+    /// bootstrap size selection. Two methods are available:
+    ///
+    /// - **PolitisWhite** (default): Based on Politis & White's (2004) optimal
+    ///   block length estimator. Works well for most use cases.
+    /// - **GeyersIMS**: Based on Geyer's (1992) Initial Monotone Sequence estimator.
+    ///   More robust to autocorrelation, recommended for highly autocorrelated data.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use tacet::{TimingOracle, AttackerModel, IactMethod};
+    ///
+    /// let oracle = TimingOracle::for_attacker(AttackerModel::AdjacentNetwork)
+    ///     .iact_method(IactMethod::GeyersIMS)
+    ///     .test(inputs, |data| operation(data));
+    /// ```
+    pub fn iact_method(mut self, method: crate::types::IactMethod) -> Self {
+        self.config.iact_method = method;
+        self
+    }
+
     /// Enable or disable CPU affinity pinning.
     ///
     /// When enabled (default), the measurement thread is pinned to its
@@ -846,6 +870,7 @@ impl TimingOracle {
             seed: self.config.measurement_seed.unwrap_or(DEFAULT_SEED),
             skip_preflight,
             force_discrete_mode: self.config.force_discrete_mode,
+            iact_method: self.config.iact_method,
         };
 
         let calibration = match calibrate(

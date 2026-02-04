@@ -30,8 +30,8 @@ use crate::constants::DEFAULT_SEED;
 use crate::math;
 use crate::preflight::{run_core_checks, PreflightResult};
 use crate::statistics::{
-    bootstrap_difference_covariance, bootstrap_difference_covariance_discrete, AcquisitionStream,
-    OnlineStats,
+    bootstrap_difference_covariance, bootstrap_difference_covariance_discrete, timing_iact_combined,
+    AcquisitionStream, OnlineStats,
 };
 use crate::types::{Matrix9, Vector9};
 
@@ -97,6 +97,13 @@ pub struct Calibration {
     /// Block length from Politis-White algorithm.
     /// Used for block bootstrap to preserve autocorrelation structure.
     pub block_length: usize,
+
+    /// IACT (Integrated Autocorrelation Time) estimate.
+    /// Used when iact_method = GeyersIMS for effective sample size computation.
+    pub iact: f64,
+
+    /// Method used for IACT computation.
+    pub iact_method: crate::types::IactMethod,
 
     /// Calibrated Student's t prior scale (v5.4).
     /// This is the σ in δ|λ ~ N(0, (σ²/λ)R).
@@ -173,6 +180,8 @@ impl Calibration {
     pub fn new(
         sigma_rate: Matrix9,
         block_length: usize,
+        iact: f64,
+        iact_method: crate::types::IactMethod,
         sigma_t: f64,
         l_r: Matrix9,
         theta_ns: f64,
@@ -198,6 +207,8 @@ impl Calibration {
         Self {
             sigma_rate,
             block_length,
+            iact,
+            iact_method,
             sigma_t,
             l_r,
             prior_cov_marginal,
@@ -224,6 +235,8 @@ impl Calibration {
     pub fn with_preflight(
         sigma_rate: Matrix9,
         block_length: usize,
+        iact: f64,
+        iact_method: crate::types::IactMethod,
         sigma_t: f64,
         l_r: Matrix9,
         theta_ns: f64,
@@ -250,6 +263,8 @@ impl Calibration {
         Self {
             sigma_rate,
             block_length,
+            iact,
+            iact_method,
             sigma_t,
             l_r,
             prior_cov_marginal,
@@ -278,12 +293,23 @@ impl Calibration {
     ///
     /// n_eff = max(1, floor(n / block_length))
     ///
-    /// where block_length is the estimated dependence length from Politis-White selector.
+    /// where block_length (PolitisWhite) or IACT (GeyersIMS) is the estimated dependence length.
     pub fn n_eff(&self, n: usize) -> usize {
-        if self.block_length == 0 {
-            return n.max(1);
+        use crate::types::IactMethod;
+        match self.iact_method {
+            IactMethod::PolitisWhite => {
+                if self.block_length == 0 {
+                    return n.max(1);
+                }
+                (n / self.block_length).max(1)
+            }
+            IactMethod::GeyersIMS => {
+                if self.iact <= 1.0 {
+                    return n.max(1);
+                }
+                ((n as f64) / self.iact).floor().max(1.0) as usize
+            }
         }
-        (n / self.block_length).max(1)
     }
 
     /// Scale sigma_rate to get covariance for n samples using effective sample size (v5.6).
@@ -367,6 +393,9 @@ pub struct CalibrationConfig {
 
     /// Force discrete mode regardless of uniqueness ratio.
     pub force_discrete_mode: bool,
+
+    /// IACT computation method (PolitisWhite or GeyersIMS).
+    pub iact_method: crate::types::IactMethod,
 }
 
 impl Default for CalibrationConfig {
@@ -380,6 +409,7 @@ impl Default for CalibrationConfig {
             seed: DEFAULT_SEED,
             skip_preflight: false,
             force_discrete_mode: false,
+            iact_method: crate::types::IactMethod::default(),
         }
     }
 }
@@ -531,6 +561,21 @@ pub fn calibrate(
     // Compute sigma rate: Sigma_rate = Sigma_cal * n_cal
     let sigma_rate = cov_estimate.matrix * (n as f64);
 
+    // Compute IACT based on method
+    let (block_length, iact, iact_method) = match config.iact_method {
+        crate::types::IactMethod::PolitisWhite => {
+            (cov_estimate.block_size, 1.0, crate::types::IactMethod::PolitisWhite)
+        }
+        crate::types::IactMethod::GeyersIMS => {
+            let iact_result = timing_iact_combined(&interleaved);
+
+            // Warnings are captured in iact_result but don't affect calibration
+            // They will be logged by the caller if needed
+
+            (cov_estimate.block_size, iact_result.tau, crate::types::IactMethod::GeyersIMS)
+        }
+    };
+
     // Compute MDE for prior setting (spec §3.3)
     let mde = estimate_mde(&cov_estimate.matrix, config.alpha);
 
@@ -571,7 +616,9 @@ pub fn calibrate(
 
     Ok(Calibration::with_preflight(
         sigma_rate,
-        cov_estimate.block_size,
+        block_length,
+        iact,
+        iact_method,
         sigma_t,
         l_r,
         config.theta_ns,
@@ -992,6 +1039,8 @@ mod tests {
         Calibration::new(
             sigma_rate,
             10,                  // block_length
+            1.0,                 // iact
+            crate::types::IactMethod::PolitisWhite, // iact_method
             100.0,               // sigma_t
             Matrix9::identity(), // l_r (identity for tests)
             theta_eff,           // theta_ns
