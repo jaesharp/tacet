@@ -77,7 +77,7 @@ impl ProcessConfig {
             args,
             working_dir: None,
             request_timeout_secs: 60, // R bootstrap tests can be slow
-            max_requests_per_process: 100,
+            max_requests_per_process: 1000,
         }
     }
 
@@ -88,7 +88,7 @@ impl ProcessConfig {
             args: vec![script_path.to_string()],
             working_dir: None,
             request_timeout_secs: 30,
-            max_requests_per_process: 100,
+            max_requests_per_process: 1000,
         }
     }
 }
