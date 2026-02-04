@@ -102,17 +102,20 @@ fn power_curve_validation_remote_network() {
     );
 }
 
-/// Power curve for Research model (most sensitive).
+/// Power curve for Research model - DISABLED.
+///
+/// Research mode returns `Outcome::Research` (raw statistical data for exploration),
+/// not `Outcome::Fail` (verdicts). Power curve validation measures detection rate,
+/// which requires verdict-based outcomes. Research mode is intentionally designed
+/// to never make Pass/Fail verdicts, so power curve testing is not applicable.
+///
+/// To validate Research mode sensitivity, use the effect estimation accuracy tests
+/// in `bayesian_calibration.rs` instead.
 #[test]
 #[ignore]
 fn power_curve_validation_research() {
-    std::env::set_var("CALIBRATION_TIER", "validation");
-    run_power_curve(
-        "power_curve_validation_research",
-        AttackerModel::Research,
-        50.0, // Nominal θ for Research
-        &FINE_MULTIPLIERS,
-    );
+    eprintln!("[power_curve_validation_research] Skipped: Research mode returns Research outcomes, not verdicts");
+    eprintln!("[power_curve_validation_research] Use bayesian_calibration tests to validate Research mode sensitivity");
 }
 
 // =============================================================================

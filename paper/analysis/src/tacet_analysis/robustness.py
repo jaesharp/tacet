@@ -8,9 +8,9 @@ import numpy as np
 from tacet_analysis.data import get_expected_combinations, load_benchmark_data, load_summary_data
 
 
-def check_completeness(df: pd.DataFrame) -> dict[str, Any]:
+def check_completeness(df: pd.DataFrame, preset: str = "medium") -> dict[str, Any]:
     """Check if all expected experimental combinations are present."""
-    expected = get_expected_combinations()
+    expected = get_expected_combinations(preset)
     issues = []
 
     # Check tools
@@ -156,9 +156,9 @@ def check_suspicious_patterns(df: pd.DataFrame) -> dict[str, Any]:
     }
 
 
-def check_dataset_counts(df: pd.DataFrame) -> dict[str, Any]:
+def check_dataset_counts(df: pd.DataFrame, preset: str = "medium") -> dict[str, Any]:
     """Verify each condition has the expected number of datasets."""
-    expected = get_expected_combinations()
+    expected = get_expected_combinations(preset)
     expected_n = expected["n_datasets"]
 
     # Group by experimental conditions
@@ -184,19 +184,26 @@ def check_dataset_counts(df: pd.DataFrame) -> dict[str, Any]:
 def run_all_checks(
     raw_df: pd.DataFrame | None = None,
     summary_df: pd.DataFrame | None = None,
+    preset: str = "medium",
 ) -> dict[str, dict[str, Any]]:
-    """Run all robustness checks and return results."""
+    """Run all robustness checks and return results.
+
+    Args:
+        raw_df: Raw benchmark results DataFrame (loaded if None)
+        summary_df: Summary DataFrame (loaded if None)
+        preset: Benchmark preset used ("medium" or "thorough")
+    """
     if raw_df is None:
         raw_df = load_benchmark_data()
     if summary_df is None:
         summary_df = load_summary_data()
 
     results = {
-        "completeness": check_completeness(raw_df),
+        "completeness": check_completeness(raw_df, preset=preset),
         "duplicates": check_duplicates(raw_df),
         "ci_sanity": check_ci_sanity(summary_df),
         "suspicious_patterns": check_suspicious_patterns(raw_df),
-        "dataset_counts": check_dataset_counts(raw_df),
+        "dataset_counts": check_dataset_counts(raw_df, preset=preset),
     }
 
     # Overall summary

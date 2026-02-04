@@ -1,3 +1,65 @@
-\begin{thebibliography}{}
+\begin{thebibliography}{10}
+
+\bibitem{lucky13}
+Nadhem~J. Al~Fardan and Kenneth~G. Paterson.
+\newblock {Lucky Thirteen: Breaking the TLS and DTLS Record Protocols}.
+\newblock In {\em 2013 IEEE Symposium on Security and Privacy}, pages 526--540.
+  IEEE, 2013.
+
+\bibitem{rtlf}
+Marcel Dunsche, Niklas Sieck, Jonas Timmermann, Eric Young, and Juraj
+  Somorovsky.
+\newblock {RTLF: Statistical Timing Leakage Detection with Empirical
+  Bootstrap}.
+\newblock In {\em 33rd USENIX Security Symposium (USENIX Security 24)}. USENIX
+  Association, 2024.
+
+\bibitem{kyberslash}
+Qian Guo, Thomas Johansson, and Alexander Nilsson.
+\newblock {A Key-Recovery Side-Channel Attack on Kyber}.
+\newblock In {\em CHES 2024}, 2024.
+\newblock CVE-2023-49092.
+
+\bibitem{marvin}
+Hubert Kario.
+\newblock {MARVIN Attack: Return of the Bleichenbacher's Oracle Threat}.
+\newblock In {\em 33rd USENIX Security Symposium (USENIX Security 24)}. USENIX
+  Association, 2024.
+
+\bibitem{tlsfuzzer}
+Hubert Kario.
+\newblock {tlsfuzzer: SSL and TLS protocol test suite and fuzzer}, 2024.
+
+\bibitem{raccoon}
+Robert Merget, Marcus Brinkmann, Nimrod Aviram, Juraj Somorovsky, Johannes
+  Mittmann, and J{\"o}rg Schwenk.
+\newblock {Raccoon Attack: Finding and Exploiting Most-Significant-Bit-Oracles
+  in TLS-DH(E)}.
+\newblock In {\em 30th USENIX Security Symposium (USENIX Security 21)}, pages
+  213--230. USENIX Association, 2021.
+
+\bibitem{politiswhite}
+Dimitris~N. Politis and Halbert White.
+\newblock {Automatic Block-Length Selection for the Dependent Bootstrap}.
+\newblock {\em Econometric Reviews}, 23(1):53--70, 2004.
+
+\bibitem{dudect}
+Oscar Reparaz, Josep Balasch, and Ingrid Verbauwhede.
+\newblock {dude, is my code constant time?}
+\newblock In {\em Design, Automation \& Test in Europe Conference \& Exhibition
+  (DATE)}, pages 1697--1702. IEEE, 2017.
+
+\bibitem{silent}
+Niklas Sieck, Marcel Dunsche, Jonas Timmermann, and Juraj Somorovsky.
+\newblock {SILENT: Scalable and Independent LEakage detection with iNfinite
+  Type-1 error control}.
+\newblock {\em arXiv preprint arXiv:2504.19821}, 2024.
+
+\bibitem{timeless}
+Tom Van~Goethem, Frank Piessens, Wouter Joosen, and Juraj Somorovsky.
+\newblock {Timeless Timing Attacks: Exploiting Concurrency to Leak Secrets over
+  Remote Connections}.
+\newblock In {\em 29th USENIX Security Symposium (USENIX Security 20)}, pages
+  1985--2002. USENIX Association, 2020.
 
 \end{thebibliography}

@@ -29,7 +29,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 /// CSV header for benchmark results.
-pub const CSV_HEADER: &str = "tool,preset,effect_pattern,effect_sigma_mult,noise_model,attacker_threshold_ns,dataset_id,samples_per_class,detected,statistic,p_value,time_ms,samples_used,status,outcome";
+pub const CSV_HEADER: &str = "tool,preset,effect_pattern,effect_sigma_mult,noise_model,synthetic_sigma_ns,attacker_threshold_ns,dataset_id,samples_per_class,detected,statistic,p_value,time_ms,samples_used,status,outcome";
 
 /// Unique identifier for a benchmark work item.
 ///
@@ -183,12 +183,13 @@ impl IncrementalCsvWriter {
             let mut file = self.file.lock().unwrap();
             writeln!(
                 file,
-                "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+                "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
                 result.tool,
                 result.preset,
                 result.effect_pattern,
                 result.effect_sigma_mult,
                 result.noise_model,
+                result.synthetic_sigma_ns,
                 result
                     .attacker_threshold_ns
                     .map(|t| format!("{}", t))
@@ -270,46 +271,33 @@ impl IncrementalCsvWriter {
     /// Parse a CSV row into a WorkItemKey.
     ///
     /// Returns None if the row cannot be parsed (malformed or incomplete).
-    /// Handles both old format (without attacker_threshold_ns) and new format.
+    /// Expected format: tool,preset,effect_pattern,effect_sigma_mult,noise_model,synthetic_sigma_ns,attacker_threshold_ns,dataset_id,...
     fn parse_csv_row(line: &str) -> Option<WorkItemKey> {
         let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() >= 7 {
-            // New format with attacker_threshold_ns
-            // CSV: tool,preset,effect_pattern,effect_sigma_mult,noise_model,attacker_threshold_ns,dataset_id,...
-            let effect_mult: f64 = parts[3].parse().ok()?;
-            let attacker_threshold_ns_str = if parts[5].is_empty() {
-                String::new()
-            } else {
-                // Normalize to consistent format
-                parts[5]
-                    .parse::<f64>()
-                    .ok()
-                    .map(|t| format!("{:.6}", t))
-                    .unwrap_or_default()
-            };
-            Some(WorkItemKey {
-                tool: parts[0].to_string(),
-                effect_pattern: parts[2].to_string(),
-                effect_sigma_mult_str: format!("{:.6}", effect_mult),
-                noise_model: parts[4].to_string(),
-                attacker_threshold_ns_str,
-                dataset_id: parts[6].parse().ok()?,
-            })
-        } else if parts.len() >= 6 {
-            // Legacy format without attacker_threshold_ns
-            // CSV: tool,preset,effect_pattern,effect_sigma_mult,noise_model,dataset_id,...
-            let effect_mult: f64 = parts[3].parse().ok()?;
-            Some(WorkItemKey {
-                tool: parts[0].to_string(),
-                effect_pattern: parts[2].to_string(),
-                effect_sigma_mult_str: format!("{:.6}", effect_mult),
-                noise_model: parts[4].to_string(),
-                attacker_threshold_ns_str: String::new(),
-                dataset_id: parts[5].parse().ok()?,
-            })
-        } else {
-            None
+        if parts.len() < 8 {
+            return None;
         }
+
+        let effect_mult: f64 = parts[3].parse().ok()?;
+        let attacker_threshold_ns_str = if parts[6].is_empty() {
+            String::new()
+        } else {
+            // Normalize to consistent format
+            parts[6]
+                .parse::<f64>()
+                .ok()
+                .map(|t| format!("{:.6}", t))
+                .unwrap_or_default()
+        };
+
+        Some(WorkItemKey {
+            tool: parts[0].to_string(),
+            effect_pattern: parts[2].to_string(),
+            effect_sigma_mult_str: format!("{:.6}", effect_mult),
+            noise_model: parts[4].to_string(),
+            attacker_threshold_ns_str,
+            dataset_id: parts[7].parse().ok()?,
+        })
     }
 }
 
@@ -325,6 +313,7 @@ mod tests {
             effect_pattern: "shift".to_string(),
             effect_sigma_mult: effect_mult,
             noise_model: "iid".to_string(),
+            synthetic_sigma_ns: 50.0,
             attacker_threshold_ns: None,
             dataset_id,
             samples_per_class: 5000,
@@ -463,13 +452,13 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().join("malformed.csv");
 
-        // Write file with some malformed lines
+        // Write file with some malformed lines (using current CSV format)
         std::fs::write(
             &path,
-            "tool,preset,effect_pattern,effect_sigma_mult,noise_model,dataset_id,samples_per_class,detected,statistic,p_value,time_ms,samples_used\n\
-             tool-a,quick,shift,0.0,iid,0,5000,false,1.5,0.15,100,5000\n\
+            "tool,preset,effect_pattern,effect_sigma_mult,noise_model,synthetic_sigma_ns,attacker_threshold_ns,dataset_id,samples_per_class,detected,statistic,p_value,time_ms,samples_used,status,outcome\n\
+             tool-a,quick,shift,0.0,iid,50,0.4,0,5000,false,1.5,0.15,100,5000,Pass,pass\n\
              malformed line\n\
-             tool-b,quick,shift,0.05,iid,1,5000,true,2.0,0.01,150,5000\n\
+             tool-b,quick,shift,0.05,iid,50,0.4,1,5000,true,2.0,0.01,150,5000,Fail,fail\n\
              \n\
              tool-c,quick\n"
         ).unwrap();

@@ -13,8 +13,8 @@ def load_benchmark_data(data_dir: Optional[Path] = None) -> pd.DataFrame:
 
     Returns DataFrame with columns:
         tool, preset, effect_pattern, effect_sigma_mult, noise_model,
-        attacker_threshold_ns, dataset_id, samples_per_class, detected,
-        statistic, p_value, time_ms, samples_used, status, outcome,
+        synthetic_sigma_ns, attacker_threshold_ns, dataset_id, samples_per_class,
+        detected, statistic, p_value, time_ms, samples_used, status, outcome,
         verdict (parsed from outcome)
     """
     if data_dir is None:
@@ -40,6 +40,12 @@ def load_benchmark_data(data_dir: Optional[Path] = None) -> pd.DataFrame:
 
     # Convert threshold to numeric
     df["attacker_threshold_ns"] = pd.to_numeric(df["attacker_threshold_ns"], errors="coerce")
+
+    # Convert synthetic_sigma_ns to numeric (may be missing in older data)
+    if "synthetic_sigma_ns" in df.columns:
+        df["synthetic_sigma_ns"] = pd.to_numeric(df["synthetic_sigma_ns"], errors="coerce")
+    else:
+        df["synthetic_sigma_ns"] = 50.0  # Default for older data
 
     return df
 
@@ -89,19 +95,48 @@ def load_summary_data(data_dir: Optional[Path] = None) -> pd.DataFrame:
     return df
 
 
-def get_expected_combinations() -> dict:
-    """Return the expected combinations of experimental factors."""
-    return {
+def get_expected_combinations(preset: str = "medium") -> dict:
+    """Return the expected combinations of experimental factors for a given preset.
+
+    Args:
+        preset: One of "medium" or "thorough"
+
+    Note: This reflects the targeted config approach for the three paper heatmaps:
+    - Heatmap 1 (Effect × Tool): All effects, IID noise, σ=50ns
+    - Heatmap 2 (Autocorr × Tool): effect=0, all noise models, σ=50ns
+    - Heatmap 3 (NoiseLevel × Tool): effect=0, IID noise, all σ values
+    """
+    # Common across presets
+    # Note: "silent" is R reference impl (not silent-native), "tlsfuzzer" is Python tool
+    base = {
         "tools": [
             "ad-test", "dudect", "ks-test", "mona",
-            "rtlf-native", "silent-native", "tacet", "timing-tvla"
+            "rtlf-native", "silent", "tacet", "timing-tvla", "tlsfuzzer"
         ],
-        "effect_patterns": ["shift", "tail"],
-        "effect_sigma_mults": [0, 0.2, 1, 2, 4, 20],
-        "noise_models": ["ar1-n0.6", "ar1-n0.3", "iid", "ar1-0.3", "ar1-0.6"],
-        "tacet_thresholds": [0.4, 100],  # Only tacet has thresholds
-        "n_datasets": 30,
+        "tacet_thresholds": [0.4],  # SharedHardware only for fair comparison
     }
+
+    if preset == "thorough":
+        return {
+            **base,
+            "effect_patterns": ["shift", "tail", "bimodal"],
+            "effect_sigma_mults": [0, 0.1, 0.2, 0.4, 1, 2, 4, 10, 20],
+            "noise_models": [
+                "ar1-n0.6", "ar1-n0.4", "ar1-n0.2", "iid",
+                "ar1-0.2", "ar1-0.4", "ar1-0.6"
+            ],
+            "synthetic_sigma_ns_values": [2, 5, 10, 20, 50],
+            "n_datasets": 100,
+        }
+    else:  # medium (default)
+        return {
+            **base,
+            "effect_patterns": ["shift", "tail"],
+            "effect_sigma_mults": [0, 0.2, 1, 2, 4, 20],
+            "noise_models": ["ar1-n0.6", "ar1-n0.3", "iid", "ar1-0.3", "ar1-0.6", "ar1-0.8"],
+            "synthetic_sigma_ns_values": [2, 5, 10, 20, 50],
+            "n_datasets": 30,
+        }
 
 
 def aggregate_by_tool_and_conditions(

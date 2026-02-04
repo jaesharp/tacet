@@ -68,7 +68,7 @@ pub enum EffectPattern {
     Null,
     /// Mean shift by `effect_sigma_mult * σ` (real-space shift)
     Shift,
-    /// Heavier tail in test class (same mean, larger variance)
+    /// Tail effect: 5% of samples have 5× the effect (outliers that shift mean)
     Tail,
     /// Different variance (same mean)
     Variance,
@@ -500,17 +500,44 @@ pub fn generate_benchmark_dataset(config: &BenchmarkConfig) -> GeneratedDataset 
             )
         }
         EffectPattern::Tail => {
-            // Heavier tail: increase σ_log, adjust μ_log to keep mean constant
-            let tail_sigma = config.base_sigma * (1.0 + 0.5 * config.effect_sigma_mult.min(2.0));
-            let mu_adjustment = (tail_sigma.powi(2) - config.base_sigma.powi(2)) / 2.0;
-            let test_dist = LogNormal::new(config.base_mu - mu_adjustment, tail_sigma)
+            // Tail effect: 5% of samples have 5× the effect (outliers that shift mean)
+            // This matches the realistic mode TailEffect behavior.
+            let tail_prob = 0.05;
+            let tail_mult = 5.0;
+
+            // Outlier shift = 5× the base effect shift
+            let outlier_shift = tail_mult * effect_shift;
+            let baseline_mean = (config.base_mu + config.base_sigma.powi(2) / 2.0).exp();
+            let shift_factor = outlier_shift / baseline_mean;
+            let mu_shift = (1.0 + shift_factor).ln();
+            let outlier_dist = LogNormal::new(config.base_mu + mu_shift, config.base_sigma)
                 .expect("Invalid log-normal parameters");
-            generate_samples_with_noise(
+
+            // Generate mixture: (1-tail_prob) from baseline, tail_prob from outlier
+            let base_samples = generate_samples_with_noise(
                 config.samples_per_class,
-                &test_dist,
+                &baseline_dist,
                 config.noise_model,
                 &mut rng,
-            )
+            );
+            let outlier_samples = generate_samples_with_noise(
+                config.samples_per_class,
+                &outlier_dist,
+                config.noise_model,
+                &mut rng,
+            );
+
+            base_samples
+                .into_iter()
+                .zip(outlier_samples)
+                .map(|(base, outlier)| {
+                    if rng.gen::<f64>() < tail_prob {
+                        outlier
+                    } else {
+                        base
+                    }
+                })
+                .collect()
         }
         EffectPattern::Variance => {
             // Different variance, same mean (similar to Tail but more variance)

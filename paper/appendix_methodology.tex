@@ -116,13 +116,13 @@ Quality gates detect when data quality is insufficient for a confident verdict, 
 
 \paragraph{Gate 1: Insufficient Information Gain.}
 We compute the KL divergence between Gaussian approximations of the prior and posterior:
-\begin{equation}
-\text{KL}(p_{\text{post}} \| p_{\text{prior}}) = \frac{1}{2}\!\left(
-\text{tr}(\Lambda_0^{-1}\Lambda_{\text{post}})
+\begin{multline}
+\text{KL}(p_{\text{post}} \| p_{\text{prior}}) = \frac{1}{2}\Big(
+\text{tr}(\Lambda_0^{-1}\Lambda_{\text{post}}) \\
 + \mu_{\text{post}}^\top \Lambda_0^{-1} \mu_{\text{post}}
 - d + \ln\frac{|\Lambda_0|}{|\Lambda_{\text{post}}|}
-\right)
-\end{equation}
+\Big)
+\end{multline}
 where $\Lambda_0 = 2\sigma^2 R$ is the marginal prior covariance for $\nu=4$, and $(\mu_{\text{post}}, \Lambda_{\text{post}})$ are estimated from Gibbs samples.
 
 \textbf{DataTooNoisy}: If KL $< 0.7$ nats after calibration, the posterior has barely moved from the prior---the data is too noisy to distinguish signal from noise.

@@ -732,7 +732,10 @@ impl Default for SilentAdapter {
             command: "silent".to_string(),
             alpha: 0.1,
             bootstrap_samples: 1000,
-            delta: 100.0,
+            // Delta = minimum detectable effect in nanoseconds.
+            // Set to 1ns to detect sub-nanosecond effects in synthetic benchmarks.
+            // For σ=5ns sweeps, this allows detection of effects >= 0.2σ (1ns).
+            delta: 1.0,
         }
     }
 }
@@ -768,6 +771,90 @@ impl SilentAdapter {
 impl ToolAdapter for SilentAdapter {
     fn name(&self) -> &str {
         "silent"
+    }
+
+    fn supports_attacker_model(&self) -> bool {
+        true
+    }
+
+    fn analyze_with_attacker_model(
+        &self,
+        dataset: &GeneratedDataset,
+        attacker_model: Option<AttackerModel>,
+    ) -> ToolResult {
+        // Use attacker model threshold as delta, or fall back to self.delta
+        let delta = attacker_model
+            .map(|m| m.to_threshold_ns())
+            .unwrap_or(self.delta);
+
+        let start = Instant::now();
+        let data = &dataset.blocked;
+
+        // Create temporary directory for input/output
+        let temp_dir = match tempfile::tempdir() {
+            Ok(dir) => dir,
+            Err(e) => {
+                return ToolResult {
+                    detected_leak: false,
+                    samples_used: 0,
+                    decision_time_ms: start.elapsed().as_millis() as u64,
+                    leak_probability: None,
+                    status: format!("Failed to create temp dir: {}", e),
+                    outcome: OutcomeCategory::Error,
+                };
+            }
+        };
+
+        // Write input CSV in SILENT format (same as RTLF)
+        let input_file = temp_dir.path().join("input.csv");
+        let output_dir = temp_dir.path();
+
+        if let Err(e) = write_rtlf_csv(&input_file, data) {
+            return ToolResult {
+                detected_leak: false,
+                samples_used: 0,
+                decision_time_ms: start.elapsed().as_millis() as u64,
+                leak_probability: None,
+                status: format!("Failed to write input: {}", e),
+                outcome: OutcomeCategory::Error,
+            };
+        }
+
+        // Run SILENT with threshold-matched delta
+        let result = run_silent(
+            &self.command,
+            self.alpha,
+            &input_file,
+            output_dir,
+            self.bootstrap_samples,
+            delta,
+        );
+
+        match result {
+            Ok((detected, stat)) => {
+                let samples_used = data.baseline.len() + data.test.len();
+                ToolResult {
+                    detected_leak: detected,
+                    samples_used,
+                    decision_time_ms: start.elapsed().as_millis() as u64,
+                    leak_probability: None,
+                    status: format!("stat={:.3}, alpha={:.2}, delta={:.1}", stat, self.alpha, delta),
+                    outcome: if detected {
+                        OutcomeCategory::Fail
+                    } else {
+                        OutcomeCategory::Pass
+                    },
+                }
+            }
+            Err(e) => ToolResult {
+                detected_leak: false,
+                samples_used: 0,
+                decision_time_ms: start.elapsed().as_millis() as u64,
+                leak_probability: None,
+                status: format!("Error: {}", e),
+                outcome: OutcomeCategory::Error,
+            },
+        }
     }
 
     fn analyze_blocked(&self, data: &BlockedData) -> ToolResult {

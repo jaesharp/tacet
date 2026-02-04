@@ -27,19 +27,20 @@ pub fn write_csv(results: &SweepResults, path: &Path) -> io::Result<()> {
     // Header (matches checkpoint::CSV_HEADER)
     writeln!(
         writer,
-        "tool,preset,effect_pattern,effect_sigma_mult,noise_model,attacker_threshold_ns,dataset_id,samples_per_class,detected,statistic,p_value,time_ms,samples_used,status,outcome"
+        "tool,preset,effect_pattern,effect_sigma_mult,noise_model,synthetic_sigma_ns,attacker_threshold_ns,dataset_id,samples_per_class,detected,statistic,p_value,time_ms,samples_used,status,outcome"
     )?;
 
     // Data rows
     for r in &results.results {
         writeln!(
             writer,
-            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
             r.tool,
             r.preset,
             r.effect_pattern,
             r.effect_sigma_mult,
             r.noise_model,
+            r.synthetic_sigma_ns,
             r.attacker_threshold_ns
                 .map(|t| format!("{}", t))
                 .unwrap_or_default(),
@@ -329,6 +330,7 @@ mod tests {
             effect_pattern: "null".to_string(),
             effect_sigma_mult: 0.0,
             noise_model: "iid".to_string(),
+            synthetic_sigma_ns: 50.0,
             attacker_threshold_ns: None,
             dataset_id: 0,
             samples_per_class: 5000,
@@ -347,6 +349,7 @@ mod tests {
             effect_pattern: "shift".to_string(),
             effect_sigma_mult: 1.0,
             noise_model: "iid".to_string(),
+            synthetic_sigma_ns: 50.0,
             attacker_threshold_ns: None,
             dataset_id: 0,
             samples_per_class: 5000,

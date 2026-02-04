@@ -60,6 +60,8 @@ pub struct DatasetConfig {
     pub effect_mult: f64,
     /// Noise model for this dataset.
     pub noise: NoiseModel,
+    /// Synthetic noise amplitude σ in nanoseconds.
+    pub sigma_ns: f64,
     /// Instance ID within this configuration point (0..datasets_per_point).
     pub instance_id: usize,
 }
@@ -68,10 +70,11 @@ impl DatasetConfig {
     /// Create a string key for this dataset config (used for display).
     pub fn display_key(&self) -> String {
         format!(
-            "{}-{:.4}σ-{}",
+            "{}-{:.4}σ-{}-{}ns",
             self.pattern.name(),
             self.effect_mult,
-            self.noise.name()
+            self.noise.name(),
+            self.sigma_ns
         )
     }
 }
@@ -144,7 +147,12 @@ pub struct SweepConfig {
     /// Controls the noise level for synthetic data generation.
     /// Default is 100_000 ns (100μs) for legacy compatibility.
     /// For SharedHardware stress testing, use ~50 ns.
+    /// Note: Use `synthetic_sigma_ns_values` for sweeps across multiple noise levels.
     pub synthetic_sigma_ns: f64,
+    /// Synthetic noise amplitude values to sweep (for Heatmap 3: Noise Level × Tool).
+    /// When non-empty, the benchmark will iterate over these values for effect=0 + IID.
+    /// If empty, uses `synthetic_sigma_ns` as the single value.
+    pub synthetic_sigma_ns_values: Vec<f64>,
 }
 
 impl SweepConfig {
@@ -180,7 +188,8 @@ impl SweepConfig {
             attacker_models: vec![Some(AttackerModel::SharedHardware)],
             use_realistic: false,
             realistic_base_ns: 1000,
-            synthetic_sigma_ns: 50.0, // 50 ns - realistic for PMU measurements
+            synthetic_sigma_ns: 5.0, // 5 ns - realistic for PMU measurements
+            synthetic_sigma_ns_values: vec![], // Empty = use synthetic_sigma_ns
         }
     }
 
@@ -220,22 +229,24 @@ impl SweepConfig {
                 20.0, // 1 μs
             ],
             effect_patterns: vec![EffectPattern::Shift, EffectPattern::Tail],
-            // Representative subset of thorough's noise range
+            // All noise models including extreme positive autocorrelation for Heatmap 2
             noise_models: vec![
                 NoiseModel::AR1 { phi: -0.6 },
                 NoiseModel::AR1 { phi: -0.3 },
                 NoiseModel::IID,
                 NoiseModel::AR1 { phi: 0.3 },
                 NoiseModel::AR1 { phi: 0.6 },
+                NoiseModel::AR1 { phi: 0.8 }, // Extreme positive autocorrelation
             ],
-            // Same attacker models as thorough
+            // Both attacker models for threshold comparison
             attacker_models: vec![
                 Some(AttackerModel::SharedHardware),
                 Some(AttackerModel::AdjacentNetwork),
             ],
             use_realistic: false,
             realistic_base_ns: 1000,
-            synthetic_sigma_ns: 50.0, // Same as thorough
+            synthetic_sigma_ns: 5.0, // 5 ns - realistic for PMU measurements
+            synthetic_sigma_ns_values: vec![2.0, 5.0, 10.0, 20.0, 50.0], // Sigma sweep for Heatmap 3
         }
     }
 
@@ -247,13 +258,13 @@ impl SweepConfig {
     /// 3. All tools' decisions across autocorrelation levels (FPR inflation demo)
     /// 4. Pattern robustness: Shift, Tail, Bimodal across representative noise
     ///
-    /// Uses σ = 50 ns for good SNR at SharedHardware-level effects.
+    /// Uses σ = 5 ns (realistic for PMU measurements, ~2ns measured on ARM64 Linux).
     ///
-    /// Effect sizes (as multiples of σ = 50 ns):
+    /// Effect sizes (as multiples of σ = 5 ns):
     /// - 0: null (FPR testing)
-    /// - 0.1–0.4: 5–20 ns (SharedHardware detection region)
-    /// - 1.0–4.0: 50–200 ns (cache timing, AdjacentNetwork threshold)
-    /// - 10.0–20.0: 500 ns–1 μs (large effects, diminishing returns)
+    /// - 0.1–0.4: 0.5–2 ns (sub-cycle, near SharedHardware θ=0.4ns)
+    /// - 1.0–4.0: 5–20 ns (SharedHardware detection region)
+    /// - 10.0–20.0: 50–100 ns (cache timing, AdjacentNetwork threshold)
     ///
     /// Key design choices:
     /// - **5,000 samples/class**: Stresses tools to work with limited data
@@ -274,11 +285,11 @@ impl SweepConfig {
             samples_per_class: 5_000,
             datasets_per_point: 100,
             // Effect sizes optimized for heatmap visualization
-            // With σ = 50 ns: [0, 5, 10, 20, 50, 100, 200, 500, 1000] ns
+            // With σ = 5 ns: [0, 0.5, 1, 2, 5, 10, 20, 50, 100] ns
             effect_multipliers: vec![
                 0.0,  // 0 ns (FPR test)
-                0.1,  // 5 ns (~12× SharedHardware θ)
-                0.2,  // 10 ns
+                0.1,  // 0.5 ns (~1× SharedHardware θ)
+                0.2,  // 1 ns
                 0.4,  // 20 ns
                 1.0,  // 50 ns
                 2.0,  // 100 ns (AdjacentNetwork θ)
@@ -292,8 +303,7 @@ impl SweepConfig {
                 EffectPattern::Tail,              // 5% of samples have 5× larger effect
                 EffectPattern::bimodal_default(), // Two-mode distribution
             ],
-            // Autocorrelation range: φ ∈ [-0.6, 0.6] in 0.2 steps
-            // (Covers the interesting range; ±0.8 adds runtime for diminishing insight)
+            // Autocorrelation range: φ ∈ [-0.6, 0.8] including extreme positive for Heatmap 2
             noise_models: vec![
                 NoiseModel::AR1 { phi: -0.6 },
                 NoiseModel::AR1 { phi: -0.4 },
@@ -302,15 +312,17 @@ impl SweepConfig {
                 NoiseModel::AR1 { phi: 0.2 },
                 NoiseModel::AR1 { phi: 0.4 },
                 NoiseModel::AR1 { phi: 0.6 },
+                NoiseModel::AR1 { phi: 0.8 }, // Extreme positive autocorrelation
             ],
-            // Two attacker models for threshold comparison
+            // Both attacker models for threshold comparison
             attacker_models: vec![
-                Some(AttackerModel::SharedHardware),  // θ = 0.4 ns
-                Some(AttackerModel::AdjacentNetwork), // θ = 100 ns
+                Some(AttackerModel::SharedHardware),
+                Some(AttackerModel::AdjacentNetwork),
             ],
             use_realistic: false,
             realistic_base_ns: 1000,
-            synthetic_sigma_ns: 50.0, // 50 ns - good SNR for SharedHardware detection
+            synthetic_sigma_ns: 5.0, // 5 ns - realistic for PMU measurements (measured ~2ns on lepton)
+            synthetic_sigma_ns_values: vec![2.0, 5.0, 10.0, 20.0, 50.0], // Sigma sweep for Heatmap 3
         }
     }
 
@@ -375,6 +387,7 @@ impl SweepConfig {
             use_realistic: false,
             realistic_base_ns: 1000,
             synthetic_sigma_ns: 100.0, // 100 ns - fine-grained threshold testing
+            synthetic_sigma_ns_values: vec![], // Not used for this preset
         }
     }
 
@@ -463,6 +476,7 @@ impl SweepConfig {
             use_realistic: false,
             realistic_base_ns: 1000,
             synthetic_sigma_ns: 100_000.0, // 100μs - legacy scale for threshold-relative testing
+            synthetic_sigma_ns_values: vec![], // Not used for this preset
         }
     }
 
@@ -524,6 +538,7 @@ impl SweepConfig {
             use_realistic: false,
             realistic_base_ns: 1000,
             synthetic_sigma_ns: 50.0, // 50 ns - realistic for PMU measurements
+            synthetic_sigma_ns_values: vec![], // Not used for this preset
         }
     }
 
@@ -542,29 +557,47 @@ impl SweepConfig {
         self.total_points() * self.datasets_per_point
     }
 
-    /// Iterate over all configuration points (without attacker model)
-    pub fn iter_configs(&self) -> impl Iterator<Item = (EffectPattern, f64, NoiseModel)> + '_ {
+    /// Iterate over all configuration points including sigma_ns.
+    ///
+    /// For Heatmap 3 (Noise Level × Tool), we sweep sigma values only when:
+    /// - effect_mult == 0 (null hypothesis)
+    /// - noise == IID
+    /// - synthetic_sigma_ns_values is non-empty
+    ///
+    /// All other configurations use the default `synthetic_sigma_ns`.
+    pub fn iter_configs(&self) -> impl Iterator<Item = (EffectPattern, f64, NoiseModel, f64)> + '_ {
+        let default_sigma = self.synthetic_sigma_ns;
+        let sigma_values = if self.synthetic_sigma_ns_values.is_empty() {
+            vec![default_sigma]
+        } else {
+            self.synthetic_sigma_ns_values.clone()
+        };
+
         self.effect_patterns.iter().flat_map(move |&pattern| {
+            let sigma_values = sigma_values.clone();
             self.effect_multipliers.iter().flat_map(move |&mult| {
-                self.noise_models
-                    .iter()
-                    .map(move |&noise| (pattern, mult, noise))
+                let sigma_values = sigma_values.clone();
+                self.noise_models.iter().flat_map(move |&noise| {
+                    // Sigma sweep only for effect=0 + IID (Heatmap 3 conditions)
+                    let sigmas: Vec<f64> = if mult == 0.0 && matches!(noise, NoiseModel::IID) {
+                        sigma_values.clone()
+                    } else {
+                        vec![default_sigma]
+                    };
+                    sigmas.into_iter().map(move |sigma| (pattern, mult, noise, sigma))
+                })
             })
         })
     }
 
-    /// Iterate over all configuration points including attacker model
+    /// Iterate over all configuration points including attacker model and sigma_ns.
     pub fn iter_configs_with_attacker(
         &self,
-    ) -> impl Iterator<Item = (EffectPattern, f64, NoiseModel, Option<AttackerModel>)> + '_ {
-        self.effect_patterns.iter().flat_map(move |&pattern| {
-            self.effect_multipliers.iter().flat_map(move |&mult| {
-                self.noise_models.iter().flat_map(move |&noise| {
-                    self.attacker_models
-                        .iter()
-                        .map(move |&model| (pattern, mult, noise, model))
-                })
-            })
+    ) -> impl Iterator<Item = (EffectPattern, f64, NoiseModel, f64, Option<AttackerModel>)> + '_ {
+        self.iter_configs().flat_map(move |(pattern, mult, noise, sigma)| {
+            self.attacker_models
+                .iter()
+                .map(move |&model| (pattern, mult, noise, sigma, model))
         })
     }
 }
@@ -582,6 +615,8 @@ pub struct BenchmarkResult {
     pub effect_sigma_mult: f64,
     /// Noise model
     pub noise_model: String,
+    /// Synthetic noise amplitude σ in nanoseconds
+    pub synthetic_sigma_ns: f64,
     /// Attacker model threshold in nanoseconds (None = tool default)
     pub attacker_threshold_ns: Option<f64>,
     /// Dataset ID within this config point
@@ -708,7 +743,7 @@ impl SweepResults {
         let mut summaries = Vec::new();
 
         for tool in self.tools() {
-            for (pattern, mult, noise) in self.config.iter_configs() {
+            for (pattern, mult, noise, _sigma) in self.config.iter_configs() {
                 // In realistic mode, noise_model has "-realistic" suffix
                 let expected_noise = if self.config.use_realistic {
                     format!("{}-realistic", noise.name())
@@ -879,11 +914,12 @@ impl SweepRunner {
         // Step 1: Build lightweight dataset configs (no memory cost)
         let all_configs: Vec<DatasetConfig> = config
             .iter_configs()
-            .flat_map(|(pattern, mult, noise)| {
+            .flat_map(|(pattern, mult, noise, sigma)| {
                 (0..config.datasets_per_point).map(move |instance_id| DatasetConfig {
                     pattern,
                     effect_mult: mult,
                     noise,
+                    sigma_ns: sigma,
                     instance_id,
                 })
             })
@@ -937,6 +973,7 @@ impl SweepRunner {
                         cfg.pattern,
                         cfg.effect_mult,
                         cfg.noise,
+                        cfg.sigma_ns,
                         cfg.instance_id,
                         dataset,
                         tool_idx,
@@ -957,6 +994,7 @@ impl SweepRunner {
                         cfg.pattern,
                         cfg.effect_mult,
                         cfg.noise,
+                        cfg.sigma_ns,
                         cfg.instance_id,
                         dataset,
                         tool_idx,
@@ -1015,11 +1053,12 @@ impl SweepRunner {
         // Step 1: Build lightweight dataset configs (no memory cost)
         let all_configs: Vec<DatasetConfig> = config
             .iter_configs()
-            .flat_map(|(pattern, mult, noise)| {
+            .flat_map(|(pattern, mult, noise, sigma)| {
                 (0..config.datasets_per_point).map(move |instance_id| DatasetConfig {
                     pattern,
                     effect_mult: mult,
                     noise,
+                    sigma_ns: sigma,
                     instance_id,
                 })
             })
@@ -1103,6 +1142,7 @@ impl SweepRunner {
                         cfg.pattern,
                         cfg.effect_mult,
                         cfg.noise,
+                        cfg.sigma_ns,
                         cfg.instance_id,
                         dataset,
                         tool_idx,
@@ -1131,6 +1171,7 @@ impl SweepRunner {
                         cfg.pattern,
                         cfg.effect_mult,
                         cfg.noise,
+                        cfg.sigma_ns,
                         cfg.instance_id,
                         dataset,
                         tool_idx,
@@ -1245,6 +1286,7 @@ impl SweepRunner {
         pattern: EffectPattern,
         mult: f64,
         noise: NoiseModel,
+        sigma_ns: f64,
         dataset_id: usize,
         dataset: &GeneratedDataset,
         tool_idx: usize,
@@ -1274,6 +1316,7 @@ impl SweepRunner {
             effect_pattern: pattern.name().to_string(),
             effect_sigma_mult: mult,
             noise_model: noise_name,
+            synthetic_sigma_ns: sigma_ns,
             attacker_threshold_ns: attacker_threshold_ns(attacker_model),
             dataset_id,
             samples_per_class: config.samples_per_class,
@@ -1521,6 +1564,7 @@ mod tests {
             use_realistic: false,
             realistic_base_ns: 1000,
             synthetic_sigma_ns: 50.0,
+            synthetic_sigma_ns_values: vec![],
         };
 
         let runner = SweepRunner::new(vec![

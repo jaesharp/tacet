@@ -247,42 +247,11 @@ pub enum TimerBackend {
 impl TimerBackend {
     /// Check if cycle-accurate timing is available on this platform.
     ///
-    /// Returns true if kperf (macOS) or perf (Linux) is available and usable.
+    /// Actually tries to initialize the PMU timer to verify it works.
+    /// This is more reliable than just checking permissions.
     pub fn cycle_accurate_available() -> bool {
-        // Try to detect cycle-accurate timer availability
-        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-        {
-            // kperf requires elevated privileges on macOS
-            // Check if we're running as root or have the right entitlements
-            is_root()
-        }
-
-        #[cfg(all(
-            target_os = "linux",
-            any(target_arch = "x86_64", target_arch = "aarch64")
-        ))]
-        {
-            // perf_event_open requires CAP_PERFMON or root
-            // Try to check perf_event_paranoid
-            if let Ok(content) = std::fs::read_to_string("/proc/sys/kernel/perf_event_paranoid") {
-                if let Ok(level) = content.trim().parse::<i32>() {
-                    // Level <= 2 allows userspace perf, but we need <= 1 for CPU cycles
-                    return level <= 1 || is_root();
-                }
-            }
-            is_root()
-        }
-
-        #[cfg(not(any(
-            all(target_os = "macos", target_arch = "aarch64"),
-            all(
-                target_os = "linux",
-                any(target_arch = "x86_64", target_arch = "aarch64")
-            )
-        )))]
-        {
-            false
-        }
+        // Use tacet's actual timer detection
+        tacet::measurement::TimerSpec::cycle_accurate_available()
     }
 }
 

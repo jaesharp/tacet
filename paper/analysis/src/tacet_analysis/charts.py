@@ -18,22 +18,90 @@ from tacet_analysis.utils import (
     NOISE_ORDER,
     TOOL_NAMES,
     TOOL_ORDER,
-    setup_dark_style,
+    setup_paper_style,
 )
 
 
+# Distinctive but neutral color scheme
+VERDICT_COLORS = {
+    "found": "#14b8a6",       # Teal - detection occurred
+    "not_found": "#d6ccc2",   # Warm taupe - no detection
+    "uncertain": "#f97316",   # Coral - couldn't determine
+}
+
+
+def _draw_stacked_bar_cell(ax: plt.Axes, x: float, y: float,
+                           width: float, height: float,
+                           found_rate: float, not_found_rate: float, uncertain_rate: float) -> None:
+    """Draw a mini stacked bar in a heatmap cell.
+
+    Args:
+        ax: Matplotlib axes
+        x, y: Bottom-left corner of the cell
+        width, height: Cell dimensions
+        found_rate, not_found_rate, uncertain_rate: Proportions (should sum to 1)
+    """
+    # Add padding around the bar
+    padding_x = width * 0.08
+    padding_y = height * 0.2
+    bar_width = width - 2 * padding_x
+    bar_height = height - 2 * padding_y
+    bar_x = x + padding_x
+    bar_y = y + padding_y
+
+    # Draw segments left to right: found (blue) | not_found (gray) | uncertain (purple)
+    current_x = bar_x
+
+    if found_rate > 0.005:  # Skip tiny segments
+        seg_width = bar_width * found_rate
+        rect = plt.Rectangle((current_x, bar_y), seg_width, bar_height,
+                             facecolor=VERDICT_COLORS["found"], edgecolor="none")
+        ax.add_patch(rect)
+        current_x += seg_width
+
+    if not_found_rate > 0.005:
+        seg_width = bar_width * not_found_rate
+        rect = plt.Rectangle((current_x, bar_y), seg_width, bar_height,
+                             facecolor=VERDICT_COLORS["not_found"], edgecolor="none")
+        ax.add_patch(rect)
+        current_x += seg_width
+
+    if uncertain_rate > 0.005:
+        seg_width = bar_width * uncertain_rate
+        rect = plt.Rectangle((current_x, bar_y), seg_width, bar_height,
+                             facecolor=VERDICT_COLORS["uncertain"], edgecolor="none")
+        ax.add_patch(rect)
+
+
+def _highlight_tacet_row(ax: plt.Axes, tool_labels: list[str]) -> None:
+    """Add visual distinction for Tacet row(s) - just bold text, no separator."""
+    tacet_indices = [i for i, label in enumerate(tool_labels) if "Tacet" in str(label)]
+    if tacet_indices:
+        # Just make Tacet labels bold - clean and simple
+        labels = ax.get_yticklabels()
+        for i in tacet_indices:
+            if i < len(labels):
+                labels[i].set_fontweight("bold")
+        ax.set_yticklabels(labels)
+
+
 def plot_power_heatmap(
-    summary_df: pd.DataFrame,
+    raw_df: pd.DataFrame,
     noise_model: str = "ar1-0.6",
     effect_pattern: str = "shift",
     tacet_threshold_ns: float = 100.0,
     output_path: Optional[Path] = None,
-    figsize: tuple[float, float] = (8, 5),
+    figsize: tuple[float, float] = (10, 5),
 ) -> plt.Figure:
     """Create heatmap of detection power: Effect Size × Tool.
 
+    Each cell contains a mini stacked bar showing the proportion of:
+    - Effect found (blue)
+    - Effect not found (gray)
+    - Couldn't determine (purple)
+
     Args:
-        summary_df: Summary data with detection rates
+        raw_df: Raw benchmark data with verdict column
         noise_model: Fixed noise model (default: ar1-0.6 for moderate autocorrelation)
         effect_pattern: Fixed effect pattern (default: shift)
         tacet_threshold_ns: Tacet threshold to use (default: 100ns)
@@ -43,12 +111,12 @@ def plot_power_heatmap(
     Returns:
         matplotlib Figure
     """
-    setup_dark_style()
+    setup_paper_style()
 
     # Filter data
-    df = summary_df[
-        (summary_df["noise_model"] == noise_model)
-        & (summary_df["effect_pattern"] == effect_pattern)
+    df = raw_df[
+        (raw_df["noise_model"] == noise_model)
+        & (raw_df["effect_pattern"] == effect_pattern)
     ].copy()
 
     # Filter tacet to specific threshold
@@ -56,43 +124,52 @@ def plot_power_heatmap(
     threshold_mask = df["attacker_threshold_ns"] == tacet_threshold_ns
     df = df[~tacet_mask | (tacet_mask & threshold_mask)]
 
-    # Pivot for heatmap
-    pivot = df.pivot_table(
-        index="tool",
-        columns="effect_sigma_mult",
-        values="detection_rate",
-        aggfunc="first",
-    )
+    # Aggregate by tool and effect to get verdict proportions
+    agg = df.groupby(["tool", "effect_sigma_mult"]).agg(
+        n_trials=("verdict", "count"),
+        pass_rate=("verdict", lambda x: (x == "pass").mean()),
+        fail_rate=("verdict", lambda x: (x == "fail").mean()),
+        inc_rate=("verdict", lambda x: (x == "inconclusive").mean()),
+    ).reset_index()
 
-    # Reorder rows and columns
-    tools_present = [t for t in TOOL_ORDER if t in pivot.index]
-    effects_present = [e for e in EFFECT_ORDER if e in pivot.columns]
-    pivot = pivot.reindex(index=tools_present, columns=effects_present)
-
-    # Rename for display
-    pivot.index = pivot.index.map(TOOL_NAMES)
-    pivot.columns = pivot.columns.map(EFFECT_NAMES)
+    # Reorder tools and effects
+    tools_present = [t for t in TOOL_ORDER if t in agg["tool"].unique()]
+    effects_present = [e for e in EFFECT_ORDER if e in agg["effect_sigma_mult"].unique()]
 
     # Create figure
     fig, ax = plt.subplots(figsize=figsize)
 
-    # Create custom colormap: red (low) -> yellow (mid) -> green (high)
-    cmap = sns.diverging_palette(10, 130, s=80, l=55, as_cmap=True)
+    n_tools = len(tools_present)
+    n_effects = len(effects_present)
 
-    # Plot heatmap
-    sns.heatmap(
-        pivot,
-        annot=True,
-        fmt=".0%",
-        cmap=cmap,
-        center=0.5,
-        vmin=0,
-        vmax=1,
-        linewidths=0.5,
-        linecolor=COLORS["grid"],
-        cbar_kws={"label": "Detection Rate", "shrink": 0.8},
-        ax=ax,
-    )
+    # Draw cell backgrounds and stacked bars
+    for i, tool in enumerate(tools_present):
+        for j, effect in enumerate(effects_present):
+            # Draw cell background
+            rect = plt.Rectangle((j, i), 1, 1, facecolor="white",
+                                 edgecolor=COLORS["border"], linewidth=0.5)
+            ax.add_patch(rect)
+
+            # Get data for this cell
+            row = agg[(agg["tool"] == tool) & (agg["effect_sigma_mult"] == effect)]
+            if len(row) > 0:
+                row = row.iloc[0]
+                _draw_stacked_bar_cell(
+                    ax, j, i, 1, 1,
+                    found_rate=row["fail_rate"],
+                    not_found_rate=row["pass_rate"],
+                    uncertain_rate=row["inc_rate"]
+                )
+
+    # Configure axes
+    ax.set_xlim(0, n_effects)
+    ax.set_ylim(0, n_tools)
+    ax.set_xticks([x + 0.5 for x in range(n_effects)])
+    ax.set_yticks([y + 0.5 for y in range(n_tools)])
+    ax.set_xticklabels([EFFECT_NAMES.get(e, str(e)) for e in effects_present])
+    tool_labels = [TOOL_NAMES.get(t, t) for t in tools_present]
+    ax.set_yticklabels(tool_labels)
+    ax.invert_yaxis()
 
     ax.set_xlabel("Effect Size (σ)")
     ax.set_ylabel("Tool")
@@ -101,6 +178,17 @@ def plot_power_heatmap(
         f"(noise: {NOISE_NAMES[noise_model]}, pattern: {effect_pattern})",
         pad=10,
     )
+
+    # Highlight Tacet row
+    _highlight_tacet_row(ax, tool_labels)
+
+    # Add legend
+    legend_elements = [
+        plt.Rectangle((0,0), 1, 1, facecolor=VERDICT_COLORS["found"], edgecolor=COLORS["border"], label="Effect found"),
+        plt.Rectangle((0,0), 1, 1, facecolor=VERDICT_COLORS["not_found"], edgecolor=COLORS["border"], label="Effect not found"),
+        plt.Rectangle((0,0), 1, 1, facecolor=VERDICT_COLORS["uncertain"], edgecolor=COLORS["border"], label="Couldn't determine"),
+    ]
+    ax.legend(handles=legend_elements, loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False)
 
     plt.tight_layout()
 
@@ -112,16 +200,21 @@ def plot_power_heatmap(
 
 
 def plot_fpr_heatmap(
-    summary_df: pd.DataFrame,
+    raw_df: pd.DataFrame,
     effect_pattern: str = "shift",
     tacet_threshold_ns: float = 100.0,
     output_path: Optional[Path] = None,
-    figsize: tuple[float, float] = (8, 5),
+    figsize: tuple[float, float] = (10, 5),
 ) -> plt.Figure:
     """Create heatmap of false positive rates: Autocorrelation × Tool.
 
+    Each cell contains a mini stacked bar showing the proportion of:
+    - Effect found (blue) = false positive under null hypothesis
+    - Effect not found (gray) = correct
+    - Couldn't determine (purple)
+
     Args:
-        summary_df: Summary data with detection rates
+        raw_df: Raw benchmark data with verdict column
         effect_pattern: Fixed effect pattern (default: shift)
         tacet_threshold_ns: Tacet threshold to use (default: 100ns)
         output_path: Path to save figure
@@ -130,12 +223,12 @@ def plot_fpr_heatmap(
     Returns:
         matplotlib Figure
     """
-    setup_dark_style()
+    setup_paper_style()
 
     # Filter to null effect (effect = 0)
-    df = summary_df[
-        (summary_df["effect_sigma_mult"] == 0)
-        & (summary_df["effect_pattern"] == effect_pattern)
+    df = raw_df[
+        (raw_df["effect_sigma_mult"] == 0)
+        & (raw_df["effect_pattern"] == effect_pattern)
     ].copy()
 
     # Filter tacet to specific threshold
@@ -143,44 +236,52 @@ def plot_fpr_heatmap(
     threshold_mask = df["attacker_threshold_ns"] == tacet_threshold_ns
     df = df[~tacet_mask | (tacet_mask & threshold_mask)]
 
-    # Pivot for heatmap
-    pivot = df.pivot_table(
-        index="tool",
-        columns="noise_model",
-        values="detection_rate",
-        aggfunc="first",
-    )
+    # Aggregate by tool and noise model to get verdict proportions
+    agg = df.groupby(["tool", "noise_model"]).agg(
+        n_trials=("verdict", "count"),
+        pass_rate=("verdict", lambda x: (x == "pass").mean()),
+        fail_rate=("verdict", lambda x: (x == "fail").mean()),
+        inc_rate=("verdict", lambda x: (x == "inconclusive").mean()),
+    ).reset_index()
 
-    # Reorder rows and columns
-    tools_present = [t for t in TOOL_ORDER if t in pivot.index]
-    noise_present = [n for n in NOISE_ORDER if n in pivot.columns]
-    pivot = pivot.reindex(index=tools_present, columns=noise_present)
-
-    # Rename for display
-    pivot.index = pivot.index.map(TOOL_NAMES)
-    pivot.columns = pivot.columns.map(NOISE_NAMES)
+    # Reorder tools and noise models
+    tools_present = [t for t in TOOL_ORDER if t in agg["tool"].unique()]
+    noise_present = [n for n in NOISE_ORDER if n in agg["noise_model"].unique()]
 
     # Create figure
     fig, ax = plt.subplots(figsize=figsize)
 
-    # Create colormap: green (low FPR) -> yellow (borderline) -> red (high FPR)
-    # We want 5% to be the threshold, so center around 0.05
-    cmap = sns.diverging_palette(130, 10, s=80, l=55, as_cmap=True)
+    n_tools = len(tools_present)
+    n_noise = len(noise_present)
 
-    # Plot heatmap
-    sns.heatmap(
-        pivot,
-        annot=True,
-        fmt=".0%",
-        cmap=cmap,
-        center=0.05,
-        vmin=0,
-        vmax=0.40,
-        linewidths=0.5,
-        linecolor=COLORS["grid"],
-        cbar_kws={"label": "False Positive Rate", "shrink": 0.8},
-        ax=ax,
-    )
+    # Draw cell backgrounds and stacked bars
+    for i, tool in enumerate(tools_present):
+        for j, noise in enumerate(noise_present):
+            # Draw cell background
+            rect = plt.Rectangle((j, i), 1, 1, facecolor="white",
+                                 edgecolor=COLORS["border"], linewidth=0.5)
+            ax.add_patch(rect)
+
+            # Get data for this cell
+            row = agg[(agg["tool"] == tool) & (agg["noise_model"] == noise)]
+            if len(row) > 0:
+                row = row.iloc[0]
+                _draw_stacked_bar_cell(
+                    ax, j, i, 1, 1,
+                    found_rate=row["fail_rate"],
+                    not_found_rate=row["pass_rate"],
+                    uncertain_rate=row["inc_rate"]
+                )
+
+    # Configure axes
+    ax.set_xlim(0, n_noise)
+    ax.set_ylim(0, n_tools)
+    ax.set_xticks([x + 0.5 for x in range(n_noise)])
+    ax.set_yticks([y + 0.5 for y in range(n_tools)])
+    ax.set_xticklabels([NOISE_NAMES.get(n, n) for n in noise_present], rotation=45, ha="right")
+    tool_labels = [TOOL_NAMES.get(t, t) for t in tools_present]
+    ax.set_yticklabels(tool_labels)
+    ax.invert_yaxis()
 
     ax.set_xlabel("Autocorrelation Structure")
     ax.set_ylabel("Tool")
@@ -190,8 +291,16 @@ def plot_fpr_heatmap(
         pad=10,
     )
 
-    # Add reference line annotation
-    ax.axhline(y=0, color=COLORS["text"], linestyle="-", linewidth=0.5)
+    # Highlight Tacet row
+    _highlight_tacet_row(ax, tool_labels)
+
+    # Add legend
+    legend_elements = [
+        plt.Rectangle((0,0), 1, 1, facecolor=VERDICT_COLORS["found"], edgecolor=COLORS["border"], label="Effect found (FP)"),
+        plt.Rectangle((0,0), 1, 1, facecolor=VERDICT_COLORS["not_found"], edgecolor=COLORS["border"], label="Effect not found"),
+        plt.Rectangle((0,0), 1, 1, facecolor=VERDICT_COLORS["uncertain"], edgecolor=COLORS["border"], label="Couldn't determine"),
+    ]
+    ax.legend(handles=legend_elements, loc="upper left", bbox_to_anchor=(1.02, 1), frameon=False)
 
     plt.tight_layout()
 
@@ -221,7 +330,7 @@ def plot_verdict_distribution(
     Returns:
         matplotlib Figure
     """
-    setup_dark_style()
+    setup_paper_style()
 
     # Filter data
     df = raw_df[
@@ -297,11 +406,19 @@ def plot_verdict_distribution(
         bottom = np.zeros(len(noise_data))
         bar_width = 0.8
 
-        # Plot in order: pass (green), fail (red), inconclusive (amber)
-        for verdict, color in [("pass", COLORS["pass"]), ("fail", COLORS["fail"]), ("inconclusive", COLORS["inconclusive"])]:
+        # Plot in order with semantic labels and neutral colors:
+        # - fail (effect found) → blue (neutral)
+        # - pass (effect not found) → gray (neutral)
+        # - inconclusive (couldn't determine) → amber
+        verdict_config = [
+            ("fail", VERDICT_COLORS["found"], "Effect found"),
+            ("pass", VERDICT_COLORS["not_found"], "Effect not found"),
+            ("inconclusive", VERDICT_COLORS["uncertain"], "Couldn't determine"),
+        ]
+        for verdict, color, label in verdict_config:
             if verdict in noise_data.columns:
                 values = noise_data[verdict].values
-                ax.barh(range(len(noise_data)), values, left=bottom, color=color, label=verdict.capitalize(), height=bar_width)
+                ax.barh(range(len(noise_data)), values, left=bottom, color=color, label=label, height=bar_width)
                 bottom += values
 
         ax.set_xlim(0, 1)
@@ -360,7 +477,7 @@ def plot_power_curves(
     Returns:
         matplotlib Figure
     """
-    setup_dark_style()
+    setup_paper_style()
 
     # Filter data
     df = summary_df[
@@ -413,7 +530,9 @@ def plot_power_curves(
         f"(noise: {NOISE_NAMES[noise_model]}, pattern: {effect_pattern})"
     )
     ax.set_ylim(-0.05, 1.05)
-    ax.set_xlim(-0.5, 21)
+    # Use symmetric log scale to show detail at small effect sizes while handling 0
+    ax.set_xscale("symlog", linthresh=0.1)
+    ax.set_xlim(-0.05, 25)
     ax.legend(loc="lower right", fontsize=8)
 
     # Reference lines
@@ -450,7 +569,7 @@ def plot_shift_vs_tail(
     Returns:
         matplotlib Figure
     """
-    setup_dark_style()
+    setup_paper_style()
 
     # Filter data
     df = summary_df[summary_df["noise_model"] == noise_model].copy()
@@ -550,18 +669,19 @@ def generate_all_figures(
     # Main paper figures
     print("\nGenerating main paper figures...")
 
+    # Use 0.4ns threshold (SharedHardware) to showcase Inconclusive verdicts
     figures["power_heatmap"] = plot_power_heatmap(
-        summary_df,
+        raw_df,
         noise_model="ar1-0.6",
         effect_pattern="shift",
-        tacet_threshold_ns=100.0,
+        tacet_threshold_ns=0.4,
         output_path=output_dir / "heatmap_power.png",
     )
 
     figures["fpr_heatmap"] = plot_fpr_heatmap(
-        summary_df,
+        raw_df,
         effect_pattern="shift",
-        tacet_threshold_ns=100.0,
+        tacet_threshold_ns=0.4,
         output_path=output_dir / "heatmap_fpr.png",
     )
 
@@ -579,7 +699,7 @@ def generate_all_figures(
         summary_df,
         noise_model="iid",
         effect_pattern="shift",
-        tacet_threshold_ns=100.0,
+        tacet_threshold_ns=0.4,
         output_path=output_dir / "power_curves_iid.png",
     )
 
@@ -587,23 +707,23 @@ def generate_all_figures(
         summary_df,
         noise_model="ar1-0.6",
         effect_pattern="shift",
-        tacet_threshold_ns=100.0,
+        tacet_threshold_ns=0.4,
         output_path=output_dir / "power_curves_ar1.png",
     )
 
     figures["shift_vs_tail"] = plot_shift_vs_tail(
         summary_df,
         noise_model="iid",
-        tacet_threshold_ns=100.0,
+        tacet_threshold_ns=0.4,
         output_path=output_dir / "shift_vs_tail.png",
     )
 
     # Tail pattern specific
     figures["power_heatmap_tail"] = plot_power_heatmap(
-        summary_df,
+        raw_df,
         noise_model="iid",
         effect_pattern="tail",
-        tacet_threshold_ns=100.0,
+        tacet_threshold_ns=0.4,
         output_path=output_dir / "heatmap_power_tail.png",
     )
 

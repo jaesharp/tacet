@@ -5,20 +5,20 @@
 
 ## Overview
 
-The benchmark presets are designed for a progression from quick CI checks to publication-quality comparative analysis. All presets share a common σ = 50 ns noise floor, which enables meaningful detection at SharedHardware thresholds (θ = 0.4 ns).
+The benchmark presets are designed for a progression from quick CI checks to publication-quality comparative analysis. All presets share a common σ = 5 ns noise floor, calibrated from actual PMU measurements (~2 ns on ARM64 Linux with perf_event).
 
 ## Design Principles
 
 ### 1. Consistent σ Across Presets
 
-All presets use **σ = 50 ns** (synthetic_sigma_ns). This value was chosen because:
+All presets use **σ = 5 ns** (synthetic_sigma_ns). This value was chosen because:
 
-- Realistic for PMU-based measurements on modern hardware
-- Enables detection of SharedHardware-level effects (θ = 0.4 ns)
-- With CV = 5%, the noise SD is ~2.5 ns, so effects ≥5 ns are statistically detectable
+- Measured ~2 ns on ARM64 Linux (lepton) with PMU cycle counting
+- Rounded up to 5 ns for conservative/portable baseline
+- At σ = 5 ns with n=5000: θ_floor ≈ 1-3 ns, making SharedHardware (0.4 ns) nearly achievable
 - Keeps presets comparable—a "pass" in quick should also pass in thorough
 
-Previous versions used σ = 100 μs, which made SharedHardware detection impossible (noise was 250,000× the threshold).
+Previous versions used σ = 50-100 μs, which made SharedHardware detection impossible.
 
 ### 2. Stress Testing with Limited Samples
 
@@ -41,19 +41,18 @@ RemoteNetwork (θ = 50 μs) is excluded because effects that large are trivially
 
 ### 4. Effect Size Selection
 
-Effect sizes are chosen to span key regions:
+Effect sizes are chosen to span key regions (with σ = 5 ns):
 
-| Effect (ns) | Significance |
-|-------------|--------------|
-| 0 | FPR testing (null hypothesis) |
-| 5 | ~12× SharedHardware θ, challenging to detect |
-| 10–20 | SharedHardware detection region |
-| 50 | 1σ, moderate effect |
-| 100 | AdjacentNetwork θ, transition zone |
-| 200–500 | Easily detectable, cache timing scale |
-| 1000 | Large effect, diminishing returns |
+| Effect (ns) | Multiplier | Significance |
+|-------------|------------|--------------|
+| 0 | 0× | FPR testing (null hypothesis) |
+| 0.5 | 0.1× | ~1× SharedHardware θ, at detection limit |
+| 1–2 | 0.2–0.4× | Sub-cycle effects, SharedHardware region |
+| 5 | 1× | 1σ, moderate effect |
+| 10–20 | 2–4× | Easily detectable with PMU |
+| 50–100 | 10–20× | AdjacentNetwork θ region, cache timing |
 
-Beyond 1 μs, all tools achieve ~100% detection, so further granularity is wasteful.
+Beyond 100 ns, all tools achieve ~100% detection, so further granularity is wasteful.
 
 ### 5. Noise Model Selection
 
@@ -135,13 +134,13 @@ Shift is the primary analysis target; Tail and Bimodal support robustness claims
 |-----------|-------|
 | samples_per_class | 5,000 |
 | datasets_per_point | 20 |
-| synthetic_sigma_ns | 50.0 |
+| synthetic_sigma_ns | 5.0 |
 | effect_multipliers | [0.0, 0.02, 0.1, 0.4, 1.0, 2.0] |
 | effect_patterns | [Shift, Null] |
 | noise_models | [IID, AR1(0.5), AR1(-0.5)] |
 | attacker_models | [SharedHardware] |
 
-**Effect sizes (ns):** 0, 1, 5, 20, 50, 100
+**Effect sizes (ns):** 0, 0.1, 0.5, 2, 5, 10
 
 **Total runs:** 6 × 2 × 3 × 20 × 1 = **720**
 
@@ -153,33 +152,35 @@ Shift is the primary analysis target; Tail and Bimodal support robustness claims
 |-----------|-------|
 | samples_per_class | 5,000 |
 | datasets_per_point | 30 |
-| synthetic_sigma_ns | 50.0 |
+| synthetic_sigma_ns | 5.0 |
+| synthetic_sigma_ns_values | [2.0, 5.0, 10.0, 20.0, 50.0] |
 | effect_multipliers | [0.0, 0.2, 1.0, 2.0, 4.0, 20.0] |
 | effect_patterns | [Shift, Tail] |
 | noise_models | [AR1(-0.6), AR1(-0.3), IID, AR1(0.3), AR1(0.6)] |
-| attacker_models | [SharedHardware, AdjacentNetwork] |
+| attacker_models | [SharedHardware] |
 
-**Effect sizes (ns):** 0, 10, 50, 100, 200, 1000
+**Effect sizes (ns):** 0, 1, 5, 10, 20, 100
 
-**Total runs:** 6 × 2 × 5 × 30 × 2 = **3,600**
+**Total runs:** 6 × 2 × 5 × 30 × 1 = **1,800** (+ sigma sweep for Chart 3)
 
 ### Thorough
 
-**Purpose:** Publication-quality benchmarks for USENIX Sec '26, ~12-18 hours per platform
+**Purpose:** Publication-quality benchmarks for USENIX Sec '26
 
 | Parameter | Value |
 |-----------|-------|
 | samples_per_class | 5,000 |
 | datasets_per_point | 100 |
-| synthetic_sigma_ns | 50.0 |
+| synthetic_sigma_ns | 5.0 |
+| synthetic_sigma_ns_values | [2.0, 5.0, 10.0, 20.0, 50.0] |
 | effect_multipliers | [0.0, 0.1, 0.2, 0.4, 1.0, 2.0, 4.0, 10.0, 20.0] |
 | effect_patterns | [Shift, Tail, Bimodal] |
 | noise_models | [AR1(-0.6), AR1(-0.4), AR1(-0.2), IID, AR1(0.2), AR1(0.4), AR1(0.6)] |
-| attacker_models | [SharedHardware, AdjacentNetwork] |
+| attacker_models | [SharedHardware] |
 
-**Effect sizes (ns):** 0, 5, 10, 20, 50, 100, 200, 500, 1000
+**Effect sizes (ns):** 0, 0.5, 1, 2, 5, 10, 20, 50, 100
 
-**Total runs:** 9 × 3 × 7 × 100 × 2 = **37,800**
+**Total runs:** 9 × 3 × 7 × 100 × 1 = **18,900** (+ sigma sweep for Chart 3)
 
 ---
 

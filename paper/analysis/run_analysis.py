@@ -37,7 +37,7 @@ def main():
         print(f"  Summary data: {len(summary_df):,} rows")
     except FileNotFoundError as e:
         print(f"ERROR: {e}")
-        print("\nMake sure benchmark data exists at aws-results/local/medium/")
+        print("\nMake sure benchmark data exists at results/medium-v2/")
         sys.exit(1)
 
     # Run robustness checks
