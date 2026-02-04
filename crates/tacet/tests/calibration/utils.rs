@@ -553,9 +553,17 @@ impl TrialRunner {
                 self.completed += 1;
                 self.fail += 1;
             }
-            Outcome::Inconclusive { .. } => {
+            Outcome::Inconclusive { leak_probability, .. } => {
                 self.completed += 1;
-                self.inconclusive += 1;
+                // Count high-confidence Inconclusive (P≥90%) as detections.
+                // Rationale: The oracle detected the leak but refused to give a Fail
+                // verdict due to quality concerns (e.g., stationarity drift).
+                // For power analysis, detection is what matters.
+                if *leak_probability >= 0.90 {
+                    self.fail += 1;
+                } else {
+                    self.inconclusive += 1;
+                }
             }
             Outcome::Unmeasurable { .. } => {
                 self.unmeasurable += 1;
