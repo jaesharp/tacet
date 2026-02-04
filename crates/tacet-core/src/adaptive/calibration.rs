@@ -31,7 +31,7 @@ use crate::math;
 use crate::preflight::{run_core_checks, PreflightResult};
 use crate::statistics::{
     bootstrap_difference_covariance, bootstrap_difference_covariance_discrete, timing_iact_combined,
-    AcquisitionStream, OnlineStats,
+    timing_iact_direct, timing_iact_per_quantile, AcquisitionStream, OnlineStats,
 };
 use crate::types::{Matrix9, Vector9};
 
@@ -303,7 +303,9 @@ impl Calibration {
                 }
                 (n / self.block_length).max(1)
             }
-            IactMethod::GeyersIMS => {
+            IactMethod::GeyersIMS
+            | IactMethod::DirectDifferences
+            | IactMethod::PerQuantile => {
                 if self.iact <= 1.0 {
                     return n.max(1);
                 }
@@ -573,6 +575,22 @@ pub fn calibrate(
             // They will be logged by the caller if needed
 
             (cov_estimate.block_size, iact_result.tau, crate::types::IactMethod::GeyersIMS)
+        }
+        crate::types::IactMethod::DirectDifferences => {
+            let iact_result = timing_iact_direct(&interleaved);
+
+            // Warnings are captured in iact_result but don't affect calibration
+            // They will be logged by the caller if needed
+
+            (cov_estimate.block_size, iact_result.tau, crate::types::IactMethod::DirectDifferences)
+        }
+        crate::types::IactMethod::PerQuantile => {
+            let iact_result = timing_iact_per_quantile(&interleaved);
+
+            // Warnings are captured in iact_result but don't affect calibration
+            // They will be logged by the caller if needed
+
+            (cov_estimate.block_size, iact_result.tau, crate::types::IactMethod::PerQuantile)
         }
     };
 

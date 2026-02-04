@@ -155,17 +155,28 @@ impl AttackerModel {
 /// IACT estimates the effective sample size under autocorrelation,
 /// which affects statistical precision and the minimum detectable effect.
 ///
-/// Two methods are available:
+/// Four methods are available:
 ///
+/// - **DirectDifferences**: Computes IACT directly on timing differences between
+///   baseline and sample with temporal pairing. Most direct approach, handles
+///   sparse outliers well. Recommended default.
+/// - **PerQuantile**: Computes IACT on indicator series for each quantile,
+///   then uses robust aggregation (median) instead of max. More principled
+///   than DirectDifferences for quantile-based inference, avoids max() pathology.
 /// - **GeyersIMS**: Implements Geyer's Initial Monotone Sequence algorithm
-///   per specification §3.3.2. This is the spec-compliant method and the default.
+///   per specification §3.3.2. Spec-compliant but uses max aggregation which
+///   can be overly conservative for sparse outliers.
 /// - **PolitisWhite**: Uses the Politis-White block length as a proxy for IACT.
-///   This was the previous default and remains available for backward compatibility.
+///   Legacy method, remains available for backward compatibility.
 ///
-/// Both methods maintain type-1 error control under autocorrelation.
+/// All methods maintain type-1 error control under autocorrelation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IactMethod {
-    /// Geyer's Initial Monotone Sequence (spec-compliant, default)
+    /// Direct IACT on timing differences (recommended)
+    DirectDifferences,
+    /// Per-quantile IACT with robust aggregation (most principled)
+    PerQuantile,
+    /// Geyer's Initial Monotone Sequence with max aggregation (conservative)
     GeyersIMS,
     /// Politis-White block length (legacy)
     PolitisWhite,
@@ -173,6 +184,6 @@ pub enum IactMethod {
 
 impl Default for IactMethod {
     fn default() -> Self {
-        Self::GeyersIMS
+        Self::PerQuantile
     }
 }

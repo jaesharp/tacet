@@ -268,6 +268,194 @@ pub fn timing_iact_combined(stream: &[TimingSample]) -> IactResult {
     }
 }
 
+/// Compute IACT directly on timing differences between baseline and sample.
+///
+/// This approach computes the IACT on timing differences while respecting
+/// temporal adjacency. Instead of pairing samples by within-class index,
+/// we use a sliding window to pair each sample with the nearest baseline
+/// measurement in time, preserving the dependence structure.
+///
+/// # Algorithm
+///
+/// 1. Scan through the interleaved stream maintaining a window
+/// 2. For each sample, pair with the nearest baseline (within window)
+/// 3. Compute difference: sample - baseline for each pair
+/// 4. Apply Geyer's IMS IACT algorithm to the difference series
+///
+/// This avoids the pairing scrambling issue that occurs when randomly
+/// interleaved samples are separated and paired by within-class order.
+///
+/// # Arguments
+///
+/// * `stream` - Interleaved timing samples with class labels
+///
+/// # Returns
+///
+/// `IactResult` with IACT estimate from the timing difference series
+pub fn timing_iact_direct(stream: &[TimingSample]) -> IactResult {
+    // Use a sliding window approach to pair samples with nearest baselines
+    // Window size: how many samples to look back for pairing
+    const WINDOW_SIZE: usize = 10;
+
+    let mut differences = Vec::new();
+    let mut recent_baselines: Vec<(usize, f64)> = Vec::new(); // (index, time_ns)
+
+    for (idx, sample) in stream.iter().enumerate() {
+        match sample.class {
+            Class::Baseline => {
+                // Add to recent baselines window
+                recent_baselines.push((idx, sample.time_ns));
+                // Keep only recent samples within window
+                if recent_baselines.len() > WINDOW_SIZE {
+                    recent_baselines.remove(0);
+                }
+            }
+            Class::Sample => {
+                // Pair this sample with the nearest baseline in the window
+                if let Some(&(_, baseline_time)) = recent_baselines.last() {
+                    // Use most recent baseline (closest in time)
+                    differences.push(sample.time_ns - baseline_time);
+                }
+            }
+        }
+    }
+
+    // Need at least 20 paired differences
+    if differences.len() < 20 {
+        return IactResult {
+            tau: 1.0,
+            m_trunc: 0,
+            max_lag: 0,
+            warnings: vec![IactWarning::InsufficientSamples {
+                n: differences.len(),
+            }],
+        };
+    }
+
+    // Apply Geyer's IMS IACT to the difference series
+    geyer_ims_iact(&differences)
+}
+
+/// Compute IACT using per-quantile indicators with robust aggregation.
+///
+/// This method is more principled than DirectDifferences for quantile-based
+/// inference because it targets the correct object: the dependence structure
+/// of quantile influence functions (indicator-like processes).
+///
+/// Unlike GeyersIMS which uses max() aggregation (overly conservative),
+/// this uses median aggregation which is robust to outlier IACT estimates
+/// while still respecting the per-quantile dependence structure.
+///
+/// # Algorithm
+///
+/// 1. For each of 9 quantiles (0.1, 0.2, ..., 0.9):
+///    - Compute indicator series: u_t(p) = 𝟙{y_t ≤ q_p}
+///    - Apply Geyer's IMS IACT to the indicator series
+///    - Do this separately for baseline and sample classes
+/// 2. Aggregate using median instead of max:
+///    - τ_baseline = median({τ̂₁, ..., τ̂₉})
+///    - τ_sample = median({τ̂₁, ..., τ̂₉})
+/// 3. Conservative combination: τ_combined = max(τ_baseline, τ_sample)
+///
+/// This avoids the "max of 9 noisy things" pathology while preserving
+/// the theoretical correctness of indicator-based quantile dependence.
+///
+/// # Arguments
+///
+/// * `stream` - Interleaved timing samples with class labels
+///
+/// # Returns
+///
+/// `IactResult` with median-aggregated IACT estimate
+pub fn timing_iact_per_quantile(stream: &[TimingSample]) -> IactResult {
+    const QUANTILES: [f64; 9] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+
+    // Separate by class
+    let f_samples: Vec<f64> = stream
+        .iter()
+        .filter(|s| s.class == Class::Baseline)
+        .map(|s| s.time_ns)
+        .collect();
+
+    let r_samples: Vec<f64> = stream
+        .iter()
+        .filter(|s| s.class == Class::Sample)
+        .map(|s| s.time_ns)
+        .collect();
+
+    if f_samples.len() < 20 || r_samples.len() < 20 {
+        return IactResult {
+            tau: 1.0,
+            m_trunc: 0,
+            max_lag: 0,
+            warnings: vec![IactWarning::InsufficientSamples {
+                n: f_samples.len().min(r_samples.len()),
+            }],
+        };
+    }
+
+    let mut tau_f_vec: Vec<f64> = Vec::new();
+    let mut tau_r_vec: Vec<f64> = Vec::new();
+    let mut all_warnings = Vec::new();
+
+    // Compute IACT for each quantile indicator
+    for &p in &QUANTILES {
+        // Baseline class
+        let q_f = compute_quantile(&f_samples, p);
+        let z_f: Vec<f64> = f_samples
+            .iter()
+            .map(|&y| if y <= q_f { 1.0 } else { 0.0 })
+            .collect();
+        let result_f = geyer_ims_iact(&z_f);
+        tau_f_vec.push(result_f.tau);
+        all_warnings.extend(result_f.warnings);
+
+        // Sample class
+        let q_r = compute_quantile(&r_samples, p);
+        let z_r: Vec<f64> = r_samples
+            .iter()
+            .map(|&y| if y <= q_r { 1.0 } else { 0.0 })
+            .collect();
+        let result_r = geyer_ims_iact(&z_r);
+        tau_r_vec.push(result_r.tau);
+        all_warnings.extend(result_r.warnings);
+    }
+
+    // Robust aggregation: use median instead of max
+    let tau_f = compute_median(&mut tau_f_vec);
+    let tau_r = compute_median(&mut tau_r_vec);
+
+    // Conservative combination (still use max across classes)
+    let tau_combined = f64::max(tau_f, tau_r);
+
+    // Deduplicate warnings
+    all_warnings.sort_unstable();
+    all_warnings.dedup();
+
+    IactResult {
+        tau: tau_combined,
+        m_trunc: 0, // Not meaningful for combined result
+        max_lag: 0, // Not meaningful for combined result
+        warnings: all_warnings,
+    }
+}
+
+/// Compute median of a vector in-place.
+fn compute_median(values: &mut [f64]) -> f64 {
+    if values.is_empty() {
+        return 1.0;
+    }
+
+    values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let n = values.len();
+    if n % 2 == 0 {
+        (values[n / 2 - 1] + values[n / 2]) / 2.0
+    } else {
+        values[n / 2]
+    }
+}
+
 /// Compute quantile using type 2 quantiles (inverse empirical CDF with averaging).
 ///
 /// This matches the quantile computation used elsewhere in the codebase.
@@ -384,5 +572,163 @@ mod tests {
 
         let q90 = compute_quantile(&data, 0.9);
         assert!(q90 > 4.0, "90th percentile should be >4.0, got {}", q90);
+    }
+
+    #[test]
+    fn test_timing_iact_direct_iid() {
+        use crate::types::Class;
+
+        // Create IID baseline and sample with no timing difference
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(456);
+        let n = 500;
+
+        let mut stream = Vec::with_capacity(n * 2);
+        for _ in 0..n {
+            let time_ns = rng.random::<f64>() * 100.0; // Random timing
+            stream.push(TimingSample {
+                time_ns,
+                class: Class::Baseline,
+            });
+            stream.push(TimingSample {
+                time_ns: time_ns + rng.random::<f64>() * 2.0, // Small random difference
+                class: Class::Sample,
+            });
+        }
+
+        let result = timing_iact_direct(&stream);
+
+        // IID differences should have tau ≈ 1
+        assert!(result.tau >= 1.0, "IACT should be >= 1.0");
+        assert!(result.tau < 2.0, "IID data should have low IACT, got {}", result.tau);
+        assert!(result.warnings.is_empty(), "Should have no warnings");
+    }
+
+    #[test]
+    fn test_timing_iact_direct_with_shift() {
+        use crate::types::Class;
+
+        // Create timing data with consistent shift (no autocorrelation in differences)
+        let n = 500;
+        let shift = 50.0; // Fixed 50ns shift
+
+        let mut stream = Vec::with_capacity(n * 2);
+        for i in 0..n {
+            let time_ns = (i as f64) * 10.0; // Linear time progression
+            stream.push(TimingSample {
+                time_ns,
+                class: Class::Baseline,
+            });
+            stream.push(TimingSample {
+                time_ns: time_ns + shift, // Consistent shift
+                class: Class::Sample,
+            });
+        }
+
+        let result = timing_iact_direct(&stream);
+
+        // Constant differences should have tau ≈ 1 (no autocorrelation in differences)
+        assert!(result.tau >= 1.0, "IACT should be >= 1.0");
+        assert!(result.tau < 3.0, "Constant shift should have low IACT, got {}", result.tau);
+    }
+
+    #[test]
+    fn test_timing_iact_direct_insufficient_samples() {
+        use crate::types::Class;
+
+        // Create stream with < 20 samples
+        let stream = vec![
+            TimingSample { time_ns: 1.0, class: Class::Baseline },
+            TimingSample { time_ns: 2.0, class: Class::Sample },
+            TimingSample { time_ns: 3.0, class: Class::Baseline },
+        ];
+
+        let result = timing_iact_direct(&stream);
+
+        assert_eq!(result.tau, 1.0, "Should return tau=1.0 for insufficient samples");
+        assert!(!result.warnings.is_empty(), "Should have InsufficientSamples warning");
+    }
+
+    #[test]
+    fn test_timing_iact_per_quantile_iid() {
+        use crate::types::Class;
+
+        // Create IID baseline and sample with no timing difference
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(789);
+        let n = 500;
+
+        let mut stream = Vec::with_capacity(n * 2);
+        for _ in 0..n {
+            stream.push(TimingSample {
+                time_ns: rng.random::<f64>() * 100.0,
+                class: Class::Baseline,
+            });
+            stream.push(TimingSample {
+                time_ns: rng.random::<f64>() * 100.0,
+                class: Class::Sample,
+            });
+        }
+
+        let result = timing_iact_per_quantile(&stream);
+
+        // IID data should have low IACT
+        assert!(result.tau >= 1.0, "IACT should be >= 1.0");
+        assert!(result.tau < 3.0, "IID data should have low IACT, got {}", result.tau);
+    }
+
+    #[test]
+    fn test_timing_iact_per_quantile_vs_max() {
+        use crate::types::Class;
+
+        // Create data where one quantile has high IACT but most have low IACT
+        // This simulates the sparse outlier case
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(999);
+        let n = 500;
+
+        let mut stream = Vec::with_capacity(n * 2);
+        for i in 0..n {
+            let baseline_time = (i as f64) * 10.0;
+            let sample_time = if i % 20 == 0 {
+                // 5% of samples have large effect with autocorrelation
+                baseline_time + 500.0 + ((i / 20) as f64) * 50.0
+            } else {
+                // 95% of samples have no effect
+                baseline_time + rng.random::<f64>() * 2.0
+            };
+
+            stream.push(TimingSample {
+                time_ns: baseline_time,
+                class: Class::Baseline,
+            });
+            stream.push(TimingSample {
+                time_ns: sample_time,
+                class: Class::Sample,
+            });
+        }
+
+        let result_per_quantile = timing_iact_per_quantile(&stream);
+        let result_max = timing_iact_combined(&stream);
+
+        // Per-quantile (median) should be less conservative than max
+        assert!(
+            result_per_quantile.tau <= result_max.tau,
+            "Median aggregation should be <= max aggregation: {} vs {}",
+            result_per_quantile.tau,
+            result_max.tau
+        );
+    }
+
+    #[test]
+    fn test_timing_iact_per_quantile_insufficient_samples() {
+        use crate::types::Class;
+
+        let stream = vec![
+            TimingSample { time_ns: 1.0, class: Class::Baseline },
+            TimingSample { time_ns: 2.0, class: Class::Sample },
+        ];
+
+        let result = timing_iact_per_quantile(&stream);
+
+        assert_eq!(result.tau, 1.0, "Should return tau=1.0 for insufficient samples");
+        assert!(!result.warnings.is_empty(), "Should have InsufficientSamples warning");
     }
 }

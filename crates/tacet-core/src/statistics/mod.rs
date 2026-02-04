@@ -36,7 +36,10 @@ pub use covariance::{
     scale_covariance_for_inference, scale_covariance_rate, CovarianceEstimate,
 };
 pub use detection::{compute_min_uniqueness_ratio, DISCRETE_MODE_THRESHOLD};
-pub use iact::{geyer_ims_iact, timing_iact_combined, IactResult, IactWarning};
+pub use iact::{
+    geyer_ims_iact, timing_iact_combined, timing_iact_direct, timing_iact_per_quantile, IactResult,
+    IactWarning,
+};
 pub use online_stats::{OnlineStats, StatsSnapshot};
 pub use quantile::{
     compute_deciles, compute_deciles_fast, compute_deciles_inplace, compute_deciles_sorted,

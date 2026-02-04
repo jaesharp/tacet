@@ -1,41 +1,89 @@
 tool,preset,effect_pattern,effect_sigma_mult,noise_model,synthetic_sigma_ns,attacker_threshold_ns,dataset_id,samples_per_class,detected,statistic,p_value,time_ms,samples_used,status,outcome
-timing-tvla,quick,null,0.4,ar1-n0.5,5,,0,5000,false,,,0,10000,"|t|=0.39, threshold=4.5",pass
-ad-test,quick,shift,1,ar1-0.5,5,,0,5000,true,1.000000,,0,10000,"A²=236.1117, p=0.0000, alpha=0.05",fail
-timing-tvla,quick,shift,0.4,ar1-n0.5,5,,0,5000,true,,,0,10000,"|t|=9.22, threshold=4.5",fail
-ad-test,quick,null,1,ar1-0.5,5,,0,5000,false,0.621003,,0,10000,"A²=0.6041, p=0.3790, alpha=0.05",pass
-ad-test,quick,null,0.4,iid,5,,0,5000,false,0.777041,,0,10000,"A²=1.3337, p=0.2230, alpha=0.05",pass
-mona,quick,shift,1,ar1-0.5,5,,0,5000,true,,,0,10000,non-overlapping box found at [4-9%],fail
-ad-test,quick,null,0.02,ar1-0.5,5,,0,5000,false,0.621003,,0,10000,"A²=0.6041, p=0.3790, alpha=0.05",pass
-mona,quick,null,0.4,iid,5,,0,5000,false,,,0,10000,no non-overlapping box found,pass
-mona,quick,null,0.4,ar1-0.5,5,,0,5000,false,,,0,10000,no non-overlapping box found,pass
-mona,quick,null,0.02,ar1-0.5,5,,0,5000,false,,,0,10000,no non-overlapping box found,pass
-ks-test,quick,shift,1,iid,5,,0,5000,true,1.000000,,0,10000,"D=0.3660, p=0.0000, alpha=0.05",fail
-ad-test,quick,shift,1,iid,5,,0,5000,true,1.000000,,0,10000,"A²=931.5662, p=0.0000, alpha=0.05",fail
-mona,quick,shift,1,iid,5,,0,5000,true,,,0,10000,non-overlapping box found at [1-6%],fail
-ks-test,quick,null,0.4,ar1-n0.5,5,,0,5000,false,0.012589,,0,10000,"D=0.0090, p=0.9874, alpha=0.05",pass
-ad-test,quick,null,0.4,ar1-n0.5,5,,0,5000,false,0.543614,,0,10000,"A²=0.2177, p=0.4564, alpha=0.05",pass
-mona,quick,null,0.4,ar1-n0.5,5,,0,5000,false,,,0,10000,no non-overlapping box found,pass
-mona,quick,null,1,ar1-0.5,5,,0,5000,false,,,0,10000,no non-overlapping box found,pass
-ks-test,quick,shift,0.4,ar1-n0.5,5,,0,5000,true,1.000000,,1,10000,"D=0.0744, p=0.0000, alpha=0.05",fail
-ad-test,quick,shift,0.4,ar1-n0.5,5,,0,5000,true,1.000000,,0,10000,"A²=40.8750, p=0.0000, alpha=0.05",fail
-mona,quick,shift,0.4,ar1-n0.5,5,,0,5000,true,,,0,10000,non-overlapping box found at [16-21%],fail
-ad-test,quick,shift,0.02,ar1-0.5,5,,0,5000,false,0.684759,,0,10000,"A²=0.9224, p=0.3152, alpha=0.05",pass
-mona,quick,shift,0.02,ar1-0.5,5,,0,5000,false,,,0,10000,no non-overlapping box found,pass
-dudect,quick,null,0.4,ar1-0.5,5,,0,5000,false,,,6,1251,"max|t|=2.36, tau=-0.0667, threshold=4.5",pass
-timing-tvla,quick,null,0.4,ar1-0.5,5,,0,5000,false,,,0,10000,"|t|=0.62, threshold=4.5",pass
-ks-test,quick,null,0.4,ar1-0.5,5,,0,5000,false,0.488028,,0,10000,"D=0.0164, p=0.5120, alpha=0.05",pass
-ad-test,quick,null,0.4,ar1-0.5,5,,0,5000,false,0.621003,,0,10000,"A²=0.6041, p=0.3790, alpha=0.05",pass
-tacet,quick,null,0,iid,5,0.4,0,5000,false,0.088542,,44,5000,"Inconclusive: SampleBudgetExceeded { current_probability: 0.08854166666666667, samples_collected: 5000 }",inconclusive
-ad-test,quick,shift,0,iid,5,,0,5000,false,0.777041,,0,10000,"A²=1.3337, p=0.2230, alpha=0.05",pass
-mona,quick,shift,0,iid,5,,0,5000,false,,,0,10000,no non-overlapping box found,pass
-dudect,quick,null,0,iid,5,,0,5000,false,,,5,8215,"max|t|=1.63, tau=0.0180, threshold=4.5",pass
-timing-tvla,quick,null,0,iid,5,,0,5000,false,,,0,10000,"|t|=1.42, threshold=4.5",pass
-ks-test,quick,null,0,iid,5,,0,5000,false,0.696445,,0,10000,"D=0.0194, p=0.3036, alpha=0.05",pass
-ad-test,quick,null,0,iid,5,,0,5000,false,0.777041,,0,10000,"A²=1.3337, p=0.2230, alpha=0.05",pass
-mona,quick,null,0,iid,5,,0,5000,false,,,0,10000,no non-overlapping box found,pass
-timing-tvla,quick,null,0.4,iid,5,,0,5000,false,,,0,10000,"|t|=1.42, threshold=4.5",pass
-ks-test,quick,null,0.4,iid,5,,0,5000,false,0.696445,,0,10000,"D=0.0194, p=0.3036, alpha=0.05",pass
-timing-tvla,quick,shift,0.4,iid,5,,0,5000,true,,,0,10000,"|t|=18.34, threshold=4.5",fail
-ks-test,quick,shift,0.4,iid,5,,0,5000,true,1.000000,,0,10000,"D=0.1484, p=0.0000, alpha=0.05",fail
-ad-test,quick,shift,0.4,iid,5,,0,5000,true,1.000000,,0,10000,"A²=158.1554, p=0.0000, alpha=0.05",fail
-mona,quick,shift,0.4,iid,5,,0,5000,true,,,0,10000,non-overlapping box found at [7-12%],fail
+ad-test,thorough,shift,0,ar1-n0.6,5,,12,5000,false,0.611916,,0,10000,"A²=0.5587, p=0.3881, alpha=0.05",pass
+ad-test,thorough,shift,0,ar1-n0.6,5,,87,5000,false,0.586582,,0,10000,"A²=0.4322, p=0.4134, alpha=0.05",pass
+ad-test,thorough,shift,0,ar1-n0.6,5,,62,5000,false,0.758521,,0,10000,"A²=1.2740, p=0.2415, alpha=0.05",pass
+mona,thorough,shift,0,ar1-n0.6,5,,87,5000,false,,,0,10000,no non-overlapping box found,pass
+mona,thorough,shift,0,ar1-n0.6,5,,62,5000,false,,,0,10000,no non-overlapping box found,pass
+mona,thorough,shift,0,ar1-n0.6,5,,12,5000,false,,,0,10000,no non-overlapping box found,pass
+dudect,thorough,shift,0,ar1-n0.6,5,,56,5000,false,,,4,1260,"max|t|=2.10, tau=0.0592, threshold=4.5",pass
+timing-tvla,thorough,shift,0,ar1-n0.6,5,,56,5000,false,,,0,10000,"|t|=0.21, threshold=4.5",pass
+ks-test,thorough,shift,0,ar1-n0.6,5,,56,5000,false,0.098656,,0,10000,"D=0.0114, p=0.9013, alpha=0.05",pass
+ad-test,thorough,shift,0,ar1-n0.6,5,,56,5000,false,0.552914,,0,10000,"A²=0.2642, p=0.4471, alpha=0.05",pass
+mona,thorough,shift,0,ar1-n0.6,5,,56,5000,false,,,0,10000,no non-overlapping box found,pass
+dudect,thorough,shift,0,ar1-n0.6,5,,81,5000,false,,,5,7947,"max|t|=1.55, tau=-0.0174, threshold=4.5",pass
+timing-tvla,thorough,shift,0,ar1-n0.6,5,,81,5000,false,,,0,10000,"|t|=0.11, threshold=4.5",pass
+ks-test,thorough,shift,0,ar1-n0.6,5,,81,5000,false,0.067497,,0,10000,"D=0.0108, p=0.9325, alpha=0.05",pass
+ad-test,thorough,shift,0,ar1-n0.6,5,,81,5000,false,0.582029,,0,10000,"A²=0.4095, p=0.4180, alpha=0.05",pass
+mona,thorough,shift,0,ar1-n0.6,5,,81,5000,false,,,0,10000,no non-overlapping box found,pass
+dudect,thorough,shift,0,ar1-n0.6,5,,6,5000,false,,,6,1219,"max|t|=1.95, tau=-0.0559, threshold=4.5",pass
+timing-tvla,thorough,shift,0,ar1-n0.6,5,,6,5000,false,,,0,10000,"|t|=0.88, threshold=4.5",pass
+ks-test,thorough,shift,0,ar1-n0.6,5,,6,5000,false,0.058534,,0,10000,"D=0.0106, p=0.9415, alpha=0.05",pass
+ad-test,thorough,shift,0,ar1-n0.6,5,,6,5000,false,0.618553,,0,10000,"A²=0.5919, p=0.3814, alpha=0.05",pass
+mona,thorough,shift,0,ar1-n0.6,5,,6,5000,false,,,0,10000,no non-overlapping box found,pass
+tacet,thorough,shift,0,ar1-n0.6,5,0.4,75,5000,false,0.005208,,42,5000,"Inconclusive: ThresholdElevated { theta_user: 0.4, theta_eff: 2.6466278315055414, leak_probability_at_eff: 0.005208333333333333, meets_pass_criterion_at_eff: true, achievable_at_max: false, message: ""Threshold elevated from 0ns to 2.6ns; P=0.5% at elevated threshold"", guidance: ""Use more samples or a higher-resolution timer to achieve the requested threshold."" }",inconclusive
+tacet,thorough,shift,0,ar1-n0.6,5,0.4,25,5000,false,0.010417,,46,5000,"Inconclusive: ThresholdElevated { theta_user: 0.4, theta_eff: 2.689275355644438, leak_probability_at_eff: 0.010416666666666666, meets_pass_criterion_at_eff: true, achievable_at_max: false, message: ""Threshold elevated from 0ns to 2.7ns; P=1.0% at elevated threshold"", guidance: ""Use more samples or a higher-resolution timer to achieve the requested threshold."" }",inconclusive
+tacet,thorough,shift,0,ar1-n0.6,5,0.4,0,5000,false,0.046875,,47,5000,"Inconclusive: ThresholdElevated { theta_user: 0.4, theta_eff: 2.6685865463947858, leak_probability_at_eff: 0.046875, meets_pass_criterion_at_eff: true, achievable_at_max: false, message: ""Threshold elevated from 0ns to 2.7ns; P=4.7% at elevated threshold"", guidance: ""Use more samples or a higher-resolution timer to achieve the requested threshold."" }",inconclusive
+tacet,thorough,shift,0,ar1-n0.6,5,100,53,5000,false,0.000000,,53,5000,Pass (P=0.0%),pass
+tacet,thorough,shift,0,ar1-n0.6,5,100,3,5000,false,0.000000,,55,5000,Pass (P=0.0%),pass
+tacet,thorough,shift,0,ar1-n0.6,5,0.4,50,5000,false,0.005208,,58,5000,"Inconclusive: ThresholdElevated { theta_user: 0.4, theta_eff: 2.7111369092749413, leak_probability_at_eff: 0.005208333333333333, meets_pass_criterion_at_eff: true, achievable_at_max: false, message: ""Threshold elevated from 0ns to 2.7ns; P=0.5% at elevated threshold"", guidance: ""Use more samples or a higher-resolution timer to achieve the requested threshold."" }",inconclusive
+dudect,thorough,shift,0,ar1-n0.6,5,,53,5000,false,,,6,655,"max|t|=1.39, tau=0.0545, threshold=4.5",pass
+timing-tvla,thorough,shift,0,ar1-n0.6,5,,53,5000,false,,,0,10000,"|t|=0.22, threshold=4.5",pass
+ks-test,thorough,shift,0,ar1-n0.6,5,,53,5000,false,0.030017,,0,10000,"D=0.0098, p=0.9700, alpha=0.05",pass
+dudect,thorough,shift,0,ar1-n0.6,5,,3,5000,false,,,4,5540,"max|t|=1.85, tau=-0.0249, threshold=4.5",pass
+timing-tvla,thorough,shift,0,ar1-n0.6,5,,3,5000,false,,,0,10000,"|t|=0.98, threshold=4.5",pass
+ad-test,thorough,shift,0,ar1-n0.6,5,,53,5000,false,0.564346,,0,10000,"A²=0.3212, p=0.4357, alpha=0.05",pass
+mona,thorough,shift,0,ar1-n0.6,5,,53,5000,false,,,0,10000,no non-overlapping box found,pass
+ks-test,thorough,shift,0,ar1-n0.6,5,,3,5000,false,0.207987,,0,10000,"D=0.0130, p=0.7920, alpha=0.05",pass
+ad-test,thorough,shift,0,ar1-n0.6,5,,3,5000,false,0.619477,,0,10000,"A²=0.5965, p=0.3805, alpha=0.05",pass
+mona,thorough,shift,0,ar1-n0.6,5,,3,5000,false,,,0,10000,no non-overlapping box found,pass
+tacet,thorough,shift,0,ar1-n0.6,5,100,75,5000,false,0.000000,,56,5000,Pass (P=0.0%),pass
+tacet,thorough,shift,0,ar1-n0.6,5,100,0,5000,false,0.000000,,56,5000,Pass (P=0.0%),pass
+dudect,thorough,shift,0,ar1-n0.6,5,,75,5000,false,,,8,8068,"max|t|=1.15, tau=0.0128, threshold=4.5",pass
+timing-tvla,thorough,shift,0,ar1-n0.6,5,,75,5000,false,,,0,10000,"|t|=0.06, threshold=4.5",pass
+tacet,thorough,shift,0,ar1-n0.6,5,100,50,5000,false,0.000000,,48,5000,Pass (P=0.0%),pass
+ks-test,thorough,shift,0,ar1-n0.6,5,,75,5000,false,0.322265,,0,10000,"D=0.0144, p=0.6777, alpha=0.05",pass
+ad-test,thorough,shift,0,ar1-n0.6,5,,75,5000,false,0.598016,,0,10000,"A²=0.4893, p=0.4020, alpha=0.05",pass
+mona,thorough,shift,0,ar1-n0.6,5,,75,5000,false,,,0,10000,no non-overlapping box found,pass
+dudect,thorough,shift,0,ar1-n0.6,5,,0,5000,false,,,5,1828,"max|t|=1.19, tau=-0.0279, threshold=4.5",pass
+timing-tvla,thorough,shift,0,ar1-n0.6,5,,0,5000,false,,,0,10000,"|t|=0.37, threshold=4.5",pass
+ks-test,thorough,shift,0,ar1-n0.6,5,,0,5000,false,0.003972,,0,10000,"D=0.0082, p=0.9960, alpha=0.05",pass
+ad-test,thorough,shift,0,ar1-n0.6,5,,0,5000,false,0.548186,,0,10000,"A²=0.2406, p=0.4518, alpha=0.05",pass
+mona,thorough,shift,0,ar1-n0.6,5,,0,5000,false,,,0,10000,no non-overlapping box found,pass
+dudect,thorough,shift,0,ar1-n0.6,5,,50,5000,false,,,4,8561,"max|t|=1.01, tau=-0.0109, threshold=4.5",pass
+timing-tvla,thorough,shift,0,ar1-n0.6,5,,50,5000,false,,,0,10000,"|t|=0.17, threshold=4.5",pass
+ks-test,thorough,shift,0,ar1-n0.6,5,,50,5000,false,0.009730,,0,10000,"D=0.0088, p=0.9903, alpha=0.05",pass
+ad-test,thorough,shift,0,ar1-n0.6,5,,50,5000,false,0.570913,,0,10000,"A²=0.3540, p=0.4291, alpha=0.05",pass
+mona,thorough,shift,0,ar1-n0.6,5,,50,5000,false,,,0,10000,no non-overlapping box found,pass
+tacet,thorough,shift,0,ar1-n0.6,5,100,25,5000,false,0.000000,,67,5000,Pass (P=0.0%),pass
+dudect,thorough,shift,0,ar1-n0.6,5,,25,5000,false,,,3,7467,"max|t|=2.00, tau=-0.0231, threshold=4.5",pass
+timing-tvla,thorough,shift,0,ar1-n0.6,5,,25,5000,false,,,0,10000,"|t|=0.85, threshold=4.5",pass
+ks-test,thorough,shift,0,ar1-n0.6,5,,25,5000,false,0.519365,,0,10000,"D=0.0168, p=0.4806, alpha=0.05",pass
+ad-test,thorough,shift,0,ar1-n0.6,5,,25,5000,false,0.646711,,0,10000,"A²=0.7324, p=0.3533, alpha=0.05",pass
+mona,thorough,shift,0,ar1-n0.6,5,,25,5000,false,,,0,10000,no non-overlapping box found,pass
+silent,thorough,shift,0,ar1-n0.6,5,0.4,6,5000,false,,,3956,10000,"stat=1.352, alpha=0.10, delta=0.4 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,0.4,56,5000,false,,,3975,10000,"stat=0.831, alpha=0.10, delta=0.4 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,0.4,0,5000,false,,,3879,10000,"stat=1.006, alpha=0.10, delta=0.4 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,0.4,87,5000,false,,,3999,10000,"stat=2.289, alpha=0.10, delta=0.4 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,0.4,3,5000,false,,,3949,10000,"stat=1.774, alpha=0.10, delta=0.4 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,0.4,53,5000,false,,,3971,10000,"stat=1.608, alpha=0.10, delta=0.4 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,0.4,75,5000,false,,,3924,10000,"stat=1.542, alpha=0.10, delta=0.4 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,100,68,5000,false,,,4035,10000,"stat=-87.525, alpha=0.10, delta=100.0 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,0.4,12,5000,false,,,4035,10000,"stat=1.946, alpha=0.10, delta=0.4 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,0.4,62,5000,false,,,4054,10000,"stat=2.795, alpha=0.10, delta=0.4 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,0.4,81,5000,false,,,4049,10000,"stat=1.474, alpha=0.10, delta=0.4 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,0.4,4,5000,false,,,4062,10000,"stat=3.305, alpha=0.10, delta=0.4 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,100,6,5000,false,,,617,10000,"stat=-59.523, alpha=0.10, delta=100.0 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,0.4,50,5000,false,,,4485,10000,"stat=2.163, alpha=0.10, delta=0.4 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,0.4,25,5000,false,,,4484,10000,"stat=2.612, alpha=0.10, delta=0.4 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,100,0,5000,false,,,618,10000,"stat=-70.144, alpha=0.10, delta=100.0 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,100,75,5000,false,,,592,10000,"stat=-105.356, alpha=0.10, delta=100.0 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,100,53,5000,false,,,604,10000,"stat=-74.647, alpha=0.10, delta=100.0 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,100,87,5000,false,,,645,10000,"stat=-77.059, alpha=0.10, delta=100.0 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,100,3,5000,false,,,641,10000,"stat=-59.453, alpha=0.10, delta=100.0 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,100,62,5000,false,,,603,10000,"stat=-75.174, alpha=0.10, delta=100.0 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,100,56,5000,false,,,680,10000,"stat=-84.096, alpha=0.10, delta=100.0 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,100,4,5000,false,,,614,10000,"stat=-89.648, alpha=0.10, delta=100.0 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,100,81,5000,false,,,664,10000,"stat=-79.623, alpha=0.10, delta=100.0 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,100,50,5000,false,,,595,10000,"stat=-108.968, alpha=0.10, delta=100.0 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,100,25,5000,false,,,595,10000,"stat=-92.931, alpha=0.10, delta=100.0 (pool)",pass
+silent,thorough,shift,0,ar1-n0.6,5,100,12,5000,false,,,1209,10000,"stat=-49.783, alpha=0.10, delta=100.0 (pool)",pass
