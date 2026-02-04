@@ -184,10 +184,10 @@ target_link_libraries(my_test PRIVATE ${TACET_LIBRARIES})
 **Example usage:**
 ```cpp
 #include <tacet/tacet.hpp>
+using namespace std::chrono_literals;
 
-auto oracle = tacet::Oracle()
-    .attacker_model(tacet::AttackerModel::AdjacentNetwork)
-    .build();
+auto oracle = tacet::Oracle::forAttacker(ToAttackerModel::AdjacentNetwork)
+    .timeBudget(30s);
 ```
 
 See [C++ API](/api/cpp) for full documentation.
