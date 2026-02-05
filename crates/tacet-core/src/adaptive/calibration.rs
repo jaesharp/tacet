@@ -654,7 +654,6 @@ fn compute_calibration_snapshot(baseline_ns: &[f64], sample_ns: &[f64]) -> Calib
 
 // DELETED: precompute_t_prior_effects() - 9D helper (replaced by 1D calibration)
 
-// DELETED: compute_c_floor_9d() - 9D version (replaced by compute_c_floor_1d)
 
 /// Calibrate half-t prior scale to achieve target exceedance probability (W₁ distance).
 ///
@@ -852,60 +851,6 @@ pub fn calibrate_floor_from_null(
     let percentile_idx = ((n_bootstrap as f64 * 0.95) as usize).min(n_bootstrap - 1);
     null_replicates.select_nth_unstable_by(percentile_idx, |a, b| a.total_cmp(b));
     null_replicates[percentile_idx]
-}
-
-/// Compute measurement floor constant from null noise distribution (W₁ distance).
-///
-/// **DEPRECATED**: Use `calibrate_floor_from_null()` instead for correct null-based calibration.
-///
-/// Returns the 95th percentile of |Z| where Z ~ N(0, var_rate).
-/// This is a heuristic approximation that doesn't account for actual null distribution.
-///
-/// Used for theta_floor computation: theta_floor(n) = c_floor / sqrt(n)
-///
-/// # Arguments
-/// * `var_rate` - Variance rate (scalar) from bootstrap
-/// * `seed` - Deterministic RNG seed
-///
-/// # Returns
-/// The 95th percentile constant c_floor.
-///
-/// # Example
-/// ```
-/// #[allow(deprecated)]
-/// use tacet_core::adaptive::compute_c_floor_1d;
-///
-/// let var_rate = 100.0;
-/// let seed = 42;
-///
-/// #[allow(deprecated)]
-/// let c_floor = compute_c_floor_1d(var_rate, seed);
-/// assert!(c_floor > 0.0);
-/// // For N(0, 100), q95(|Z|) ≈ 1.645 * sqrt(100) ≈ 16.45
-/// assert!((c_floor - 16.45).abs() < 3.0);
-/// ```
-#[deprecated(
-    since = "0.8.0",
-    note = "Use calibrate_floor_from_null() for correct null-based calibration"
-)]
-pub fn compute_c_floor_1d(var_rate: f64, seed: u64) -> f64 {
-    const N_SAMPLES: usize = 50_000;
-    const PERCENTILE: usize = (N_SAMPLES as f64 * 0.95) as usize;
-
-    let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
-    let std_dev = var_rate.sqrt();
-
-    // Sample |Z| values
-    let mut samples: Vec<f64> = (0..N_SAMPLES)
-        .map(|_| {
-            let z = sample_standard_normal(&mut rng);
-            (z * std_dev).abs()
-        })
-        .collect();
-
-    // Get 95th percentile via selection
-    samples.select_nth_unstable_by(PERCENTILE, |a, b| a.total_cmp(b));
-    samples[PERCENTILE]
 }
 
 #[cfg(test)]
@@ -1138,124 +1083,6 @@ mod tests {
             "Ratio {} should be near {}",
             actual_ratio,
             expected_ratio
-        );
-    }
-
-    #[test]
-    fn test_compute_c_floor_1d_basic() {
-        // Test basic computation produces reasonable value
-        let var_rate = 100.0;
-        let seed = 42;
-
-        let c_floor = compute_c_floor_1d(var_rate, seed);
-
-        // For N(0, 100), q95(|Z|) ≈ 1.645 * sqrt(100) = 16.45
-        // Allow some Monte Carlo variance
-        assert!(c_floor > 0.0, "c_floor should be positive");
-        assert!(
-            c_floor > 13.0 && c_floor < 20.0,
-            "c_floor {} should be in range [13, 20] for var=100",
-            c_floor
-        );
-    }
-
-    #[test]
-    fn test_compute_c_floor_1d_determinism() {
-        // Same seed should give same result
-        let var_rate = 100.0;
-        let seed = 12345;
-
-        let c_floor_1 = compute_c_floor_1d(var_rate, seed);
-        let c_floor_2 = compute_c_floor_1d(var_rate, seed);
-
-        assert!(
-            (c_floor_1 - c_floor_2).abs() < 1e-10,
-            "Same seed should give same c_floor: {} vs {}",
-            c_floor_1,
-            c_floor_2
-        );
-    }
-
-    #[test]
-    fn test_compute_c_floor_1d_scaling() {
-        // c_floor should scale with sqrt(var_rate)
-        let var_base = 100.0;
-        let seed = 42;
-
-        let c_floor_base = compute_c_floor_1d(var_base, seed);
-        let c_floor_4x = compute_c_floor_1d(var_base * 4.0, seed);
-
-        // Should scale roughly by factor of 2 (sqrt(4))
-        let ratio = c_floor_4x / c_floor_base;
-        assert!(
-            (ratio - 2.0).abs() < 0.3,
-            "Ratio {} should be near 2.0",
-            ratio
-        );
-    }
-
-    #[test]
-    fn test_compute_c_floor_1d_percentile_property() {
-        // Verify that c_floor is indeed near the 95th percentile
-        let var_rate = 100.0;
-        let seed = 42;
-
-        let c_floor = compute_c_floor_1d(var_rate, seed);
-
-        // Generate fresh samples and check empirical percentile
-        const N_VERIFY: usize = 50_000;
-        let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed + 1);
-        let std_dev = var_rate.sqrt();
-
-        let mut samples: Vec<f64> = (0..N_VERIFY)
-            .map(|_| {
-                let z = sample_standard_normal(&mut rng);
-                (z * std_dev).abs()
-            })
-            .collect();
-
-        samples.sort_by(|a, b| a.total_cmp(b));
-        let percentile_95_idx = (N_VERIFY as f64 * 0.95) as usize;
-        let empirical_q95 = samples[percentile_95_idx];
-
-        // c_floor should be close to empirical 95th percentile
-        assert!(
-            (c_floor - empirical_q95).abs() < 2.0,
-            "c_floor {} should be near empirical q95 {}",
-            c_floor,
-            empirical_q95
-        );
-    }
-
-    #[test]
-    fn test_compute_c_floor_1d_small_variance() {
-        // Test with small variance
-        let var_rate = 1.0;
-        let seed = 42;
-
-        let c_floor = compute_c_floor_1d(var_rate, seed);
-
-        // For N(0, 1), q95(|Z|) ≈ 1.645
-        assert!(
-            c_floor > 1.3 && c_floor < 2.0,
-            "c_floor {} should be near 1.645 for unit variance",
-            c_floor
-        );
-    }
-
-    #[test]
-    fn test_compute_c_floor_1d_large_variance() {
-        // Test with large variance
-        let var_rate = 10000.0;
-        let seed = 42;
-
-        let c_floor = compute_c_floor_1d(var_rate, seed);
-
-        // For N(0, 10000), q95(|Z|) ≈ 1.645 * 100 = 164.5
-        assert!(
-            c_floor > 130.0 && c_floor < 200.0,
-            "c_floor {} should be near 164.5 for var=10000",
-            c_floor
         );
     }
 

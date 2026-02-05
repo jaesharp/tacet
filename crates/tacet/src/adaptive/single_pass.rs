@@ -19,13 +19,13 @@
 //! - Measurement floor with timer tick floor (spec §3.3.4)
 //! - Student's t prior calibration (spec §3.3.5)
 //! - Gibbs sampling inference (spec §3.4.4)
-//! - Variance ratio quality check (spec §3.5.2)
+//! - KL divergence quality check (spec §3.5.2)
 //! - Proper MDE estimation for quality assessment
 
 use std::time::{Duration, Instant};
 
 use tacet_core::adaptive::{
-    calibrate_halft_prior_scale_1d, compute_achievable_at_max, compute_c_floor_1d,
+    calibrate_floor_from_null, calibrate_halft_prior_scale_1d, compute_achievable_at_max,
     is_threshold_elevated,
 };
 use tacet_core::analysis::{compute_effect_estimate, estimate_mde};
@@ -64,9 +64,9 @@ pub struct SinglePassConfig {
     /// Random seed for reproducibility.
     pub seed: u64,
 
-    /// Maximum variance ratio for quality gate (default 0.95).
-    /// If posterior variance > this fraction of prior variance, data is not informative.
-    pub max_variance_ratio: f64,
+    /// Minimum KL divergence (nats) for quality gate (default 0.7, per spec §3.5.2).
+    /// If KL(posterior || prior) < this threshold, data is not informative.
+    pub kl_min: f64,
 }
 
 impl Default for SinglePassConfig {
@@ -78,7 +78,7 @@ impl Default for SinglePassConfig {
             bootstrap_iterations: DEFAULT_BOOTSTRAP_ITERATIONS,
             timer_resolution_ns: 1.0, // Assume 1ns resolution for pre-collected data
             seed: 0xDEADBEEF,
-            max_variance_ratio: 0.95,
+            kl_min: 0.7,
         }
     }
 }
@@ -241,12 +241,14 @@ pub fn analyze_single_pass(
     // Step 4: Compute variance rate and measurement floor (spec §3.3.4)
     // var_rate = variance * n (variance scales as 1/n)
     let var_rate = variance * (n as f64);
+    let block_length = var_estimate.block_size;
 
-    // Compute c_floor: 95th percentile of |Z| where Z ~ N(0, var_rate)
-    let c_floor = compute_c_floor_1d(var_rate, config.seed);
+    // Compute c_floor from null distribution
+    let c_floor = calibrate_floor_from_null(&interleaved, block_length, config.bootstrap_iterations, config.seed);
 
-    // Statistical floor: c_floor / √n
-    let theta_floor_stat = c_floor / (n as f64).sqrt();
+    // Statistical floor: c_floor / √n_blocks
+    let n_blocks = if block_length > 0 { (n / block_length).max(1) } else { n.max(1) };
+    let theta_floor_stat = c_floor / (n_blocks as f64).sqrt();
 
     // Timer tick floor (spec §3.3.4)
     let theta_tick = config.timer_resolution_ns;
@@ -316,15 +318,21 @@ pub fn analyze_single_pass(
     // Step 8: Compute effect estimate from Bayesian result
     let effect_estimate = compute_effect_estimate(&bayes_result.w1_draws);
 
-    // Step 9: Check variance ratio quality gate (spec §3.5.2)
-    // Compute variance ratio: posterior_var / prior_var
-    let variance_ratio = bayes_result.var_post / prior_var;
-    let data_too_noisy = variance_ratio > config.max_variance_ratio;
+    // Step 9: Check KL divergence quality gate (spec §3.5.2)
+    // KL(posterior || prior) for Gaussian surrogates
+    let v_ratio = bayes_result.var_post / prior_var;
+    let mu_sq_term = (bayes_result.w1_post * bayes_result.w1_post) / prior_var;
+    let kl_divergence = if v_ratio <= 0.0 || !v_ratio.is_finite() {
+        f64::INFINITY
+    } else {
+        0.5 * (v_ratio + mu_sq_term - 1.0 + (1.0 / v_ratio).ln())
+    };
+    let data_too_noisy = kl_divergence < config.kl_min;
 
     if std::env::var("TIMING_ORACLE_DEBUG").is_ok() {
         eprintln!(
-            "[DEBUG] variance_ratio = {:.3}, max = {:.3}, data_too_noisy = {}",
-            variance_ratio, config.max_variance_ratio, data_too_noisy
+            "[DEBUG] kl_divergence = {:.3} nats, kl_min = {:.3}, data_too_noisy = {}",
+            kl_divergence, config.kl_min, data_too_noisy
         );
     }
 
@@ -343,8 +351,6 @@ pub fn analyze_single_pass(
     }
 
     // Build diagnostics
-    // Use block_size from variance estimation (spec §3.3.2 compliant)
-    let block_length = var_estimate.block_size;
     let diagnostics = Diagnostics {
         dependence_length: block_length,
         effective_sample_size: n / block_length.max(1),
@@ -391,8 +397,8 @@ pub fn analyze_single_pass(
         Outcome::Inconclusive {
             reason: InconclusiveReason::DataTooNoisy {
                 message: format!(
-                    "Posterior variance is {:.0}% of prior; data not informative",
-                    variance_ratio * 100.0
+                    "KL divergence {:.2} nats < {:.1} nats threshold; data not informative",
+                    kl_divergence, config.kl_min
                 ),
                 guidance: "Try: more samples, higher-resolution timer, reduce system load"
                     .to_string(),

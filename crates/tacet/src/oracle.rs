@@ -1668,7 +1668,7 @@ impl TimingOracle {
             bootstrap_iterations: 2000,
             timer_resolution_ns: 1.0, // Unknown for raw samples
             seed: self.config.measurement_seed.unwrap_or(DEFAULT_SEED),
-            max_variance_ratio: 0.95,
+            kl_min: 0.7,
         };
 
         let result = analyze_single_pass(baseline_ns, test_ns, &config);

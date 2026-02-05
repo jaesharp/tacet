@@ -145,12 +145,56 @@ pub fn to_markdown(results: &SweepResults) -> String {
     md
 }
 
+/// Collect unique (tool, threshold) pairs from summaries, preserving tool order.
+fn unique_tool_thresholds(summaries: &[&PointSummary]) -> Vec<(String, Option<f64>)> {
+    let mut seen = Vec::new();
+    for s in summaries {
+        let key = (s.tool.clone(), s.attacker_threshold_ns);
+        if !seen.iter().any(|(t, th): &(String, Option<f64>)| {
+            t == &s.tool && threshold_eq(*th, s.attacker_threshold_ns)
+        }) {
+            seen.push(key);
+        }
+    }
+    seen
+}
+
+/// Compare optional thresholds for equality (handles f64).
+fn threshold_eq(a: Option<f64>, b: Option<f64>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(x), Some(y)) => (x - y).abs() < 0.001,
+        _ => false,
+    }
+}
+
+/// Format a tool label, adding threshold suffix only when the tool has multiple thresholds.
+fn format_tool_label(
+    tool: &str,
+    threshold: Option<f64>,
+    all_pairs: &[(String, Option<f64>)],
+) -> String {
+    let has_multiple = all_pairs
+        .iter()
+        .filter(|(t, _)| t == tool)
+        .count()
+        > 1;
+    if has_multiple {
+        match threshold {
+            Some(t) if t < 1.0 => format!("{} (θ={:.1}ns)", tool, t),
+            Some(t) => format!("{} (θ={:.0}ns)", tool, t),
+            None => tool.to_string(),
+        }
+    } else {
+        tool.to_string()
+    }
+}
+
 /// Generate FPR table (effect_sigma_mult = 0).
 fn fpr_table(results: &SweepResults) -> String {
     let summaries = results.summarize();
 
-    // Get unique tools and noise models (with realistic suffix if applicable)
-    let tools = results.tools();
+    // Get noise models (with realistic suffix if applicable)
     let noise_models: Vec<String> = results
         .config
         .noise_models
@@ -164,11 +208,14 @@ fn fpr_table(results: &SweepResults) -> String {
         })
         .collect();
 
-    // Filter to null effect (effect_sigma_mult == 0 means no effect regardless of pattern)
+    // Filter to null effect with shift pattern (canonical FPR measurement)
     let fpr_summaries: Vec<&PointSummary> = summaries
         .iter()
-        .filter(|s| s.effect_sigma_mult == 0.0)
+        .filter(|s| s.effect_sigma_mult == 0.0 && s.effect_pattern == "shift")
         .collect();
+
+    // Collect unique (tool, threshold) pairs preserving tool order
+    let tool_thresholds = unique_tool_thresholds(&fpr_summaries);
 
     let mut table = String::new();
 
@@ -183,14 +230,16 @@ fn fpr_table(results: &SweepResults) -> String {
     }
     table.push('\n');
 
-    // Rows
-    for tool in &tools {
-        table.push_str(&format!("| {} |", tool));
+    // Rows — one per (tool, threshold) pair
+    for (tool, threshold) in &tool_thresholds {
+        let label = format_tool_label(tool, *threshold, &tool_thresholds);
+        table.push_str(&format!("| {} |", label));
         for noise in &noise_models {
-            if let Some(s) = fpr_summaries
-                .iter()
-                .find(|s| s.tool == *tool && s.noise_model == *noise)
-            {
+            if let Some(s) = fpr_summaries.iter().find(|s| {
+                s.tool == *tool
+                    && threshold_eq(s.attacker_threshold_ns, *threshold)
+                    && s.noise_model == *noise
+            }) {
                 table.push_str(&format!(
                     " {:.1}% ± {:.1}% |",
                     s.detection_rate * 100.0,
@@ -210,8 +259,7 @@ fn fpr_table(results: &SweepResults) -> String {
 fn power_table(results: &SweepResults) -> String {
     let summaries = results.summarize();
 
-    // Get unique tools and effect multipliers (excluding 0)
-    let tools = results.tools();
+    // Get unique effect multipliers (excluding 0)
     let effect_mults: Vec<f64> = results
         .config
         .effect_multipliers
@@ -233,6 +281,9 @@ fn power_table(results: &SweepResults) -> String {
         .filter(|s| s.effect_pattern == "shift" && s.noise_model == iid_noise)
         .collect();
 
+    // Collect unique (tool, threshold) pairs preserving tool order
+    let tool_thresholds = unique_tool_thresholds(&power_summaries);
+
     let mut table = String::new();
 
     // Header
@@ -246,14 +297,16 @@ fn power_table(results: &SweepResults) -> String {
     }
     table.push('\n');
 
-    // Rows
-    for tool in &tools {
-        table.push_str(&format!("| {} |", tool));
+    // Rows — one per (tool, threshold) pair
+    for (tool, threshold) in &tool_thresholds {
+        let label = format_tool_label(tool, *threshold, &tool_thresholds);
+        table.push_str(&format!("| {} |", label));
         for mult in &effect_mults {
-            if let Some(s) = power_summaries
-                .iter()
-                .find(|s| s.tool == *tool && (s.effect_sigma_mult - mult).abs() < 0.001)
-            {
+            if let Some(s) = power_summaries.iter().find(|s| {
+                s.tool == *tool
+                    && threshold_eq(s.attacker_threshold_ns, *threshold)
+                    && (s.effect_sigma_mult - mult).abs() < 0.001
+            }) {
                 table.push_str(&format!(" {:.0}% |", s.detection_rate * 100.0));
             } else {
                 table.push_str(" - |");

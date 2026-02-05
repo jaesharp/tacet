@@ -1,0 +1,7 @@
+ecosystem,library,test_name,iteration,outcome,leak_probability,samples,elapsed_sec,timestamp
+Rust,RustCrypto,AES-128 Encrypt,1,PASS,0.0,0,3,2026-02-05T11:24:17-03:00
+Rust,RustCrypto,SHA3-256 Hash,1,PASS,0.0,0,6,2026-02-05T11:24:23-03:00
+Rust,RustCrypto,BLAKE2b Hash,1,PASS,0.0,0,3,2026-02-05T11:24:26-03:00
+Rust,RustCrypto,ChaCha20-Poly1305,1,PASS,0.0,0,9,2026-02-05T11:24:35-03:00
+Rust,RustCrypto,RSA-2048 Sign,1,PASS,0.0,0,2,2026-02-05T11:24:37-03:00
+Rust,ring,AES-256-GCM Encrypt,1,PASS,0.0,0,2,2026-02-05T11:24:39-03:00

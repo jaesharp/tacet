@@ -12,6 +12,7 @@ set -euo pipefail
 ITERATIONS="${1:-10}"  # Default: 10 iterations
 OUTPUT_FILE="${2:-fpr_results_$(date +%Y%m%d_%H%M%S).csv}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TEST_BINARY="$REPO_ROOT/target/debug/deps/crypto-1de28dece211c887"
 
 # Color output
 RED='\033[0;31m'
@@ -83,8 +84,8 @@ run_rust_test() {
         local output
         local exit_code=0
 
-        # Run test and capture output
-        output=$(cd "$REPO_ROOT" && sudo -E cargo test --test crypto "$test_pattern" --no-fail-fast -- --nocapture --test-threads=1 2>&1) || exit_code=$?
+        # Run test and capture output (using pre-built binary)
+        output=$(cd "$REPO_ROOT" && sudo -E "$TEST_BINARY" "$test_pattern" --nocapture --test-threads=1 2>&1) || exit_code=$?
 
         local elapsed=$(($(date +%s) - start_time))
         local timestamp=$(date -Iseconds)
@@ -252,6 +253,13 @@ main() {
     log "Output: $OUTPUT_FILE"
     log ""
 
+    # Background process to refresh sudo credentials every 50 seconds
+    # (assumes sudo was authenticated before script start)
+    (while true; do sleep 50; sudo -n true 2>/dev/null || exit; done) &
+    SUDO_KEEPER_PID=$!
+    # Ensure sudo keeper is killed when script exits
+    trap "kill $SUDO_KEEPER_PID 2>/dev/null" EXIT
+
     init_csv
 
     # =========================================================================
@@ -263,22 +271,22 @@ main() {
     log "========================================"
 
     # RustCrypto tests
-    run_rust_test "rustcrypto::aes_128_encrypt_constant_time" "AES-128 Encrypt" "RustCrypto"
-    run_rust_test "rustcrypto::sha3_256_hash_constant_time" "SHA3-256 Hash" "RustCrypto"
-    run_rust_test "rustcrypto::blake2b_512_hash_constant_time" "BLAKE2b Hash" "RustCrypto"
-    run_rust_test "rustcrypto::chacha20poly1305_encrypt_constant_time" "ChaCha20-Poly1305" "RustCrypto"
-    run_rust_test "rustcrypto::rsa_2048_sign_constant_time" "RSA-2048 Sign" "RustCrypto"
+    run_rust_test "rustcrypto::aes::aes128_block_encrypt_constant_time" "AES-128 Encrypt" "RustCrypto"
+    run_rust_test "rustcrypto::sha3::rustcrypto_sha3_256_ct" "SHA3-256 Hash" "RustCrypto"
+    run_rust_test "rustcrypto::blake2::rustcrypto_blake2b512_ct" "BLAKE2b Hash" "RustCrypto"
+    run_rust_test "rustcrypto::chacha20poly1305::rustcrypto_chacha20poly1305_encrypt_ct" "ChaCha20-Poly1305" "RustCrypto"
+    run_rust_test "rustcrypto::rsa::rsa_2048_sign_constant_time" "RSA-2048 Sign" "RustCrypto"
 
     # ring tests
-    run_rust_test "ring::aes_256_gcm_encrypt_constant_time" "AES-256-GCM Encrypt" "ring"
-    run_rust_test "ring::aes_256_gcm_decrypt_constant_time" "AES-256-GCM Decrypt" "ring"
+    run_rust_test "ring::aes_gcm::ring_aes256gcm_encrypt_ct" "AES-256-GCM Encrypt" "ring"
+    run_rust_test "ring::aes_gcm::ring_aes256gcm_decrypt_ct" "AES-256-GCM Decrypt" "ring"
 
     # dalek tests
-    run_rust_test "dalek::x25519_scalar_mult_constant_time" "X25519 ScalarMult" "dalek"
+    run_rust_test "dalek::x25519::x25519_scalar_mult_constant_time" "X25519 ScalarMult" "dalek"
 
     # pqcrypto tests (sample)
-    run_rust_test "pqcrypto::kyber768_encapsulate_constant_time" "Kyber-768 Encap" "pqcrypto"
-    run_rust_test "pqcrypto::dilithium3_sign_constant_time" "Dilithium3 Sign" "pqcrypto"
+    run_rust_test "pqcrypto::kyber::pqcrypto_kyber768_encapsulate_ct" "Kyber-768 Encap" "pqcrypto"
+    run_rust_test "pqcrypto::dilithium::pqcrypto_dilithium3_sign_ct" "Dilithium3 Sign" "pqcrypto"
 
     # orion tests (NEW)
     run_rust_test "rust_libraries::orion::orion_auth_constant_time" "BLAKE2b-MAC" "orion"

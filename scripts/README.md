@@ -41,7 +41,6 @@ Runs all crypto library tests N times to measure empirical false positive rate.
 5. Generates summary report with Wilson confidence intervals
 
 **Requirements:**
-- `sudo` access (for PMU timers in Rust tests)
 - `cargo` (for Rust tests)
 - `bun` (for JavaScript tests)
 - `python3` (optional, for confidence intervals in summary)
@@ -228,10 +227,6 @@ run_js_test "node-forge" "RSA PKCS1v15 Encrypt" "node-forge"
 ### Parsing errors
 - Check if test output format has changed
 - Update `parse_rust_outcome()` regex patterns if needed
-
-### Sudo permission denied
-- Ensure you have sudo access for PMU timers
-- Alternative: Run without sudo but note reduced precision
 
 ### CSV format issues
 - Ensure no commas in test names or library names

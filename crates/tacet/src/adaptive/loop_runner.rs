@@ -259,7 +259,7 @@ pub fn run_adaptive(
                 reason: InconclusiveReason::DataTooNoisy {
                     message: "Could not compute posterior from samples".to_string(),
                     guidance: "Check timer resolution and sample count".to_string(),
-                    variance_ratio: 1.0,
+                    kl_divergence: 0.0,
                 },
                 posterior: None,
                 samples_per_class: state.n_total(),

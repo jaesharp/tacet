@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025/nixos.org) (preloaded format=pdflatex 1980.1.1)  5 FEB 2026 04:26
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025/nixos.org) (preloaded format=pdflatex 1980.1.1)  5 FEB 2026 09:59
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -1207,18 +1207,18 @@ Underfull \hbox (badness 1215) in paragraph at lines 707--712
 
 
 
-<analysis/outputs/figures/heatmap_fpr.png, id=265, 716.9184pt x 356.2911pt>
+<analysis/outputs/figures/heatmap_fpr.png, id=265, 716.4366pt x 356.2911pt>
 File: analysis/outputs/figures/heatmap_fpr.png Graphic file (type png)
 <use analysis/outputs/figures/heatmap_fpr.png>
 Package pdftex.def Info: analysis/outputs/figures/heatmap_fpr.png  used on inpu
 t line 752.
-(pdftex.def)             Requested size: 430.00958pt x 213.70563pt.
-<analysis/outputs/figures/heatmap_power.png, id=268, 716.9184pt x 356.2911pt>
+(pdftex.def)             Requested size: 430.00958pt x 213.85242pt.
+<analysis/outputs/figures/heatmap_power.png, id=268, 716.4366pt x 356.2911pt>
 File: analysis/outputs/figures/heatmap_power.png Graphic file (type png)
 <use analysis/outputs/figures/heatmap_power.png>
 Package pdftex.def Info: analysis/outputs/figures/heatmap_power.png  used on in
 put line 777.
-(pdftex.def)             Requested size: 430.00958pt x 213.70563pt.
+(pdftex.def)             Requested size: 430.00958pt x 213.85242pt.
 
 
 [6]
@@ -1292,7 +1292,7 @@ Package rerunfilecheck Info: File `paper.out' has not changed.
 Here is how much of TeX's memory you used:
  32923 strings out of 467888
  665964 string characters out of 5412697
- 1038692 words of memory out of 5000000
+ 1038693 words of memory out of 5000000
  60243 multiletter control sequences out of 15000+600000
  743602 words of font info for 549 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
@@ -1317,7 +1317,7 @@ fb></nix/store/phgzpfd1ghxamcz18bi1rivm0xqz7n73-texlive-combined-2025-texmfdist
 /fonts/type1/public/wasy-type1/wasy10.pfb></nix/store/phgzpfd1ghxamcz18bi1rivm0
 xqz7n73-texlive-combined-2025-texmfdist/fonts/type1/public/wasy-type1/wasy9.pfb
 >
-Output written on paper.pdf (13 pages, 552061 bytes).
+Output written on paper.pdf (13 pages, 572833 bytes).
 PDF statistics:
  483 PDF objects out of 1000 (max. 8388607)
  431 compressed objects within 5 object streams

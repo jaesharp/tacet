@@ -577,7 +577,7 @@ pub fn adaptive_step(
                     reason: InconclusiveReason::DataTooNoisy {
                         message: String::from("Insufficient samples for posterior computation"),
                         guidance: String::from("Need at least 20 samples per class"),
-                        variance_ratio: 1.0,
+                        kl_divergence: 0.0,
                     },
                     posterior: None,
                     samples_per_class: state.n_total(),
@@ -589,7 +589,7 @@ pub fn adaptive_step(
                 reason: InconclusiveReason::DataTooNoisy {
                     message: String::from("Could not compute posterior from samples"),
                     guidance: String::from("Check timer resolution and sample count"),
-                    variance_ratio: 1.0,
+                    kl_divergence: 0.0,
                 },
                 posterior: None,
                 samples_per_class: state.n_total(),

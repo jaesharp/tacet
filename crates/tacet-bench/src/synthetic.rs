@@ -578,7 +578,7 @@ pub fn generate_benchmark_dataset(config: &BenchmarkConfig) -> GeneratedDataset 
                 .into_iter()
                 .zip(slow_samples)
                 .map(|(base, slow)| {
-                    if rng.gen::<f64>() < slow_prob * config.effect_sigma_mult.max(1.0) {
+                    if rng.gen::<f64>() < slow_prob * config.effect_sigma_mult {
                         slow
                     } else {
                         base

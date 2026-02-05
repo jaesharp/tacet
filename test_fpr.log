@@ -1,0 +1,32 @@
+[0;34m[11:24:01][0m ==========================================
+[0;34m[11:24:01][0m Crypto Library FPR Measurement
+[0;34m[11:24:01][0m ==========================================
+[0;34m[11:24:01][0m Iterations: 1
+[0;34m[11:24:01][0m Output: results/test_fpr.csv
+[0;34m[11:24:01][0m 
+[0;34m[11:24:01][0m Requesting sudo access for PMU timers...
+[0;34m[11:24:14][0m Initialized output file: results/test_fpr.csv
+[0;34m[11:24:14][0m 
+[0;34m[11:24:14][0m ========================================
+[0;34m[11:24:14][0m RUST ECOSYSTEM
+[0;34m[11:24:14][0m ========================================
+[0;34m[11:24:14][0m Running Rust test: RustCrypto / AES-128 Encrypt
+[0;34m[11:24:14][0m   Iteration 1/1...
+[0;32m[11:24:17][0m     → PASS
+[0;34m[11:24:17][0m Running Rust test: RustCrypto / SHA3-256 Hash
+[0;34m[11:24:17][0m   Iteration 1/1...
+[0;32m[11:24:23][0m     → PASS
+[0;34m[11:24:23][0m Running Rust test: RustCrypto / BLAKE2b Hash
+[0;34m[11:24:23][0m   Iteration 1/1...
+[0;32m[11:24:26][0m     → PASS
+[0;34m[11:24:26][0m Running Rust test: RustCrypto / ChaCha20-Poly1305
+[0;34m[11:24:26][0m   Iteration 1/1...
+[0;32m[11:24:35][0m     → PASS
+[0;34m[11:24:35][0m Running Rust test: RustCrypto / RSA-2048 Sign
+[0;34m[11:24:35][0m   Iteration 1/1...
+[0;32m[11:24:37][0m     → PASS
+[0;34m[11:24:37][0m Running Rust test: ring / AES-256-GCM Encrypt
+[0;34m[11:24:37][0m   Iteration 1/1...
+[0;32m[11:24:39][0m     → PASS
+[0;34m[11:24:39][0m Running Rust test: ring / AES-256-GCM Decrypt
+[0;34m[11:24:39][0m   Iteration 1/1...
