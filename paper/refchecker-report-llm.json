@@ -1,0 +1,124 @@
+REFERENCE VERIFICATION ERRORS
+
+PAPER: Paper
+ArXiv ID: local_paper
+URL: file:///Users/agucova/repos/tacet/paper/paper.pdf
+Authors: Unknown
+Year: 2026
+--------------------------------------------------------------------------------
+REFERENCE: Cache-timing attacks on AES
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+Daniel J. Bernstein#Cache-timing attacks on AES##2005#
+
+================================================================================
+REFERENCE: Software Grand Exposure: SGX Cache Attacks Are Practical
+Type: ❌ author
+Details: Author count mismatch: 6 cited vs 1 correct:
+       cited:  Ferdinand Brasser, Urs Müller, Alexandra Dmitrienko, Kari Kostiainen, Srdjan Capkun, Ahmad-Reza Sadeghi
+       actual: Ferdinand Brasser
+
+RAW REFERENCE TEXT:
+Ferdinand Brasser*Urs Müller*Alexandra Dmitrienko*Kari Kostiainen*Srdjan Capkun*Ahmad-Reza Sadeghi#Software Grand Exposure: SGX Cache Attacks Are Practical#11th USENIX Workshop on Offensive Technologies (WOOT 17)#2017#
+
+VERIFIED URL:
+  https://works.bepress.com/system-security/4/download/
+
+CORRECTED REFERENCE (Plain Text):
+Ferdinand Brasser. "Grand Software Exposure: SGX Cache Attacks Are Practical". https://works.bepress.com/system-security/4/download/.
+
+CORRECTED REFERENCE (BibTeX):
+@article{unknown,
+  author = {Ferdinand Brasser},
+  title = {Grand Software Exposure: SGX Cache Attacks Are Practical},
+  url = {https://works.bepress.com/system-security/4/download/}
+}
+
+CORRECTED REFERENCE (LaTeX/Biblatex):
+\bibitem{unknown}
+Ferdinand Brasser. \textit{Grand Software Exposure: SGX Cache Attacks Are Practical}. \url{https://works.bepress.com/system-security/4/download/}.
+
+================================================================================
+REFERENCE: SILENT: Scalable and Independent LEakage detection with iNfinite Type-1 error control
+Type: ❌ multiple
+Details: - Reference could not be verified
+- Incorrect ArXiv ID: ArXiv ID 2504.19821 points to 'SILENT: A New Lens on Statistics in Software Timing Side Channels'
+
+RAW REFERENCE TEXT:
+Martin Dunsche*Patrick Bastian*Marcel Maehren*Nurullah Erinola*Robert Merget*Nicolai Bissantz*Holger Dette*Jörg Schwenk#SILENT: Scalable and Independent LEakage detection with iNfinite Type-1 error control#arXiv preprint arXiv:2504.19821#2025#
+
+CORRECTED REFERENCE (Plain Text):
+Martin Dunsche, Patrick Bastian, Marcel Maehren, Nurullah Erinola, Robert Merget, Nicolai Bissantz, Holger Dette, Jörg Schwenk. (2025). "SILENT: A New Lens on Statistics in Software Timing Side Channels". In arXiv. https://arxiv.org/abs/2504.19821.
+
+CORRECTED REFERENCE (BibTeX):
+@article{unknown,
+  author = {Martin Dunsche and Patrick Bastian and Marcel Maehren and Nurullah Erinola and Robert Merget and Nicolai Bissantz and Holger Dette and Jörg Schwenk},
+  title = {SILENT: A New Lens on Statistics in Software Timing Side Channels},
+  journal = {arXiv},
+  year = {2025},
+  url = {https://arxiv.org/abs/2504.19821}
+}
+
+CORRECTED REFERENCE (LaTeX/Biblatex):
+\bibitem{unknown}
+Martin Dunsche, Patrick Bastian, Marcel Maehren, Nurullah Erinola, Robert Merget, Nicolai Bissantz, Holger Dette, Jörg Schwenk. (2025). \textit{SILENT: A New Lens on Statistics in Software Timing Side Channels}. In \textit{arXiv}. \url{https://arxiv.org/abs/2504.19821}.
+
+================================================================================
+REFERENCE: RTLF: Statistical Timing Leakage Detection with Empirical Bootstrap
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+Martin Dunsche*Marcel Maehren*Nurullah Erinola*Robert Merget*Nicolai Bissantz*Juraj Somorovsky*Jörg Schwenk#RTLF: Statistical Timing Leakage Detection with Empirical Bootstrap#33rd USENIX Security Symposium (USENIX Security 24)#2024#
+
+================================================================================
+REFERENCE: Everlasting ROBOT: The Marvin Attack
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+Hubert Kario#Everlasting ROBOT: The Marvin Attack#Computer Security – ESORICS 2023#2023#
+
+================================================================================
+REFERENCE: tlsfuzzer: SSL and TLS protocol test suite and fuzzer
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+Hubert Kario#tlsfuzzer: SSL and TLS protocol test suite and fuzzer##2024#
+
+================================================================================
+REFERENCE: Raccoon Attack: Finding and Exploiting Most-Significant-Bit-Oracles in TLS-DH(E)
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+Robert Merget*Marcus Brinkmann*Nimrod Aviram*Juraj Somorovsky*Johannes Mittmann*Jörg Schwenk#Raccoon Attack: Finding and Exploiting Most-Significant-Bit-Oracles in TLS-DH(E)#30th USENIX Security Symposium (USENIX Security 21)#2021#
+
+================================================================================
+REFERENCE: noble-ciphers: Audited & minimal JS implementation of Salsa20, ChaCha and AES
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+Paul Miller#noble-ciphers: Audited & minimal JS implementation of Salsa20, ChaCha and AES##2024#
+
+================================================================================
+REFERENCE: Constant-Time Toolkit: dudect
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+Trail of Bits#Constant-Time Toolkit: dudect##2024#
+
+================================================================================
+REFERENCE: Optimal Transport: Old and New
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+Cédric Villani#Optimal Transport: Old and New#Grundlehren der Mathematischen Wissenschaften#2009#
+
+================================================================================

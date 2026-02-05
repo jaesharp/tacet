@@ -219,7 +219,7 @@ func (s *State) Free() {
 	}
 }
 
-// TotalSamples returns total samples collected (both classes)
+// TotalSamples returns total samples collected per class (baseline class count).
 func (s *State) TotalSamples() uint64 {
 	if s == nil || s.ptr == nil {
 		return 0

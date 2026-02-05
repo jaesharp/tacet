@@ -1,0 +1,553 @@
+REFERENCE VERIFICATION ERRORS
+
+PAPER: Paper
+ArXiv ID: local_paper
+URL: file:///Users/agucova/repos/tacet/paper/paper.tex
+Authors: Unknown
+Year: 2026
+--------------------------------------------------------------------------------
+REFERENCE: Untitled Reference
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+}
+
+%===============================================================================
+% OPTIONAL APPENDIX: STATISTICAL METHODOLOGY (after references per USENIX)
+%===============================================================================
+\newpage
+\appendix
+
+\section{Statistical Methodology Details}
+\label{app:methodology}
+
+================================================================================
+REFERENCE: We cover the probabilistic model, inference procedure, autocorrelation handling, quality gates, and measurement floor derivation. For complete algorithmic specifications, see the specification document in the artifact repository. \subsection{Probabilistic Model} \label{app:model} \paragraph{Test Statistic.}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+This appendix provides additional detail on tacet's statistical methodology for reviewers familiar with Bayesian inference. We cover the probabilistic model, inference procedure, autocorrelation handling, quality gates, and measurement floor derivation. For complete algorithmic specifications, see the specification document in the artifact repository.
+
+\subsection{Probabilistic Model}
+\label{app:model}
+
+\paragraph{Test Statistic.}
+
+================================================================================
+REFERENCE: 
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+Rather than comparing means or individual quantiles, we measure the \textbf{Wasserstein-1 (W$_1$)
+distance}---also known as the \textbf{earth-mover distance}---between timing distributions.
+
+================================================================================
+REFERENCE: For discrete empirical distributions with $n$ samples each, this reduces to: \begin{equation} \widehat{W}_1(F, R) = \frac{1}{n}\sum_{i=1}^{n} \left| r_{(i)} - f_{(i)} \right| \end{equation} where $f_{(i)}$ and $r_{(i)}$ are the sorted (order-statistic) samples from the fixed and random input classes
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+The W$_1$ distance is the minimum total cost to transform one distribution into another, where
+cost is the amount of probability mass times the distance it must be moved. For discrete
+empirical distributions with $n$ samples each, this reduces to:
+\begin{equation}
+\widehat{W}_1(F, R) = \frac{1}{n}\sum_{i=1}^{n} \left| r_{(i)} - f_{(i)} \right|
+\end{equation}
+where $f_{(i)}$ and $r_{(i)}$ are the sorted (order-statistic) samples from the fixed and
+random input classes.
+
+================================================================================
+REFERENCE: We use $\widehat{W}_1$ directly as the observed statistic for inference---no debiasing or clamping is applied before computing the posterior. \paragraph{Interpretation.}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+This is the \textbf{average absolute rank-wise mismatch} between distributions, measured in
+nanoseconds. We use $\widehat{W}_1$ directly as the observed statistic for inference---no
+debiasing or clamping is applied before computing the posterior.
+
+\paragraph{Interpretation.}
+
+================================================================================
+REFERENCE: For tail effects (e.g., cache misses affecting upper percentiles), $W_1$ measures the total transport cost, naturally emphasizing the distance those outliers must move. A timing leak is declared when $W_1 > \theta$ with high posterior probability. \paragraph{Likelihood.}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+For a uniform shift of $c$ nanoseconds, $W_1 \approx |c|$. For tail effects (e.g., cache
+misses affecting upper percentiles), $W_1$ measures the total transport cost, naturally
+emphasizing the distance those outliers must move. A timing leak is declared when
+$W_1 > \theta$ with high posterior probability.
+
+\paragraph{Likelihood.}
+
+================================================================================
+REFERENCE: Using the scale-mixture representation: \begin{align} \widehat{W}_1 \mid W, \kappa &\sim \mathcal{N}\!\left(W, \frac{v_n}{\kappa}\right) \\ \kappa &\sim \text{Gamma}\!\left(\frac{\nu_\ell}{2}, \frac{\nu_\ell}{2}\right) \end{align} with $\nu_\ell = 8$. Marginally, this yields $\widehat{W}_1 \mid W \sim t_{\nu_\ell}(W, v_n)$
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+We model the observed W$_1$ distance with a robust Student-$t$ likelihood to handle potential
+variance underestimation. Using the scale-mixture representation:
+\begin{align}
+\widehat{W}_1 \mid W, \kappa &\sim \mathcal{N}\!\left(W, \frac{v_n}{\kappa}\right) \\
+\kappa &\sim \text{Gamma}\!\left(\frac{\nu_\ell}{2}, \frac{\nu_\ell}{2}\right)
+\end{align}
+with $\nu_\ell = 8$. Marginally, this yields $\widehat{W}_1 \mid W \sim t_{\nu_\ell}(W, v_n)$.
+
+================================================================================
+REFERENCE: g
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+When the estimated variance $v_n$ is too small (e.g., from unmodeled autocorrelation), the
+scale parameter $\kappa$ is pulled below 1, automatically inflating uncertainty. This prevents
+overconfident posteriors when our dependence model is mis-specified.
+
+================================================================================
+REFERENCE: \paragraph{Prior
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+The variance $v_n$ is computed from calibration-phase bootstrap as:
+\begin{equation}
+v_n = \frac{v_{\text{rate}}}{n_{\text{blocks}}(n)}
+\end{equation}
+where $v_{\text{rate}}$ is the variance-rate constant estimated during calibration, and
+$n_{\text{blocks}}(n) = \max(1, \lfloor n/L \rfloor)$ is the number of approximately independent
+blocks given block length $L$.
+
+\paragraph{Prior.}
+
+================================================================================
+REFERENCE: 62$: \begin{equation}
+Type: ❌ author
+Details: No correct authors provided
+
+RAW REFERENCE TEXT:
+W \sim \text{Half-}t_\nu(0, \sigma_t^2), \quad \nu = 4
+\end{equation}
+where the prior scale $\sigma_t$ is calibrated so that the prior probability of exceeding
+the \textbf{user-requested threshold} $\theta_{\text{user}}$ equals a target probability
+$\pi_0 = 0.62$:
+\begin{equation}
+
+VERIFIED URL:
+  https://doi.org/10.15215/aupress/9781897425909.063
+
+CORRECTED REFERENCE (Plain Text):
+"62". https://doi.org/10.15215/aupress/9781897425909.063.
+
+CORRECTED REFERENCE (BibTeX):
+@article{unknown,
+  title = {62},
+  url = {https://doi.org/10.15215/aupress/9781897425909.063}
+}
+
+CORRECTED REFERENCE (LaTeX/Biblatex):
+\bibitem{unknown}
+\textit{62}. \url{https://doi.org/10.15215/aupress/9781897425909.063}.
+
+================================================================================
+REFERENCE: The value $\pi_0 = 0.62$ expresses genuine prior uncertainty without strong bias toward either ``leak'' or ``no leak.'' It is chosen to be slightly above 0.5 to account for the Half-t distribution's support being restricted to positive values
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+This calibration targets the \emph{threat-model threshold} (what the user wants to detect),
+not the measurement floor. The value $\pi_0 = 0.62$ expresses genuine prior uncertainty
+without strong bias toward either ``leak'' or ``no leak.'' It is chosen to be slightly above
+0.5 to account for the Half-t distribution's support being restricted to positive values.
+
+================================================================================
+REFERENCE: \subsection{Inference Procedure} \label{app:inference} \paragraph{Gibbs Sampler
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+W \mid \lambda &\sim \text{Half-}\mathcal{N}\!\left(0, \frac{\sigma_t^2}{\lambda}\right)
+\end{align}
+which enables closed-form Gibbs conditionals.
+
+\subsection{Inference Procedure}
+\label{app:inference}
+
+\paragraph{Gibbs Sampler.}
+
+================================================================================
+REFERENCE: 
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+We approximate the posterior $p(W \mid \widehat{W}_1)$ using a Gibbs sampler over $(W, \lambda, \kappa)$.
+
+================================================================================
+REFERENCE: Unlike the 9-dimensional quantile approach (v6.0), this requires no matrix inversions or Cholesky decompositions---all operations are scalar. \paragraph{Convergence and Cost.}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+All conditionals are conjugate and admit closed-form sampling. Unlike the 9-dimensional quantile
+approach (v6.0), this requires no matrix inversions or Cholesky decompositions---all operations
+are scalar.
+
+\paragraph{Convergence and Cost.}
+
+================================================================================
+REFERENCE: Mixing is fast due to the low-dimensional parameter space and conjugate structure. Initialization at $\lambda^{(0)} = \kappa^{(0)} = 1$ (the prior means) provides a good starting point
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+We run 256 total iterations with 64 burn-in, retaining 192 samples. Mixing is fast due to
+the low-dimensional parameter space and conjugate structure. Initialization at $\lambda^{(0)} =
+\kappa^{(0)} = 1$ (the prior means) provides a good starting point.
+
+================================================================================
+REFERENCE: 
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+We track $\lambda$ mixing via its coefficient of variation (CV) and effective sample size (ESS).
+
+================================================================================
+REFERENCE: 1$ or $\lambda$ ESS $< 20$, we flag a potential convergence issue in diagnostics, though this rarely occurs in practice
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+If $\lambda$ CV $< 0.1$ or $\lambda$ ESS $< 20$, we flag a potential convergence issue in
+diagnostics, though this rarely occurs in practice.
+
+================================================================================
+REFERENCE: This is substantially faster than the 9-dimensional approach (v6.0), which required $O(d^3 + d^2 \cdot N_{\text{gibbs}})$ operations dominated by Cholesky decompositions. \paragraph{Leak Probability.}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+Computational cost per posterior update is $O(N_{\text{gibbs}}) \approx 256$ scalar operations---
+negligible compared to measurement time ($<1$ms on modern hardware). This is substantially faster
+than the 9-dimensional approach (v6.0), which required $O(d^3 + d^2 \cdot N_{\text{gibbs}})$
+operations dominated by Cholesky decompositions.
+
+\paragraph{Leak Probability.}
+
+================================================================================
+REFERENCE: }
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+The leak probability is estimated as the Monte Carlo fraction of posterior samples exceeding
+the effective threshold:
+\begin{equation}
+\widehat{P}(W > \theta_{\text{eff}} \mid \widehat{W}_1) = \frac{1}{N_{\text{keep}}} \sum_{s=1}^{N_{\text{keep}}} \mathbf{1}\!\left[W^{(s)} > \theta_{\text{eff}}\right]
+\end{equation}
+
+\subsection{Block Bootstrap for Autocorrelation}
+\label{app:bootstrap}
+
+\paragraph{Why Standard Bootstrap Fails.}
+
+================================================================================
+REFERENCE: Standard bootstrap assumes i.i.d.\ samples, systematically underestimating variance and producing overconfident posteriors
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+Timing measurements exhibit autocorrelation: nearby samples are more similar than distant ones due to cache state, CPU frequency scaling, and OS scheduling. Standard bootstrap assumes i.i.d.\ samples, systematically underestimating variance and producing overconfident posteriors.
+
+================================================================================
+REFERENCE: 3$, the effective sample size may be 30--50\% lower than the nominal count
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+For example, if consecutive measurements have autocorrelation $\rho = 0.3$, the effective sample size may be 30--50\% lower than the nominal count. Ignoring this inflates the false positive rate---the main failure mode we aim to prevent.
+
+\paragraph{Stream-Based Block Bootstrap.}
+
+================================================================================
+REFERENCE: This preserves the true temporal dependence structure
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+We use block bootstrap on the \emph{acquisition stream}---the interleaved sequence of (class, timing)
+pairs in measurement order---rather than per-class samples. This preserves the true temporal
+dependence structure.
+
+================================================================================
+REFERENCE: 
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+The algorithm resamples contiguous blocks of length $L$ with replacement, reconstructs a bootstrap
+stream of the same length, splits by class, and computes $\widehat{W}_1$ for each replicate.
+
+================================================================================
+REFERENCE: Over $B = 2000$ iterations, we estimate the variance $v_{\text{cal}}$ of $\widehat{W}_1$ under the calibration sample size. \paragraph{Block Length Selection.}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+Block resampling may produce slightly unequal class sizes; when this occurs, we use the general
+1D Wasserstein formula for unequal sample sizes or truncate the larger class by one sample. Over
+$B = 2000$ iterations, we estimate the variance $v_{\text{cal}}$ of $\widehat{W}_1$ under the
+calibration sample size.
+
+\paragraph{Block Length Selection.}
+
+================================================================================
+REFERENCE: Standard Politis-White estimates autocorrelation from raw lag-$k$ pairs, but with interleaved sampling, a lag-$k$ pair may cross class boundaries. Instead, we compute autocorrelation using only same-class pairs at each acquisition-stream lag, then take the conservative maximum across classes
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+We use the Politis-White automatic block length selection algorithm with a class-conditional modification. Standard Politis-White estimates autocorrelation from raw lag-$k$ pairs, but with interleaved sampling, a lag-$k$ pair may cross class boundaries. Instead, we compute autocorrelation using only same-class pairs at each acquisition-stream lag, then take the conservative maximum across classes.
+
+================================================================================
+REFERENCE: We clamp $\hat{b} \in [10, \min(3\sqrt{T}, T/3)]$ to prevent degenerate blocks
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+The optimal block length scales as $\hat{b} \propto T^{1/3}$ where $T$ is the stream length. We clamp $\hat{b} \in [10, \min(3\sqrt{T}, T/3)]$ to prevent degenerate blocks. In high-autocorrelation regimes (detected when $\rho_{\text{max}}(10) > 0.3$), we inflate the block length by 50\% for additional conservatism.
+
+\paragraph{Variance Scaling.}
+
+================================================================================
+REFERENCE: 
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+The key insight enabling adaptive sampling is that W$_1$ estimator variance scales as $1/n_{\text{blocks}}$.
+
+================================================================================
+REFERENCE: This allows cheap posterior updates without re-bootstrapping at each batch
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+During the adaptive loop with $n$ samples:
+\begin{equation}
+v_n = \frac{v_{\text{rate}}}{n_{\text{blocks}}(n)}
+\end{equation}
+where $n_{\text{blocks}}(n) = \max(1, \lfloor n/L \rfloor)$ is the number of approximately independent
+blocks. This allows cheap posterior updates without re-bootstrapping at each batch.
+
+================================================================================
+REFERENCE: The block count provides a conservative lower bound on the number of approximately independent observations given the dependence structure. \subsection{Quality Gates} \label{app:gates}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+The terminology ``$n_{\text{blocks}}$'' replaces the earlier ``$n_{\text{eff}}$'' (effective sample
+size) to avoid confusion with IACT-based estimators. The block count provides a conservative lower
+bound on the number of approximately independent observations given the dependence structure.
+
+\subsection{Quality Gates}
+\label{app:gates}
+
+================================================================================
+REFERENCE: This is the key mechanism ensuring calibrated verdicts. \paragraph{S1: Insufficient Information Gain.}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+Quality gates detect when data quality is insufficient for a confident verdict, forcing an \textsc{Inconclusive} outcome rather than an unreliable Pass or Fail. This is the key mechanism ensuring calibrated verdicts.
+
+\paragraph{S1: Insufficient Information Gain.}
+
+================================================================================
+REFERENCE: 4
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+We compute the KL divergence between Gaussian surrogates of the prior and posterior
+for the 1D W$_1$ distance $\delta$:
+\begin{equation}
+\mathrm{KL} = \frac{1}{2}\left(
+\frac{V_{\text{post}}}{V_0^{\text{marginal}}}
++ \frac{\mu_{\text{post}}^2}{V_0^{\text{marginal}}}
+- 1 + \ln\frac{V_0^{\text{marginal}}}{V_{\text{post}}}
+\right)
+\end{equation}
+where $V_{\text{post}}$ is the posterior variance of $\delta$ (estimated from Gibbs samples)
+and $V_0^{\text{marginal}} = 2\sigma^2$ is the marginal prior variance (§3.4.3).
+
+================================================================================
+REFERENCE: 7 nats was selected empirically from pilot studies on synthetic data with known null effects—values below this consistently indicated insufficient posterior movement to support reliable verdicts
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+The threshold of 0.7 nats was selected empirically from pilot studies on synthetic data with known null effects—values below this consistently indicated insufficient posterior movement to support reliable verdicts. The 0.001 nats threshold for NotLearning similarly reflects the practical lower bound of KL divergence detectability given MCMC approximation error with 192 retained samples.
+
+\textbf{DataTooNoisy}: If KL $< 0.7$ nats after calibration, the posterior has barely moved from the prior---the data is too noisy to distinguish signal from noise.
+
+\textbf{NotLearning}: If the sum of inter-batch KL divergences falls below 0.001 for 5+ consecutive batches, the posterior has stopped updating. Additional samples will not help.
+
+\paragraph{S2: Condition Drift Detected.}
+
+================================================================================
+REFERENCE: If measurement conditions change during the adaptive loop, this estimate becomes invalid. We detect drift by comparing: \begin{itemize} \item Variance ratio: $\sigma_{\text{post}}^2 / \sigma_{\text{cal}}^2$ outside $[0.5, 2.0]$ \item Autocorrelation change: $|\rho_{\text{post}}(1) - \rho_{\text{cal}}(1)| > 0.3$ \item Mean drift: $|\mu_{\text{post}} - \mu_{\text{cal}}| / \sigma_{\text{cal}} > 3.0$ \end{itemize}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+The covariance rate $\Sigma_{\text{rate}}$ is estimated during calibration. If measurement conditions change during the adaptive loop, this estimate becomes invalid. We detect drift by comparing:
+\begin{itemize}
+\item Variance ratio: $\sigma_{\text{post}}^2 / \sigma_{\text{cal}}^2$ outside $[0.5, 2.0]$
+\item Autocorrelation change: $|\rho_{\text{post}}(1) - \rho_{\text{cal}}(1)| > 0.3$
+\item Mean drift: $|\mu_{\text{post}} - \mu_{\text{cal}}| / \sigma_{\text{cal}} > 3.0$
+\end{itemize}
+
+================================================================================
+REFERENCE: Any trigger yields \textsc{Inconclusive} with reason \textsc{ConditionsChanged}. \paragraph{O1: Would Take Too Long.}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+These thresholds were calibrated on pilot experiments to detect gross non-stationarity (2$\times$ variance change, significant autocorrelation shift, or large mean drift) while tolerating natural measurement variation in realistic CI environments. Any trigger yields \textsc{Inconclusive} with reason \textsc{ConditionsChanged}.
+
+\paragraph{O1: Would Take Too Long.}
+
+================================================================================
+REFERENCE: If projected time exceeds 10$\times$ the configured budget, we stop early with \textsc{Inconclusive} rather than waste resources on a test that cannot conclude. \paragraph{O2: Resource Budget Exceeded.}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+We extrapolate time to decision based on current convergence rate. If projected time exceeds 10$\times$ the configured budget, we stop early with \textsc{Inconclusive} rather than waste resources on a test that cannot conclude.
+
+\paragraph{O2: Resource Budget Exceeded.}
+
+================================================================================
+REFERENCE: \paragraph{Likelihood Inflation Warning
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+If elapsed time exceeds the configured time budget, or total samples exceed the configured maximum, we stop with \textsc{Inconclusive} and report the current posterior probability.
+
+\paragraph{Likelihood Inflation Warning.}
+
+================================================================================
+REFERENCE: 3, the likelihood covariance was effectively scaled up by $>3\times$ for robustness
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+When the posterior mean of $\kappa$ falls below 0.3, the likelihood covariance was effectively scaled up by $>3\times$ for robustness. This indicates potential covariance misestimation and is reported in diagnostics, though it does not block verdicts.
+
+\subsection{Measurement Floor Derivation}
+\label{app:floor}
+
+================================================================================
+REFERENCE: \paragraph{Floor-Rate Constant
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+A critical design element is distinguishing what the user \emph{wants} to detect ($\theta_{\text{user}}$) from what the measurement \emph{can} detect ($\theta_{\text{floor}}$).
+
+\paragraph{Floor-Rate Constant.}
+
+================================================================================
+REFERENCE: This is done by computing $\widehat{W}_1$ between resampled baseline-baseline and sample-sample splits using the same block-bootstrap procedure that respects temporal dependence
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+During calibration, we estimate the null distribution of $\widehat{W}_1$ under the hypothesis of no
+timing leak. This is done by computing $\widehat{W}_1$ between resampled baseline-baseline and
+sample-sample splits using the same block-bootstrap procedure that respects temporal dependence.
+
+================================================================================
+REFERENCE: 95}\!\left(\widehat{W}_1^{(b)} \cdot \sqrt{n_{\text{blocks,cal}}}\right) \end{equation}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+For each null replicate $\widehat{W}_1^{(b)}$ at calibration sample size $n_{\text{cal}}$:
+\begin{equation}
+c_{\text{floor}} = q_{0.95}\!\left(\widehat{W}_1^{(b)} \cdot \sqrt{n_{\text{blocks,cal}}}\right)
+\end{equation}
+
+================================================================================
+REFERENCE: Critically, we use \emph{raw} $\widehat{W}_1$ values (not debiased or clamped), ensuring the floor accounts for the natural positive bias of W$_1$ under the null hypothesis. \paragraph{Dynamic Measurement Floor.}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+This floor-rate constant captures the 95th percentile of the null distribution of raw W$_1$, scaled to
+be sample-size-independent. Critically, we use \emph{raw} $\widehat{W}_1$ values (not debiased or
+clamped), ensuring the floor accounts for the natural positive bias of W$_1$ under the null hypothesis.
+
+\paragraph{Dynamic Measurement Floor.}
+
+================================================================================
+REFERENCE: The combined floor is: \begin{equation} \theta_{\text{floor}}(n) = \max\!\left(\theta_{\text{floor,stat}}(n), \theta_{\text{tick}}\right) \end{equation}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+The timer also imposes a floor based on quantization:
+\begin{equation}
+\theta_{\text{tick}} = \frac{\text{1 tick (ns)}}{K}
+\end{equation}
+where $K$ is the batch size (if batching is used). The combined floor is:
+\begin{equation}
+\theta_{\text{floor}}(n) = \max\!\left(\theta_{\text{floor,stat}}(n), \theta_{\text{tick}}\right)
+\end{equation}
+
+================================================================================
+REFERENCE: \paragraph{Effective Threshold
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+Treating $\theta_{\text{tick}}$ as an irreducible floor is a conservative design choice:
+while sub-tick mean shifts are theoretically resolvable with sufficient independent jitter,
+we assume worst-case timer behavior for security testing.
+
+\paragraph{Effective Threshold.}
+
+================================================================================
+REFERENCE: \item \textbf{Pass does not propagate}: ``No effect above $\theta_{\text{eff}}$'' is compatible with effects in the gap $(\theta_{\text{user}}, \theta_{\text{eff}}]$
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+When $\theta_{\text{eff}} > \theta_{\text{user}}$:
+\begin{itemize}
+\item \textbf{Fail propagates}: Detecting $W > \theta_{\text{eff}}$ implies $W > \theta_{\text{user}}$,
+      since $\theta_{\text{eff}} \geq \theta_{\text{user}}$ by construction.
+\item \textbf{Pass does not propagate}: ``No effect above $\theta_{\text{eff}}$'' is compatible with
+      effects in the gap $(\theta_{\text{user}}, \theta_{\text{eff}}]$. We return \textsc{Inconclusive}
+      with reason \textsc{ThresholdElevated}.
+\end{itemize}
+
+================================================================================
+REFERENCE: If it drops to $\theta_{\text{user}}$ or below, Pass becomes possible (subject to the posterior). This is why adaptive sampling can eventually reach Pass even when early calibration shows an elevated floor. \subsection{Adaptive Batching} \label{app:batching}
+Type: ❓ unverified
+Details: Reference could not be verified
+
+RAW REFERENCE TEXT:
+As sampling continues, $\theta_{\text{floor}}(n)$ decreases. If it drops to $\theta_{\text{user}}$ or below, Pass becomes possible (subject to the posterior). This is why adaptive sampling can eventually reach Pass even when early calibration shows an elevated floor.
+
+\subsection{Adaptive Batching}
+\label{app:batching}
+
+================================================================================

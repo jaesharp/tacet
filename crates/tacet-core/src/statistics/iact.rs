@@ -19,7 +19,7 @@ pub struct IactResult {
 }
 
 /// Warnings that may be emitted during IACT computation
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum IactWarning {
     /// Insufficient samples for reliable IACT estimation
     InsufficientSamples { n: usize },
@@ -33,6 +33,12 @@ pub enum IactWarning {
 
 // Manual Eq/Ord implementations for sorting/dedup
 impl Eq for IactWarning {}
+
+impl PartialOrd for IactWarning {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 impl Ord for IactWarning {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {

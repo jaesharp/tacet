@@ -25,12 +25,41 @@ pub fn sample_standard_normal<R: Rng>(rng: &mut R) -> f64 {
     math::sqrt(-2.0 * math::ln(u1)) * math::cos(2.0 * PI * u2)
 }
 
+/// Sample from a truncated normal distribution restricted to [0, ∞).
+///
+/// Uses the inverse CDF method (spec §3.4.4, implementation guide §5.2):
+/// 1. Compute α = -μ/σ (standardized lower bound)
+/// 2. Sample p ~ Uniform(Φ(α), 1)
+/// 3. Return μ + σ·Φ⁻¹(p)
+///
+/// This is used for the half-t prior on δ, which requires δ ≥ 0
+/// since W₁ distances are non-negative.
+pub fn sample_truncated_normal_positive<R: Rng>(rng: &mut R, mu: f64, var: f64) -> f64 {
+    let sigma = math::sqrt(var);
+    if sigma < 1e-15 {
+        return mu.max(0.0);
+    }
+    let alpha = -mu / sigma;
+    let phi_alpha = math::normal_cdf(alpha);
+
+    // Sample p ~ Uniform(Φ(α), 1)
+    let u: f64 = rng.random();
+    let p = phi_alpha + u * (1.0 - phi_alpha);
+
+    // Clamp p to avoid numerical issues at the boundary
+    let p_clamped = p.clamp(1e-15, 1.0 - 1e-15);
+
+    let result = mu + sigma * math::normal_quantile(p_clamped);
+    // Ensure non-negative (guard against floating-point edge cases)
+    result.max(0.0)
+}
+
 /// Result from 1D Bayesian inference on Wasserstein-1 distance.
 ///
-/// Models: W₁_obs ~ N(δ, var_n), δ ~ half-t(ν=4, σ_t)
+/// Models: W₁_obs ~ t(δ, var_n, ν_ℓ), δ ~ half-t(ν=4, σ_t), δ ≥ 0
 #[derive(Debug, Clone)]
 pub struct BayesW1Result {
-    /// Posterior probability of a significant leak: P(|δ| > θ | W₁_obs).
+    /// Posterior probability of a significant leak: P(δ > θ | W₁_obs).
     pub leak_probability: f64,
 
     /// Posterior mean of δ (effect size in nanoseconds).
@@ -58,23 +87,23 @@ pub struct BayesW1Result {
 /// than Normal likelihood. It's represented as:
 /// - W₁_obs | δ, κ ~ N(δ, var_n/κ)
 /// - κ ~ Gamma(ν_ℓ/2, ν_ℓ/2)
-/// Marginalizing κ gives Student-t(δ, var_n, ν_ℓ).
+///   Marginalizing κ gives Student-t(δ, var_n, ν_ℓ).
 ///
-/// The half-t prior is represented as a scale mixture of Gaussians:
+/// The half-t prior is represented as a scale mixture of half-normals:
 /// - λ ~ Gamma(ν/2, ν/2) = Gamma(2, 2)
-/// - δ | λ ~ N(0, σ_t²/λ)
+/// - δ | λ ~ half-N(0, σ_t²/λ), i.e., N(0, σ_t²/λ) truncated to [0, ∞)
 ///
-/// # Gibbs Sampling
+/// # Gibbs Sampling (spec §3.4.4)
 ///
-/// 1. Sample λ ~ Gamma(2 + 1/2, 2 + δ²/(2σ_t²))
-/// 2. Sample δ | λ ~ N(μ_post, σ²_post) where:
-///    - posterior_precision = λ/σ_t² + 1/var_n
-///    - μ_post = (W₁_obs/var_n) / posterior_precision
+/// 1. Sample κ ~ Gamma(ν_ℓ/2 + 1/2, ν_ℓ/2 + (W₁_obs - δ)²/(2·var_n))
+/// 2. Sample λ ~ Gamma(ν/2 + 1/2, ν/2 + δ²/(2σ_t²))
+/// 3. Sample δ | λ, κ ~ TruncatedNormal(μ_post, σ²_post, lower=0) where:
+///    - posterior_precision = λ/σ_t² + κ/var_n
+///    - μ_post = (W₁_obs · κ/var_n) / posterior_precision
 ///    - σ²_post = 1 / posterior_precision
 ///
-/// Note: The Gibbs sampler still uses Normal likelihood internally (sampling from
-/// the conditional posterior), but the Student-t is equivalent to marginalizing
-/// over κ, which provides robustness.
+/// The truncation to [0, ∞) enforces the non-negativity constraint from
+/// the half-t prior, since W₁ distances are non-negative.
 ///
 /// # Arguments
 ///
@@ -102,8 +131,8 @@ pub fn compute_bayes_1d(
 
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
 
-    // Initialize δ to observed value (warm start for Gibbs sampler)
-    let mut delta = w1_obs;
+    // Initialize δ to max(0, w1_obs) since δ ≥ 0 under the half-t prior
+    let mut delta = w1_obs.max(0.0);
     // κ is sampled in each iteration (no initialization needed)
     let mut kappa;
 
@@ -125,21 +154,21 @@ pub fn compute_bayes_1d(
         let rate_lambda = NU / 2.0 + (delta * delta) / (2.0 * sigma_t * sigma_t);
         let lambda = sample_gamma(&mut rng, shape_lambda, rate_lambda);
 
-        // Step 3: Sample δ | λ, κ ~ N(μ_post, σ²_post)
-        // Likelihood precision is κ/var_n (robustness via κ)
-        // Prior precision is λ/σ_t²
+        // Step 3: Sample δ | λ, κ ~ TruncatedNormal(μ_post, σ²_post, lower=0)
+        // The half-t prior constrains δ ≥ 0 (W₁ distances are non-negative).
+        // Spec §3.4.4: "truncated normal, positive only"
         let posterior_precision = lambda / (sigma_t * sigma_t) + kappa / var_n;
         let posterior_mean = (w1_obs * kappa / var_n) / posterior_precision;
         let posterior_var = 1.0 / posterior_precision;
 
-        delta = posterior_mean + math::sqrt(posterior_var) * sample_standard_normal(&mut rng);
+        delta = sample_truncated_normal_positive(&mut rng, posterior_mean, posterior_var);
 
         // Store samples after burn-in
         if iter >= BURN_IN {
             delta_draws.push(delta);
 
-            // Count leak exceedances
-            if delta.abs() > theta {
+            // Count leak exceedances: P(δ > θ | data) per spec §3.4.5
+            if delta > theta {
                 leak_count += 1;
             }
         }
@@ -249,7 +278,8 @@ mod tests {
 
     #[test]
     fn test_bayes_1d_handles_negative_w1() {
-        // Negative W₁ can occur from debiasing
+        // Negative W₁ can occur from debiasing; δ is still constrained ≥ 0
+        // by the half-t prior (truncated normal sampling)
         let w1_obs = -3.0;
         let var_n = 5.0;
         let sigma_t = 10.0;
@@ -257,14 +287,26 @@ mod tests {
 
         let result = compute_bayes_1d(w1_obs, var_n, sigma_t, theta, 42, 4.0);
 
-        // Should handle negative observations gracefully
+        // δ draws are constrained to [0, ∞) so posterior mean must be ≥ 0
         assert!(
-            result.w1_post < 0.0,
-            "Posterior should reflect negative observation"
+            result.w1_post >= 0.0,
+            "Posterior mean should be non-negative (half-t prior), got {}",
+            result.w1_post
+        );
+        // With negative observation and truncation, posterior should be near zero
+        assert!(
+            result.w1_post < 5.0,
+            "Posterior should be small for negative observation, got {}",
+            result.w1_post
         );
         assert!(
             result.leak_probability >= 0.0 && result.leak_probability <= 1.0,
             "Leak probability should be valid"
+        );
+        // All draws should be non-negative
+        assert!(
+            result.w1_draws.iter().all(|&d| d >= 0.0),
+            "All δ draws should be non-negative under half-t prior"
         );
     }
 

@@ -681,7 +681,7 @@ fn compute_calibration_snapshot(baseline_ns: &[f64], sample_ns: &[f64]) -> Calib
 ///
 /// # Example
 /// ```
-/// use tacet_core::adaptive::calibration::calibrate_halft_prior_scale_1d;
+/// use tacet_core::adaptive::calibrate_halft_prior_scale_1d;
 ///
 /// let var_rate = 1000.0;
 /// let theta_user = 100.0;
@@ -872,11 +872,13 @@ pub fn calibrate_floor_from_null(
 ///
 /// # Example
 /// ```
-/// use tacet_core::adaptive::calibration::compute_c_floor_1d;
+/// #[allow(deprecated)]
+/// use tacet_core::adaptive::compute_c_floor_1d;
 ///
 /// let var_rate = 100.0;
 /// let seed = 42;
 ///
+/// #[allow(deprecated)]
 /// let c_floor = compute_c_floor_1d(var_rate, seed);
 /// assert!(c_floor > 0.0);
 /// // For N(0, 100), q95(|Z|) ≈ 1.645 * sqrt(100) ≈ 16.45

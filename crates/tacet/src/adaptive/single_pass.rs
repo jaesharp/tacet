@@ -264,7 +264,7 @@ pub fn analyze_single_pass(
     };
 
     // Step 5: half-t prior calibration for 1D (spec §3.3.5)
-    let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_eff, n, config.seed);
+    let sigma_t = calibrate_halft_prior_scale_1d(var_rate, config.theta_ns, n, config.seed);
 
     // Compute marginal prior variance for variance ratio check (spec §3.5.2)
     // For half-t_4: Var(|δ|) ≈ 2σ_t² (using half-normal approximation)

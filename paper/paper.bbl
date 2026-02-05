@@ -30,15 +30,14 @@ Scott~A. Crosby, Dan~S. Wallach, and Rudolf~H. Riedi.
 \bibitem{silent}
 Martin Dunsche, Patrick Bastian, Marcel Maehren, Nurullah Erinola, Robert
   Merget, Nicolai Bissantz, Holger Dette, and J{\"o}rg Schwenk.
-\newblock {SILENT: Scalable and Independent LEakage detection with iNfinite
-  Type-1 error control}.
+\newblock {SILENT: A New Lens on Statistics in Software Timing Side Channels}.
 \newblock {\em arXiv preprint arXiv:2504.19821}, 2025.
 
 \bibitem{rtlf}
 Martin Dunsche, Marcel Maehren, Nurullah Erinola, Robert Merget, Nicolai
   Bissantz, Juraj Somorovsky, and J{\"o}rg Schwenk.
-\newblock {RTLF: Statistical Timing Leakage Detection with Empirical
-  Bootstrap}.
+\newblock {With Great Power Come Great Side Channels: Statistical Timing
+  Side-Channel Analyses with Bounded Type-1 Errors}.
 \newblock In {\em 33rd USENIX Security Symposium (USENIX Security 24)}. USENIX
   Association, 2024.
 

@@ -237,7 +237,7 @@ pub unsafe extern "C" fn to_state_free(state: *mut ToState) {
     }
 }
 
-/// Get the total number of samples collected (both classes combined).
+/// Get the total number of samples collected per class (baseline class count).
 ///
 /// # Safety
 /// `state` must be a valid pointer.
@@ -383,7 +383,7 @@ pub unsafe extern "C" fn to_calibrate(
     let theta_eff = theta_ns.max(theta_floor_initial);
 
     // Calibrate half-t prior scale
-    let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_eff, count, seed);
+    let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_ns, count, seed);
 
     // Compute calibration snapshot for drift detection
     let baseline_stats = compute_stats_snapshot(&baseline_ns);
@@ -801,7 +801,7 @@ pub unsafe extern "C" fn to_test(
                     .unwrap_or(0.5),
                 inconclusive_reason: ToInconclusiveReason::TimeBudgetExceeded,
                 elapsed_secs: elapsed.as_secs_f64(),
-                samples_used: state.n_total() as u64 / 2,
+                samples_used: state.n_total() as u64,
                 ..ToResult::default()
             };
             to_calibration_free(cal_ptr);
@@ -963,7 +963,7 @@ pub unsafe extern "C" fn to_analyze(
     let theta_eff = theta_ns.max(theta_floor);
 
     // Calibrate prior
-    let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_eff, count, seed);
+    let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_ns, count, seed);
 
     // Scale variance
     let var_n = var_rate / n_blocks as f64;

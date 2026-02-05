@@ -1,0 +1,15 @@
+ecosystem,library,test_name,iteration,outcome,leak_probability,samples,elapsed_sec,timestamp
+Rust,RustCrypto,AES-128 Encrypt,1,PASS,0.0,0,5,2026-02-05T04:03:54-03:00
+Rust,RustCrypto,SHA3-256 Hash,1,PASS,0.0,0,2,2026-02-05T04:03:56-03:00
+Rust,RustCrypto,BLAKE2b Hash,1,PASS,0.0,0,1,2026-02-05T04:03:57-03:00
+Rust,RustCrypto,ChaCha20-Poly1305,1,PASS,0.0,0,1,2026-02-05T04:03:58-03:00
+Rust,RustCrypto,RSA-2048 Sign,1,PASS,0.0,0,0,2026-02-05T04:03:59-03:00
+Rust,ring,AES-256-GCM Encrypt,1,PASS,0.0,0,1,2026-02-05T04:04:00-03:00
+Rust,ring,AES-256-GCM Decrypt,1,PASS,0.0,0,1,2026-02-05T04:04:01-03:00
+Rust,dalek,X25519 ScalarMult,1,PASS,0.0,0,1,2026-02-05T04:04:02-03:00
+Rust,pqcrypto,Kyber-768 Encap,1,PASS,0.0,0,1,2026-02-05T04:04:03-03:00
+Rust,pqcrypto,Dilithium3 Sign,1,PASS,0.0,0,0,2026-02-05T04:04:03-03:00
+Rust,orion,BLAKE2b-MAC,1,PASS,0.0,0,3,2026-02-05T04:04:06-03:00
+Rust,orion,BLAKE2b Hash,1,PASS,0.0,0,4,2026-02-05T04:04:10-03:00
+Rust,orion,XChaCha20-Poly1305 Encrypt,1,PASS,0.0,0,2,2026-02-05T04:04:12-03:00
+Rust,orion,XChaCha20-Poly1305 Decrypt,1,PASS,0.0,0,3,2026-02-05T04:04:15-03:00

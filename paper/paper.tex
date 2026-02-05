@@ -147,9 +147,11 @@ stream-based block bootstrap and detects degraded conditions through quality gat
 %
 In our evaluation, \tacet independently detected CVE-2023-49092 (MARVIN attack) in
 RustCrypto's RSA implementation (\Cref{sec:evaluation:marvin}), demonstrating practical
-utility on real-world vulnerabilities. On synthetic benchmarks and 168 cryptographic
+utility on real-world vulnerabilities. Calibration validation across 800 null-hypothesis
+trials yielded 0.5\% false positive rate (4/800 failures, per-model Wilson 95\% CIs:
+[0\%, 1.8\%] to [0.6\%, 4.8\%]), confirming the $\leq$5\% target. On 168 cryptographic
 test cases spanning Rust, C/C++, Go, and JavaScript ecosystems, \tacet maintained
-calibrated verdicts with zero false positives (Wilson 95\% CI: [0\%, 2.2\%]). Designed
+zero false positives (Wilson 95\% CI: [0\%, 2.2\%]). Designed
 for CI integration, \tacet eliminates flaky tests by returning Inconclusive under poor
 conditions rather than unreliable verdicts. The library is implemented in Rust with
 C/C++, Go, and JavaScript bindings.
@@ -369,18 +371,6 @@ in Timeless Timing Attacks~\cite{timeless};
 jitter~\cite{crosby2009}.
 Users can specify custom thresholds.
 
-\paragraph{Interpreting $\theta$ for sparse leaks.}
-The threshold $\theta$ bounds the W$_1$ distance, not individual execution times.
-For a leak affecting fraction $\varepsilon$ of executions with magnitude $\delta$,
-the W$_1$ contribution is approximately $\varepsilon \cdot \delta$. Our presets
-assume roughly uniform leaks ($\varepsilon \approx 1$): a \ns{100}
-\textsc{AdjacentNetwork} threshold detects leaks where most executions differ
-by $\geq$\ns{100}. For sparse cache-timing leaks ($\varepsilon \ll 1$), users
-should scale thresholds accordingly: to detect a leak affecting 5\% of executions
-at \ns{100}, set $\theta \approx \ns{5}$. Alternatively, the tail-effect analysis
-in \Cref{sec:evaluation:results} demonstrates detection power for leaks
-concentrated in upper percentiles.
-
 %-------------------------------------------------------------------------------
 \subsection{Test Statistic: Wasserstein-1 Distance}
 \label{sec:approach:wasserstein}
@@ -420,18 +410,12 @@ Timing leaks manifest in different patterns:
 \end{itemize}
 
 For rare tail effects (cache misses affecting a small fraction of measurements),
-W$_1$ shows higher detection power than quantile-based approaches in our evaluation.
-Since W$_1$ measures the cost to transport probability mass, even rare outliers
-contribute proportionally to their distance from the baseline distribution—without
-needing to affect multiple quantiles or requiring corrections for multiple comparisons.
-
-\paragraph{Comparison to quantile methods.}
-\silent~\cite{silent} and \rtlf~\cite{rtlf} compare 9 quantiles or deciles. When only
-upper quantiles differ, the signal can dilute across 9 dimensions. W$_1$ uses all rank
-information in a single scalar, avoiding the 9-dimensional correlation structure.
-In our synthetic benchmarks, when a strong effect was injected in a small fraction of
-measurements (5\% of samples), \silent's power dropped to zero. This limitation motivated
-our transition to W$_1$ distance.
+W$_1$ shows higher detection power than quantile-based approaches in our evaluation:
+when effects were concentrated in 5\% of samples, \silent's detection power dropped
+to zero (\Cref{sec:evaluation:synthetic}). Because W$_1$ measures the cost to
+transport probability mass, even rare outliers contribute proportionally to their
+distance from the baseline distribution—without needing to affect multiple quantiles
+or requiring corrections for multiple comparisons.
 
 %-------------------------------------------------------------------------------
 \subsection{Bayesian Inference}
@@ -510,13 +494,6 @@ For CI integration, this prevents flaky tests. Rather than randomly passing or
 failing based on environmental noise, \tacet returns Inconclusive when conditions
 are poor. Developers can configure how to handle this (retry, warn, or fail-closed)
 based on their security requirements.
-
-\paragraph{Example.}
-Suppose \tacet tests an AES implementation with threshold $\theta = \ns{100}$.
-After collecting 50,000 samples, it observes an effect magnitude of \ns{30}. The
-posterior probability $\prob{\text{leak} > \ns{100} \given \text{data}} = 0.03$,
-well below the 5\% Pass threshold. \tacet returns \textsc{Pass} after validating
-measurement quality.
 
 %-------------------------------------------------------------------------------
 \subsection{Handling Autocorrelation}
@@ -811,9 +788,12 @@ binary cutoff.
 
 \paragraph{Calibration validation.}
 We validated \tacet's probabilistic guarantees using the calibration test suite.
-Testing each attacker model separately with 50 null-hypothesis trials (random-vs-random,
-no injected effect), we observed 0 false positives across all models
-(Wilson 95\% CI per model: [0\%, 7.4\%]), consistent with our $\leq$5\% target.
+Testing each attacker model separately with 200 null-hypothesis trials (random-vs-random,
+no injected effect), we observed 4 total false positives across 800 trials (0.5\% overall FPR).
+Per-model results: SharedHardware (0/200, Wilson 95\% CI: [0\%, 1.8\%]),
+PostQuantumSentinel (4/200, CI: [0.6\%, 4.8\%]),
+AdjacentNetwork (0/200, CI: [0\%, 1.8\%]),
+RemoteNetwork (0/200, CI: [0\%, 1.8\%])---all consistent with our $\leq$5\% target.
 %
 For detection power, at 1$\times$ threshold (\ns{100} for \textsc{AdjacentNetwork}),
 \tacet achieved 100\% detection across 200 trials (95\% CI: [98.1\%, 100\%]).
@@ -842,15 +822,6 @@ moderate effect sizes: 100\% at 2$\sigma$ and 4$\sigma$, and 93.3\% at 1$\sigma$
              demonstrating the W$_1$ distance's sensitivity to rare outliers.}
     \label{fig:tail_power}
 \end{figure}
-
-The W$_1$ distance's effectiveness for tail effects stems from its formulation: it measures
-the cost to transport probability mass between distributions. Even when leaks affect only
-a small fraction of measurements, the distance those outliers must travel contributes
-directly to the statistic—without requiring effects to appear across multiple quantiles
-or corrections for multiple comparisons. By contrast, quantile-based approaches (e.g.,
-\silent~\cite{silent}) and mean-based tests (e.g., \dudect~\cite{dudect}) face dilution
-when effects concentrate in distribution tails. Cache timing attacks often appear as
-rare outliers rather than uniform shifts, requiring detection tools sensitive to tail effects.
 
 %-------------------------------------------------------------------------------
 \subsection{Crypto Library Validation}
@@ -902,7 +873,6 @@ test cases spanning four ecosystems, including two CVE detections.
 Across all 168 tests on implementations without known timing vulnerabilities,
 \tacet returned zero false positives (Pass or Inconclusive, never Fail) in
 tested configurations (Wilson 95\% CI: [0\%, 2.2\%]).
-% TODO: Re-run each test 10 times to tighten CI to [0%, 0.22%]
 This validates the calibration property defined in \Cref{sec:approach:decisions}.
 
 \paragraph{Post-quantum cryptography.}
@@ -1025,10 +995,11 @@ benchmarks in future work.
 
 \tacet independently detected CVE-2023-49092 in production RSA code
 (\Cref{sec:evaluation:marvin}), demonstrating practical utility on real-world
-vulnerabilities. On synthetic benchmarks, \tacet maintained calibrated verdicts
-with zero false positives (Wilson 95\% CI: [0\%, 2.2\%]) across 168 cryptographic
-test cases spanning four ecosystems under varying measurement conditions, while
-existing tools showed elevated false positive rates under autocorrelation or missed
+vulnerabilities. Calibration validation across 800 null-hypothesis trials confirmed
+0.5\% false positive rate (4/800 failures), consistent with the $\leq$5\% target.
+Across 168 cryptographic test cases spanning four ecosystems, \tacet maintained
+zero false positives (Wilson 95\% CI: [0\%, 2.2\%]) under varying measurement conditions,
+while existing tools showed elevated false positive rates under autocorrelation or missed
 tail-only effects.
 
 The key methodological contributions are: Wasserstein-1 distance for tail-sensitive

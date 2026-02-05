@@ -133,7 +133,7 @@ func Test(gen Generator, op Operation, inputSize int, opts ...Option) (*Result, 
 			return &Result{
 				Outcome:            Inconclusive,
 				InconclusiveReason: ReasonTimeBudgetExceeded,
-				SamplesUsed:        state.TotalSamples() / 2, // Per class
+				SamplesUsed:        state.TotalSamples(),
 				ElapsedTime:        elapsed,
 				LeakProbability:    state.LeakProbability(),
 			}, nil
@@ -164,11 +164,11 @@ func Test(gen Generator, op Operation, inputSize int, opts ...Option) (*Result, 
 		}
 
 		// Check sample budget
-		if state.TotalSamples()/2 >= uint64(cfg.maxSamples) {
+		if state.TotalSamples() >= uint64(cfg.maxSamples) {
 			return &Result{
 				Outcome:            Inconclusive,
 				InconclusiveReason: ReasonSampleBudgetExceeded,
-				SamplesUsed:        state.TotalSamples() / 2,
+				SamplesUsed:        state.TotalSamples(),
 				ElapsedTime:        time.Since(startTime),
 				LeakProbability:    state.LeakProbability(),
 			}, nil

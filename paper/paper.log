@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025/nixos.org) (preloaded format=pdflatex 1980.1.1)  5 FEB 2026 03:41
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025/nixos.org) (preloaded format=pdflatex 1980.1.1)  5 FEB 2026 04:26
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -1143,20 +1143,19 @@ qz7n73-texlive-combined-2025-texmfdist/fonts/enc/dvips/base/8r.enc}
 
 ]
 LaTeX Font Info:    Trying to load font information for TS1+ptm on input line 2
-53.
+56.
 
 (/nix/store/phgzpfd1ghxamcz18bi1rivm0xqz7n73-texlive-combined-2025-texmfdist/te
 x/latex/psnfss/ts1ptm.fd
 File: ts1ptm.fd 2001/06/04 font definitions for TS1/ptm.
 )
+
 LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <9> not available
-(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 326.
+(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 329.
 LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <7> not available
-(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 326.
+(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 329.
 LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <5> not available
-(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 326.
-
-
+(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 329.
 
 
 [2]
@@ -1165,23 +1164,22 @@ LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <5> not available
 
 [3]
 
-
-
-[4]
 Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             `pcr' (encoding: T1).
 (microtype)             For optimal results, create family-specific settings.
 (microtype)             See the microtype manual for details.
 
 
+[4]
 
-Underfull \hbox (badness 1199) in paragraph at lines 653--657
+
+Underfull \hbox (badness 1199) in paragraph at lines 631--635
 []\T1/ptm/m/n/10 (+20) For cycle-level pre-ci-sion on ARM64, \T1/ptm/m/sc/10 (+
 20) Tacet \T1/ptm/m/n/10 (+20) op-tion-
  []
 
 
-Underfull \hbox (badness 1122) in paragraph at lines 653--657
+Underfull \hbox (badness 1122) in paragraph at lines 631--635
 \T1/pcr/m/n/10 perf_event \T1/ptm/m/n/10 (+20) on Linux (re-quires \T1/pcr/m/n/
 10 CAP_PERFMON \T1/ptm/m/n/10 (+20) or root).
  []
@@ -1189,54 +1187,55 @@ Underfull \hbox (badness 1122) in paragraph at lines 653--657
 
 
 [5]
-Underfull \hbox (badness 1533) in paragraph at lines 724--729
+LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <8> not available
+(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 704.
+
+Underfull \hbox (badness 1533) in paragraph at lines 707--712
 \T1/ptm/m/sc/10 (+20) SILENT\T1/ptm/m/n/10 (+20) , \T1/ptm/m/sc/10 (+20) RTLF\T
 1/ptm/m/n/10 (+20) , and sev-eral ad-di-tional sta-tis-ti-cal tests
  []
 
 
-Underfull \hbox (badness 7907) in paragraph at lines 724--729
+Underfull \hbox (badness 7907) in paragraph at lines 707--712
 \T1/ptm/m/n/10 (+20) (Kolmogorov-Smirnov, Anderson-Darling, TVLA t-test,
  []
 
 
-Underfull \hbox (badness 1215) in paragraph at lines 724--729
+Underfull \hbox (badness 1215) in paragraph at lines 707--712
 \T1/ptm/m/n/10 (+20) sam-ple counts (10,000 sam-ples per class for syn-thetic
  []
 
 
 
-<analysis/outputs/figures/heatmap_fpr.png, id=269, 716.9184pt x 356.2911pt>
+<analysis/outputs/figures/heatmap_fpr.png, id=265, 716.9184pt x 356.2911pt>
 File: analysis/outputs/figures/heatmap_fpr.png Graphic file (type png)
 <use analysis/outputs/figures/heatmap_fpr.png>
 Package pdftex.def Info: analysis/outputs/figures/heatmap_fpr.png  used on inpu
-t line 769.
+t line 752.
 (pdftex.def)             Requested size: 430.00958pt x 213.70563pt.
-<analysis/outputs/figures/heatmap_power.png, id=272, 716.9184pt x 356.2911pt>
+<analysis/outputs/figures/heatmap_power.png, id=268, 716.9184pt x 356.2911pt>
 File: analysis/outputs/figures/heatmap_power.png Graphic file (type png)
 <use analysis/outputs/figures/heatmap_power.png>
 Package pdftex.def Info: analysis/outputs/figures/heatmap_power.png  used on in
-put line 794.
+put line 777.
 (pdftex.def)             Requested size: 430.00958pt x 213.70563pt.
 
 
 [6]
-<analysis/outputs/figures/tail_power_curve.png, id=286, 570.4512pt x 353.1594pt
+<analysis/outputs/figures/tail_power_curve.png, id=284, 570.4512pt x 353.1594pt
 >
 File: analysis/outputs/figures/tail_power_curve.png Graphic file (type png)
 <use analysis/outputs/figures/tail_power_curve.png>
 Package pdftex.def Info: analysis/outputs/figures/tail_power_curve.png  used on
- input line 833.
+ input line 819.
 (pdftex.def)             Requested size: 242.82503pt x 150.33054pt.
 
-Overfull \hbox (1.80464pt too wide) in paragraph at lines 833--836
+Overfull \hbox (1.80464pt too wide) in paragraph at lines 819--822
  [][] 
  []
 
 
 
-LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <8> not available
-(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 862.
 
 
 [7 <./analysis/outputs/figures/heatmap_fpr.png>]
@@ -1247,7 +1246,7 @@ LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <8> not available
 ail_power_curve.png>]
 
 
-Underfull \hbox (badness 1917) in paragraph at lines 1051--1056
+Underfull \hbox (badness 1917) in paragraph at lines 1032--1037
 \T1/ptm/b/n/10 (+20) Stakeholders. \T1/ptm/m/n/10 (+20) We iden-tify three pri-
 mary stake-hold-ers:
  []
@@ -1255,7 +1254,7 @@ mary stake-hold-ers:
 
 
 [9]
-Overfull \hbox (19.38324pt too wide) in paragraph at lines 1090--1091
+Overfull \hbox (19.38324pt too wide) in paragraph at lines 1071--1072
 []\T1/ptm/b/n/10 (-20) Specification\T1/ptm/m/n/10 (-20) : \T1/pcr/m/n/10 websi
 te/.../reference/specification.md
  []
@@ -1269,7 +1268,7 @@ te/.../reference/specification.md
 
 
 [11]
-Underfull \hbox (badness 1681) in paragraph at lines 1245--1246
+Underfull \hbox (badness 1681) in paragraph at lines 1226--1227
 \T1/ptm/m/n/10 (+20) to-matic block length se-lec-tion al-go-rithm with a class
 -
  []
@@ -1291,11 +1290,11 @@ Package rerunfilecheck Info: File `paper.out' has not changed.
 (rerunfilecheck)             Checksum: AB923FEA100AD2B472B607E0599D5553;5550.
  ) 
 Here is how much of TeX's memory you used:
- 32922 strings out of 467888
- 665937 string characters out of 5412697
- 1037692 words of memory out of 5000000
- 60240 multiletter control sequences out of 15000+600000
- 742989 words of font info for 547 fonts, out of 8000000 for 9000
+ 32923 strings out of 467888
+ 665964 string characters out of 5412697
+ 1038692 words of memory out of 5000000
+ 60243 multiletter control sequences out of 15000+600000
+ 743602 words of font info for 549 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  102i,16n,107p,1002b,1197s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </nix/store/phgzpfd1ghxamcz18bi1rivm0xqz7n73-texlive-combined-2025-texmfdist/
@@ -1318,10 +1317,10 @@ fb></nix/store/phgzpfd1ghxamcz18bi1rivm0xqz7n73-texlive-combined-2025-texmfdist
 /fonts/type1/public/wasy-type1/wasy10.pfb></nix/store/phgzpfd1ghxamcz18bi1rivm0
 xqz7n73-texlive-combined-2025-texmfdist/fonts/type1/public/wasy-type1/wasy9.pfb
 >
-Output written on paper.pdf (13 pages, 553738 bytes).
+Output written on paper.pdf (13 pages, 552061 bytes).
 PDF statistics:
- 489 PDF objects out of 1000 (max. 8388607)
- 437 compressed objects within 5 object streams
- 158 named destinations out of 1000 (max. 500000)
- 106812 words of extra memory for PDF output out of 106986 (max. 10000000)
+ 483 PDF objects out of 1000 (max. 8388607)
+ 431 compressed objects within 5 object streams
+ 156 named destinations out of 1000 (max. 500000)
+ 107324 words of extra memory for PDF output out of 128383 (max. 10000000)
 
