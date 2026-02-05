@@ -1,0 +1,27 @@
+Using Cachix caches: devenv
+Building shell in 74.9ms
+Entering shell
+
+running 1 test
+test fpr::fpr_validation_per_attacker_model ... [fpr_validation_per_attacker_model] RNG seed: 1770328368237833552 (reproduce: CALIBRATION_SEED=1770328368237833552 CALIBRATION_TIER=validation cargo test fpr_validation_per_attacker_model)
+[fpr_validation_per_attacker_model_SharedHardware] Data export enabled: "results/paper-calibration-noisy/fpr_validation_per_attacker_model_SharedHardware.csv"
+[fpr_validation_per_attacker_model] Testing SharedHardware (400 trials)
+[fpr_validation_per_attacker_model] SharedHardware: 1 failures / 400 completed (0.2% FPR) - pass
+[fpr_validation_per_attacker_model_SharedHardware] Data export complete: 400 records written to "results/paper-calibration-noisy/fpr_validation_per_attacker_model_SharedHardware.csv"
+[fpr_validation_per_attacker_model_PostQuantumSentinel] Data export enabled: "results/paper-calibration-noisy/fpr_validation_per_attacker_model_PostQuantumSentinel.csv"
+[fpr_validation_per_attacker_model] Testing PostQuantumSentinel (400 trials)
+[fpr_validation_per_attacker_model] PostQuantumSentinel: 15 failures / 400 completed (3.8% FPR) - pass
+[fpr_validation_per_attacker_model_PostQuantumSentinel] Data export complete: 400 records written to "results/paper-calibration-noisy/fpr_validation_per_attacker_model_PostQuantumSentinel.csv"
+[fpr_validation_per_attacker_model_AdjacentNetwork] Data export enabled: "results/paper-calibration-noisy/fpr_validation_per_attacker_model_AdjacentNetwork.csv"
+[fpr_validation_per_attacker_model] Testing AdjacentNetwork (400 trials)
+[fpr_validation_per_attacker_model] AdjacentNetwork: 0 failures / 400 completed (0.0% FPR) - pass
+[fpr_validation_per_attacker_model_AdjacentNetwork] Data export complete: 400 records written to "results/paper-calibration-noisy/fpr_validation_per_attacker_model_AdjacentNetwork.csv"
+[fpr_validation_per_attacker_model_RemoteNetwork] Data export enabled: "results/paper-calibration-noisy/fpr_validation_per_attacker_model_RemoteNetwork.csv"
+[fpr_validation_per_attacker_model] Testing RemoteNetwork (400 trials)
+[fpr_validation_per_attacker_model] RemoteNetwork: 0 failures / 400 completed (0.0% FPR) - pass
+[fpr_validation_per_attacker_model_RemoteNetwork] Data export complete: 400 records written to "results/paper-calibration-noisy/fpr_validation_per_attacker_model_RemoteNetwork.csv"
+[fpr_validation_per_attacker_model] PASSED: All attacker models have bounded FPR
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 60 filtered out; finished in 297.19s
+

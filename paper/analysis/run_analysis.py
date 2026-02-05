@@ -10,9 +10,22 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from tacet_analysis.data import load_benchmark_data, load_summary_data
+from tacet_analysis.data import load_benchmark_data, load_summary_data, load_thorough_data, load_thorough_summary
 from tacet_analysis.robustness import print_check_results, run_all_checks
-from tacet_analysis.charts import generate_all_figures
+from tacet_analysis.charts import (
+    generate_all_figures,
+    plot_fpr_grouped_bars,
+    plot_power_curves_dual_panel,
+    plot_verdict_breakdown,
+    plot_fpr_heatmap_v3,
+    plot_power_heatmap_v3,
+    plot_power_heatmap_v3_trimodal,
+    plot_tail_power_curve_v3,
+    plot_fpr_small_multiples,
+    plot_fpr_grouped_bars_stages,
+    plot_fpr_heatmap_seaborn,
+    print_ablation_summary,
+)
 from tacet_analysis.utils import FIGURES_DIR, OUTPUT_DIR
 
 
@@ -87,6 +100,111 @@ def main():
         print(f"\nGenerated {len(figures)} figures:")
         for name in figures:
             print(f"  - {name}")
+
+    # Generate new paper figures (v2) from thorough dataset
+    if not args.checks_only:
+        print("\n" + "=" * 60)
+        print("GENERATING NEW PAPER FIGURES (v2)")
+        print("=" * 60)
+
+        try:
+            thorough_raw = load_thorough_data()
+            thorough_summary = load_thorough_summary()
+            print(f"  Thorough raw data: {len(thorough_raw):,} rows")
+            print(f"  Thorough summary data: {len(thorough_summary):,} rows")
+
+            figures_dir = args.output_dir / "figures"
+
+            print("\n  Generating v2-fig1: FPR grouped bars...")
+            plot_fpr_grouped_bars(
+                thorough_raw,
+                output_path=figures_dir / "v2-fig1_fpr_grouped_bars.png",
+            )
+
+            print("  Generating v2-fig2: power curves dual panel...")
+            plot_power_curves_dual_panel(
+                thorough_summary,
+                output_path=figures_dir / "v2-fig2_power_dual_panel.png",
+            )
+
+            print("  Generating v2-fig3: verdict breakdown...")
+            plot_verdict_breakdown(
+                thorough_raw,
+                output_path=figures_dir / "v2-fig3_verdict_breakdown.png",
+            )
+
+            print("\n  v2 figures saved to:", figures_dir)
+
+            # v3 figures (original chart types with targeted fixes)
+            print("\n" + "=" * 60)
+            print("GENERATING v3 FIGURES (original types, minimal fixes)")
+            print("=" * 60)
+
+            print("\n  Generating v3-fig1: FPR heatmap (with annotations)...")
+            plot_fpr_heatmap_v3(
+                thorough_raw,
+                output_path=figures_dir / "v3-fig1_fpr_heatmap.png",
+            )
+
+            print("  Generating v3-fig2: power heatmap (shift + tail)...")
+            plot_power_heatmap_v3(
+                thorough_raw,
+                output_path=figures_dir / "v3-fig2_power_heatmap_dual.png",
+            )
+
+            print("  Generating v3-fig3: tail power curve (fixed axis + ns)...")
+            plot_tail_power_curve_v3(
+                thorough_summary,
+                noise_model="iid",  # Use i.i.d. for cleaner visualization
+                output_path=figures_dir / "v3-fig3_tail_power_curve.png",
+            )
+
+            print("\n  v3 figures saved to:", figures_dir)
+
+            # Experimental: v3-fig2 with bimodal
+            print("\n" + "=" * 60)
+            print("GENERATING EXPERIMENTAL FIGURE (v3-fig2 with bimodal)")
+            print("=" * 60)
+
+            print("\n  Generating v3-fig2-experimental: power heatmap (shift + tail + bimodal)...")
+            plot_power_heatmap_v3_trimodal(
+                thorough_raw,
+                output_path=figures_dir / "v3-fig2-experimental_with_bimodal.png",
+            )
+
+            print("\n  Experimental figure saved to:", figures_dir)
+
+            # v4 figures (alternative autocorrelation visualizations)
+            print("\n" + "=" * 60)
+            print("GENERATING v4 FIGURES (alternative autocorrelation viz)")
+            print("=" * 60)
+
+            print("\n  Generating v4-fig1: small multiples (sparkline grid)...")
+            plot_fpr_small_multiples(
+                thorough_raw,
+                output_path=figures_dir / "v4-fig1_fpr_small_multiples.png",
+            )
+
+            print("  Generating v4-fig2: grouped bars (3 stages)...")
+            plot_fpr_grouped_bars_stages(
+                thorough_raw,
+                output_path=figures_dir / "v4-fig2_fpr_grouped_bars_stages.png",
+            )
+
+            print("  Generating v4-fig3: seaborn FPR heatmap (EDA-style)...")
+            plot_fpr_heatmap_seaborn(
+                thorough_raw,
+                output_path=figures_dir / "v4-fig3_fpr_heatmap_seaborn.png",
+            )
+
+            print("\n  v4 figures saved to:", figures_dir)
+
+        except FileNotFoundError as e:
+            print(f"\n  WARNING: Could not generate v2/v3/v4 figures: {e}")
+            print("  Thorough dataset not found. Skipping v2/v3/v4 figures.")
+
+    # Ablation study summaries (for paper verification)
+    print_ablation_summary()
 
     # Generate summary report
     print("\n" + "=" * 60)

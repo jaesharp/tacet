@@ -154,6 +154,8 @@ pub struct TimingOracleAdapter {
     pub time_budget: Option<Duration>,
     /// Maximum samples to use.
     pub max_samples: Option<usize>,
+    /// Bootstrap resampling method (Joint or Stratified).
+    pub bootstrap_method: tacet::BootstrapMethod,
 }
 
 impl Default for TimingOracleAdapter {
@@ -162,6 +164,7 @@ impl Default for TimingOracleAdapter {
             attacker_model: AttackerModel::AdjacentNetwork,
             time_budget: Some(Duration::from_secs(60)),
             max_samples: None,
+            bootstrap_method: tacet::BootstrapMethod::Joint,
         }
     }
 }
@@ -173,6 +176,12 @@ impl TimingOracleAdapter {
             attacker_model: model,
             ..Default::default()
         }
+    }
+
+    /// Set the bootstrap resampling method.
+    pub fn bootstrap_method(mut self, method: tacet::BootstrapMethod) -> Self {
+        self.bootstrap_method = method;
+        self
     }
 
     /// Set time budget.
@@ -201,7 +210,8 @@ impl ToolAdapter for TimingOracleAdapter {
         let baseline_ns: Vec<f64> = data.baseline.iter().map(|&c| c as f64).collect();
         let test_ns: Vec<f64> = data.test.iter().map(|&c| c as f64).collect();
 
-        let mut oracle = TimingOracle::for_attacker(self.attacker_model);
+        let mut oracle = TimingOracle::for_attacker(self.attacker_model)
+            .bootstrap_method(self.bootstrap_method);
 
         if let Some(budget) = self.time_budget {
             oracle = oracle.time_budget(budget);

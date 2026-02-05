@@ -216,7 +216,7 @@ impl SweepConfig {
     pub fn medium() -> Self {
         Self {
             preset: BenchmarkPreset::Medium,
-            samples_per_class: 5_000,
+            samples_per_class: 10_000,
             datasets_per_point: 30,
             // Subset of thorough's effect sizes
             // With σ = 50 ns: [0, 10ns, 50ns, 100ns, 200ns, 1μs]
@@ -267,7 +267,7 @@ impl SweepConfig {
     /// - 10.0–20.0: 50–100 ns (cache timing, AdjacentNetwork threshold)
     ///
     /// Key design choices:
-    /// - **5,000 samples/class**: Stresses tools to work with limited data
+    /// - **10,000 samples/class**: Enough for reliable floor estimation under autocorrelation
     /// - **3 effect patterns**: Shift (primary), Tail, Bimodal for robustness claims
     /// - **7 noise levels**: φ ∈ [-0.6, 0.6] covers autocorrelation effects
     /// - **Two attacker models**: SharedHardware (0.4ns) + AdjacentNetwork (100ns)
@@ -282,7 +282,7 @@ impl SweepConfig {
     pub fn thorough() -> Self {
         Self {
             preset: BenchmarkPreset::Thorough,
-            samples_per_class: 5_000,
+            samples_per_class: 10_000,
             datasets_per_point: 100,
             // Effect sizes optimized for heatmap visualization
             // With σ = 5 ns: [0, 0.5, 1, 2, 5, 10, 20, 50, 100] ns

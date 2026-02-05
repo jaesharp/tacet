@@ -31,7 +31,7 @@ pub use bootstrap::{
     block_bootstrap_resample, block_bootstrap_resample_into, block_bootstrap_resample_joint_into,
     compute_block_size, counter_rng_seed,
 };
-pub use covariance::{bootstrap_w1_variance, W1VarianceEstimate};
+pub use covariance::{bootstrap_w1_variance, BootstrapMethod, W1VarianceEstimate};
 pub use detection::{compute_min_uniqueness_ratio, DISCRETE_MODE_THRESHOLD};
 pub use iact::{
     geyer_ims_iact, timing_iact_combined, timing_iact_direct, timing_iact_per_quantile, IactResult,

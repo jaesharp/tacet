@@ -130,6 +130,7 @@ pub fn calibrate_samples(
         skip_preflight: true,
         force_discrete_mode: false,
         iact_method: tacet_core::types::IactMethod::default(),
+        bootstrap_method: tacet_core::statistics::BootstrapMethod::default(),
     };
 
     match calibrate(&baseline, &sample, ns_per_tick, &cal_config) {
@@ -266,6 +267,7 @@ pub fn analyze(
         skip_preflight: true,
         force_discrete_mode: false,
         iact_method: tacet_core::types::IactMethod::default(),
+        bootstrap_method: tacet_core::statistics::BootstrapMethod::default(),
     };
 
     // Run calibration

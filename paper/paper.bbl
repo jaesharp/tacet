@@ -51,6 +51,22 @@ Hubert Kario.
 Hubert Kario.
 \newblock {tlsfuzzer: SSL and TLS protocol test suite and fuzzer}, 2024.
 
+\bibitem{spectre}
+Paul Kocher, Jann Horn, Anders Fogh, Daniel Genkin, Daniel Gruss, Werner Haas,
+  Mike Hamburg, Moritz Lipp, Stefan Mangard, Thomas Prescher, Michael Schwarz,
+  and Yuval Yarom.
+\newblock {Spectre Attacks: Exploiting Speculative Execution}.
+\newblock In {\em 40th IEEE Symposium on Security and Privacy (S\&P'19)}, pages
+  1--19. IEEE, 2019.
+
+\bibitem{meltdown}
+Moritz Lipp, Michael Schwarz, Daniel Gruss, Thomas Prescher, Werner Haas,
+  Anders Fogh, Jann Horn, Stefan Mangard, Paul Kocher, Daniel Genkin, Yuval
+  Yarom, and Mike Hamburg.
+\newblock {Meltdown: Reading Kernel Memory from User Space}.
+\newblock In {\em 27th USENIX Security Symposium (USENIX Security 18)}, pages
+  973--990. USENIX Association, 2018.
+
 \bibitem{raccoon}
 Robert Merget, Marcus Brinkmann, Nimrod Aviram, Juraj Somorovsky, Johannes
   Mittmann, and J{\"o}rg Schwenk.
@@ -98,5 +114,12 @@ C{\'e}dric Villani.
 \newblock {\em {Optimal Transport: Old and New}}, volume 338 of {\em
   Grundlehren der Mathematischen Wissenschaften}.
 \newblock Springer, 2009.
+
+\bibitem{flushreload}
+Yuval Yarom and Katrina Falkner.
+\newblock {FLUSH+RELOAD: A High Resolution, Low Noise, L3 Cache Side-Channel
+  Attack}.
+\newblock In {\em 23rd USENIX Security Symposium (USENIX Security 14)}, pages
+  719--732. USENIX Association, 2014.
 
 \end{thebibliography}

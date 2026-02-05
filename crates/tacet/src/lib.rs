@@ -94,6 +94,7 @@ pub use result::{
     IssueCode, MeasurementQuality, Metadata, MinDetectableEffect, Outcome, QualityIssue,
     QuantileShifts, TailDiagnostics, TopQuantile, UnmeasurableInfo, UnreliablePolicy,
 };
+pub use tacet_core::statistics::BootstrapMethod;
 pub use types::{AttackerModel, Class, IactMethod, TimingSample};
 
 // Re-export helpers for convenience

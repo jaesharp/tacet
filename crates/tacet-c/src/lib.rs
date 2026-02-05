@@ -368,6 +368,7 @@ pub unsafe extern "C" fn to_calibrate(
         DEFAULT_BOOTSTRAP_ITERATIONS,
         seed,
         discrete_mode,
+        tacet_core::statistics::BootstrapMethod::Joint,
     );
     let var_rate = var_estimate.variance * count as f64; // Convert to rate: var_rate = var_cal * n_cal
     let block_length = var_estimate.block_size;
@@ -952,6 +953,7 @@ pub unsafe extern "C" fn to_analyze(
         DEFAULT_BOOTSTRAP_ITERATIONS,
         seed,
         discrete_mode,
+        tacet_core::statistics::BootstrapMethod::Joint,
     );
     let var_rate = var_estimate.variance * count as f64;
     let block_length = var_estimate.block_size;

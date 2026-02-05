@@ -14,8 +14,31 @@ use rand_xoshiro::Xoshiro256PlusPlus;
 
 use crate::types::{Class, TimingSample};
 
-use super::bootstrap::{block_bootstrap_resample_joint_into, counter_rng_seed};
+use super::bootstrap::{
+    block_bootstrap_resample_into, block_bootstrap_resample_joint_into, counter_rng_seed,
+};
 use super::wasserstein::compute_w1_distance;
+
+/// Bootstrap resampling strategy for variance estimation.
+///
+/// Controls how the block bootstrap preserves (or breaks) temporal dependencies
+/// between the two measurement classes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BootstrapMethod {
+    /// Joint (stream) bootstrap: resample the interleaved measurement stream as
+    /// a single sequence, then split by class. This preserves cross-class
+    /// temporal dependencies from common-mode noise (e.g., CPU frequency drift,
+    /// thermal throttling), yielding correct variance estimates under
+    /// autocorrelation.
+    #[default]
+    Joint,
+
+    /// Stratified (per-class) bootstrap: resample each class independently.
+    /// This breaks cross-class temporal pairing, causing variance
+    /// underestimation when measurements exhibit autocorrelation. Included
+    /// for ablation comparison only.
+    Stratified,
+}
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -187,6 +210,7 @@ pub fn bootstrap_w1_variance(
     n_bootstrap: usize,
     seed: u64,
     is_fragile: bool,
+    method: BootstrapMethod,
 ) -> W1VarianceEstimate {
     let n = interleaved.len();
 
@@ -194,7 +218,23 @@ pub fn bootstrap_w1_variance(
     let block_size =
         super::block_length::class_conditional_optimal_block_length(interleaved, is_fragile);
 
-    // Generate bootstrap replicates of W₁ using joint resampling
+    // Pre-split interleaved data by class (needed for stratified bootstrap)
+    let (baseline_raw, sample_raw): (Vec<f64>, Vec<f64>) = if method == BootstrapMethod::Stratified
+    {
+        let mut b = Vec::with_capacity(n / 2 + 1);
+        let mut s = Vec::with_capacity(n / 2 + 1);
+        for sample in interleaved {
+            match sample.class {
+                Class::Baseline => b.push(sample.time_ns),
+                Class::Sample => s.push(sample.time_ns),
+            }
+        }
+        (b, s)
+    } else {
+        (Vec::new(), Vec::new())
+    };
+
+    // Generate bootstrap replicates of W₁
     #[cfg(feature = "parallel")]
     let var_accumulator: WelfordVariance = {
         // Pre-compute estimated class sizes (roughly n/2 each)
@@ -214,28 +254,54 @@ pub fn bootstrap_w1_variance(
                     ],
                     Vec::with_capacity(estimated_class_size), // baseline_samples buffer
                     Vec::with_capacity(estimated_class_size), // sample_samples buffer
+                    vec![0.0f64; baseline_raw.len()],         // stratified baseline resample buffer
+                    vec![0.0f64; sample_raw.len()],           // stratified sample resample buffer
                     WelfordVariance::new(),
                 ),
-                |(_, mut buffer, mut baseline_samples, mut sample_samples, mut acc), i| {
+                |(_, mut buffer, mut baseline_samples, mut sample_samples, mut baseline_buf, mut sample_buf, mut acc),
+                 i| {
                     // Counter-based RNG for deterministic, well-distributed seeding
                     let mut rng =
                         Xoshiro256PlusPlus::seed_from_u64(counter_rng_seed(seed, i as u64));
 
-                    // Joint resample the interleaved sequence (preserves temporal pairing)
-                    block_bootstrap_resample_joint_into(
-                        interleaved,
-                        block_size,
-                        &mut rng,
-                        &mut buffer,
-                    );
+                    match method {
+                        BootstrapMethod::Joint => {
+                            // Joint resample the interleaved sequence (preserves temporal pairing)
+                            block_bootstrap_resample_joint_into(
+                                interleaved,
+                                block_size,
+                                &mut rng,
+                                &mut buffer,
+                            );
 
-                    // Split by class AFTER resampling (reuse pre-allocated buffers)
-                    baseline_samples.clear();
-                    sample_samples.clear();
-                    for sample in &buffer {
-                        match sample.class {
-                            Class::Baseline => baseline_samples.push(sample.time_ns),
-                            Class::Sample => sample_samples.push(sample.time_ns),
+                            // Split by class AFTER resampling
+                            baseline_samples.clear();
+                            sample_samples.clear();
+                            for sample in &buffer {
+                                match sample.class {
+                                    Class::Baseline => baseline_samples.push(sample.time_ns),
+                                    Class::Sample => sample_samples.push(sample.time_ns),
+                                }
+                            }
+                        }
+                        BootstrapMethod::Stratified => {
+                            // Resample each class independently (breaks cross-class pairing)
+                            block_bootstrap_resample_into(
+                                &baseline_raw,
+                                block_size,
+                                &mut rng,
+                                &mut baseline_buf,
+                            );
+                            block_bootstrap_resample_into(
+                                &sample_raw,
+                                block_size,
+                                &mut rng,
+                                &mut sample_buf,
+                            );
+                            baseline_samples.clear();
+                            sample_samples.clear();
+                            baseline_samples.extend_from_slice(&baseline_buf);
+                            sample_samples.extend_from_slice(&sample_buf);
                         }
                     }
 
@@ -245,10 +311,18 @@ pub fn bootstrap_w1_variance(
                     // Update variance accumulator
                     acc.update(w1);
 
-                    (rng, buffer, baseline_samples, sample_samples, acc)
+                    (
+                        rng,
+                        buffer,
+                        baseline_samples,
+                        sample_samples,
+                        baseline_buf,
+                        sample_buf,
+                        acc,
+                    )
                 },
             )
-            .map(|(_, _, _, _, acc)| acc)
+            .map(|(_, _, _, _, _, _, acc)| acc)
             .reduce(WelfordVariance::new, |mut a, b| {
                 a.merge(&b);
                 a
@@ -269,21 +343,51 @@ pub fn bootstrap_w1_variance(
         let estimated_class_size = (n / 2) + 1;
         let mut baseline_samples: Vec<f64> = Vec::with_capacity(estimated_class_size);
         let mut sample_samples: Vec<f64> = Vec::with_capacity(estimated_class_size);
+        let mut baseline_buf = vec![0.0f64; baseline_raw.len()];
+        let mut sample_buf = vec![0.0f64; sample_raw.len()];
 
         for i in 0..n_bootstrap {
             // Counter-based RNG for deterministic, well-distributed seeding
             let mut rng = Xoshiro256PlusPlus::seed_from_u64(counter_rng_seed(seed, i as u64));
 
-            // Joint resample the interleaved sequence (preserves temporal pairing)
-            block_bootstrap_resample_joint_into(interleaved, block_size, &mut rng, &mut buffer);
+            match method {
+                BootstrapMethod::Joint => {
+                    // Joint resample the interleaved sequence (preserves temporal pairing)
+                    block_bootstrap_resample_joint_into(
+                        interleaved,
+                        block_size,
+                        &mut rng,
+                        &mut buffer,
+                    );
 
-            // Split by class AFTER resampling (reuse pre-allocated buffers)
-            baseline_samples.clear();
-            sample_samples.clear();
-            for sample in &buffer {
-                match sample.class {
-                    Class::Baseline => baseline_samples.push(sample.time_ns),
-                    Class::Sample => sample_samples.push(sample.time_ns),
+                    // Split by class AFTER resampling
+                    baseline_samples.clear();
+                    sample_samples.clear();
+                    for sample in &buffer {
+                        match sample.class {
+                            Class::Baseline => baseline_samples.push(sample.time_ns),
+                            Class::Sample => sample_samples.push(sample.time_ns),
+                        }
+                    }
+                }
+                BootstrapMethod::Stratified => {
+                    // Resample each class independently (breaks cross-class pairing)
+                    block_bootstrap_resample_into(
+                        &baseline_raw,
+                        block_size,
+                        &mut rng,
+                        &mut baseline_buf,
+                    );
+                    block_bootstrap_resample_into(
+                        &sample_raw,
+                        block_size,
+                        &mut rng,
+                        &mut sample_buf,
+                    );
+                    baseline_samples.clear();
+                    sample_samples.clear();
+                    baseline_samples.extend_from_slice(&baseline_buf);
+                    sample_samples.extend_from_slice(&sample_buf);
                 }
             }
 
@@ -453,7 +557,7 @@ mod tests {
             });
         }
 
-        let estimate = bootstrap_w1_variance(&samples, 100, 42, false);
+        let estimate = bootstrap_w1_variance(&samples, 100, 42, false, BootstrapMethod::Joint);
 
         // Variance should be positive and finite
         assert!(
@@ -488,7 +592,7 @@ mod tests {
             });
         }
 
-        let estimate = bootstrap_w1_variance(&samples, 50, 123, false);
+        let estimate = bootstrap_w1_variance(&samples, 50, 123, false, BootstrapMethod::Joint);
 
         // Variance should be small (near zero) but positive due to jitter
         assert!(
@@ -521,8 +625,8 @@ mod tests {
             });
         }
 
-        let estimate1 = bootstrap_w1_variance(&samples, 50, 999, false);
-        let estimate2 = bootstrap_w1_variance(&samples, 50, 999, false);
+        let estimate1 = bootstrap_w1_variance(&samples, 50, 999, false, BootstrapMethod::Joint);
+        let estimate2 = bootstrap_w1_variance(&samples, 50, 999, false, BootstrapMethod::Joint);
 
         // Should be identical (deterministic RNG)
         assert_eq!(
@@ -551,8 +655,8 @@ mod tests {
             });
         }
 
-        let normal = bootstrap_w1_variance(&samples, 50, 42, false);
-        let fragile = bootstrap_w1_variance(&samples, 50, 42, true);
+        let normal = bootstrap_w1_variance(&samples, 50, 42, false, BootstrapMethod::Joint);
+        let fragile = bootstrap_w1_variance(&samples, 50, 42, true, BootstrapMethod::Joint);
 
         // Fragile mode should use larger block size (1.5x inflation + floor of 10)
         assert!(
@@ -583,7 +687,7 @@ mod tests {
             });
         }
 
-        let estimate = bootstrap_w1_variance(&samples, 100, 777, false);
+        let estimate = bootstrap_w1_variance(&samples, 100, 777, false, BootstrapMethod::Joint);
 
         // Just verify it produces sensible output
         assert!(estimate.variance > 0.0);

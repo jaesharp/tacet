@@ -67,6 +67,9 @@ pub struct SinglePassConfig {
     /// Minimum KL divergence (nats) for quality gate (default 0.7, per spec §3.5.2).
     /// If KL(posterior || prior) < this threshold, data is not informative.
     pub kl_min: f64,
+
+    /// Bootstrap resampling method (Joint or Stratified).
+    pub bootstrap_method: tacet_core::statistics::BootstrapMethod,
 }
 
 impl Default for SinglePassConfig {
@@ -79,6 +82,7 @@ impl Default for SinglePassConfig {
             timer_resolution_ns: 1.0, // Assume 1ns resolution for pre-collected data
             seed: 0xDEADBEEF,
             kl_min: 0.7,
+            bootstrap_method: tacet_core::statistics::BootstrapMethod::default(),
         }
     }
 }
@@ -209,6 +213,7 @@ pub fn analyze_single_pass(
         config.bootstrap_iterations,
         config.seed,
         discrete_mode, // is_fragile - use discrete mode flag
+        config.bootstrap_method,
     );
     let variance = var_estimate.variance;
 

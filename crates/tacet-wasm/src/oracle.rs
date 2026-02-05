@@ -213,6 +213,7 @@ pub fn calibrate_samples(
         skip_preflight: true,
         force_discrete_mode: false,
         iact_method: tacet_core::types::IactMethod::default(),
+        bootstrap_method: tacet_core::statistics::BootstrapMethod::default(),
     };
 
     // Use a placeholder for samples_per_second since we can't use std::time::Instant in WASM.
@@ -368,6 +369,7 @@ pub fn analyze(
         skip_preflight: true,
         force_discrete_mode: false,
         iact_method: tacet_core::types::IactMethod::default(),
+        bootstrap_method: tacet_core::statistics::BootstrapMethod::default(),
     };
 
     // Use a placeholder for samples_per_second since we can't use std::time::Instant in WASM.

@@ -4,7 +4,7 @@ from pathlib import Path
 
 # Project paths
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "medium-w1-v7.1-round2-local"
+DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "thorough-w1-v7.3-pre-final"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
 FIGURES_DIR = OUTPUT_DIR / "figures"
 
@@ -41,9 +41,9 @@ TOOL_NAMES = {
 
 # Noise model display names (ordered by autocorrelation strength)
 # Medium preset uses: ar1-n0.6, ar1-n0.3, iid, ar1-0.3, ar1-0.6, ar1-0.8
-# Thorough preset uses finer steps: ar1-n0.6, ar1-n0.4, ar1-n0.2, iid, ar1-0.2, ar1-0.4, ar1-0.6
+# Thorough preset uses finer steps: ar1-n0.6, ar1-n0.4, ar1-n0.2, iid, ar1-0.2, ar1-0.4, ar1-0.6, ar1-0.8
 NOISE_ORDER_MEDIUM = ["ar1-n0.6", "ar1-n0.3", "iid", "ar1-0.3", "ar1-0.6", "ar1-0.8"]
-NOISE_ORDER_THOROUGH = ["ar1-n0.6", "ar1-n0.4", "ar1-n0.2", "iid", "ar1-0.2", "ar1-0.4", "ar1-0.6"]
+NOISE_ORDER_THOROUGH = ["ar1-n0.6", "ar1-n0.4", "ar1-n0.2", "iid", "ar1-0.2", "ar1-0.4", "ar1-0.6", "ar1-0.8"]
 NOISE_ORDER = NOISE_ORDER_MEDIUM  # Default for backwards compatibility
 
 NOISE_NAMES = {
@@ -73,8 +73,10 @@ SIGMA_NAMES = {
 # Effect size display
 # Medium preset: [0, 0.2, 1, 2, 4, 20]
 # Thorough preset: [0, 0.1, 0.2, 0.4, 1, 2, 4, 10, 20]
+# Paper figures preset: [0, 0.1, 0.4, 1, 2, 10, 20] - reduced granularity for clarity
 EFFECT_ORDER_MEDIUM = [0, 0.2, 1, 2, 4, 20]
 EFFECT_ORDER_THOROUGH = [0, 0.1, 0.2, 0.4, 1, 2, 4, 10, 20]
+EFFECT_ORDER_PAPER = [0, 0.1, 0.4, 1, 2, 10, 20]  # Remove 0.2σ and 4σ for cleaner viz
 EFFECT_ORDER = EFFECT_ORDER_MEDIUM  # Default for backwards compatibility
 
 EFFECT_NAMES = {
@@ -102,31 +104,39 @@ TOOL_ORDER = [
     "mona",
 ]
 
-# Primary tools for paper figures (6 tools, cleaner plots)
-PRIMARY_TOOLS = ["tacet", "silent", "rtlf", "dudect", "timing-tvla", "tlsfuzzer"]
+# Primary tools for paper figures (7 tools, cleaner plots)
+PRIMARY_TOOLS = ["tacet", "silent", "rtlf", "dudect", "timing-tvla", "tlsfuzzer", "mona"]
 
-# Distinctive color palette for 6 primary tools
+# Distinctive color palette for 7 primary tools
 PRIMARY_TOOL_COLORS = {
-    "tacet": "#14b8a6",        # Teal (Tacet brand)
+    "tacet": "#FF6060",        # Coral red (Tacet brand accent)
     "silent": "#8b5cf6",       # Purple
     "rtlf": "#3b82f6",         # Blue
     "dudect": "#f59e0b",       # Amber
     "timing-tvla": "#10b981",  # Emerald
     "tlsfuzzer": "#6b7280",    # Gray
+    "mona": "#ec4899",         # Pink
 }
 
 # Thorough dataset path (higher trial count, more effect sizes)
-THOROUGH_DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "thorough-w1-v7.1-all-tools"
+# Lives under paper/analysis/results/ (not repo-root results/)
+THOROUGH_DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "thorough-w1-v7.3-pre-final"
+
+# Target figure widths matching the LaTeX layout:
+#   USENIX textwidth = 7.0", figure* uses width=0.85\textwidth, figure uses ~columnwidth
+FIGSIZE_FULL = 5.95    # 0.85 * 7.0" — for figure* (2-column spanning)
+FIGSIZE_SINGLE = 3.36  # ~columnwidth — for figure (single column)
 
 
 def setup_paper_style():
-    """Configure matplotlib for paper figures (light background, technical typography)."""
+    """Configure matplotlib for paper figures.
+
+    Minimal style: sans-serif font for clarity, clean axes, otherwise defaults.
+    """
     import matplotlib.pyplot as plt
 
     plt.style.use("default")
 
-    # Use DejaVu Sans Mono - it has good Unicode coverage including Greek letters
-    # and is bundled with matplotlib, so it's always available
     plt.rcParams.update({
         # Colors
         "figure.facecolor": COLORS["background"],
@@ -136,33 +146,20 @@ def setup_paper_style():
         "text.color": COLORS["text"],
         "xtick.color": COLORS["text"],
         "ytick.color": COLORS["text"],
-        "grid.color": COLORS["grid"],
 
-        # Typography - use DejaVu Sans Mono for technical feel + Greek support
-        "font.family": "monospace",
-        "font.monospace": ["DejaVu Sans Mono", "Menlo", "Monaco", "monospace"],
-        "font.size": 9,
-        "axes.titlesize": 11,
-        "axes.titleweight": "medium",
-        "axes.labelsize": 9,
-        "axes.labelweight": "medium",
-        "xtick.labelsize": 8,
-        "ytick.labelsize": 8,
+        # Typography — just sans-serif, keep default sizes
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Helvetica", "DejaVu Sans", "Arial", "sans-serif"],
 
         # Cleaner axes
         "axes.spines.top": False,
         "axes.spines.right": False,
-        "axes.linewidth": 0.8,
-        "xtick.major.width": 0.8,
-        "ytick.major.width": 0.8,
 
         # Legend
         "legend.frameon": False,
-        "legend.fontsize": 8,
 
         # Figure
         "figure.dpi": 150,
         "savefig.dpi": 300,
         "savefig.bbox": "tight",
-        "savefig.pad_inches": 0.1,
     })

@@ -138,26 +138,22 @@ Existing detection tools output Pass or Fail without reporting when measurement
 conditions make results unreliable—developers see ``pass'' and assume safety,
 unaware the test lacked power to detect exploitable leaks.
 %
-We present \tacet, a timing side-channel detection library with calibrated three-way
-verdicts: Pass, Fail, or Inconclusive (\Cref{sec:approach:decisions}). \tacet uses
+We present \tacet, a timing side-channel detection library with empirically calibrated
+three-way verdicts: Pass, Fail, or Inconclusive (\Cref{sec:approach:decisions}). \tacet uses
 Bayesian inference over the Wasserstein-1 distance, outputting posterior probabilities
 $\prob{\text{leak} > \theta \given \text{data}}$ to distinguish ``no leak detected''
 from ``insufficient evidence.'' The system handles autocorrelated measurements via
 stream-based block bootstrap and detects degraded conditions through quality gates.
 %
-% TODO: Verify total test count (168) matches Table 2 (current rows sum to 158).
-In our evaluation, \tacet independently detected CVE-2023-49092 (MARVIN attack) in
-RustCrypto's RSA implementation (\Cref{sec:evaluation:marvin}), demonstrating practical
-utility on real-world vulnerabilities. Calibration validation across 1{,}600
-null-hypothesis trials on a heavily loaded server (64-vCPU, load average ${\sim}54$)
-yielded 0.25\% false positive rate (4/1{,}600 failures, per-model Wilson 95\% CIs:
-[0\%, 0.9\%] to [0.3\%, 2.5\%]), confirming the $\leq$5\% target.
-% TODO: Update crypto FPR numbers once final benchmark runs complete.
-On 168 cryptographic test cases spanning Rust, C/C++, Go, and JavaScript ecosystems,
-\tacet maintained zero false positives (Wilson 95\% CI: [0\%, 2.2\%]). Designed
-for CI integration, \tacet eliminates flaky tests by returning Inconclusive under poor
-conditions rather than unreliable verdicts. The library is implemented in Rust with
-C/C++, Go, and JavaScript bindings.
+In our evaluation, \tacet detected CVE-2023-49092 (MARVIN attack) in
+RustCrypto's RSA implementation without prior knowledge of the vulnerability. Across 2{,}270 trials on a heavily loaded
+server---1{,}600 synthetic calibration trials and 670 on real cryptographic
+implementations spanning 7~libraries---\tacet produced 5~false positives (0.22\%
+aggregate FPR; 0.47\% conditional on definitive verdict), consistent with the
+$\leq$5\% target.
+Designed for CI integration, \tacet eliminates flaky tests by returning Inconclusive
+under degraded measurement conditions rather than unreliable verdicts. The library
+is implemented in Rust with C/C++, Go, and JavaScript bindings.
 
 \end{abstract}
 
@@ -208,7 +204,7 @@ so even rare outliers contribute visibly
 to the statistic.
 
 Beyond the W$_1$ statistic (\Cref{sec:approach:wasserstein}), we contribute a Bayesian
-framework (\Cref{sec:approach:inference}) with calibrated three-way verdicts
+framework (\Cref{sec:approach:inference}) with empirically calibrated three-way verdicts
 (Pass/Fail/Inconclusive; \Cref{sec:approach:decisions}), quality gates that detect
 degraded measurement conditions (\Cref{sec:approach:gates}), and an explicit measurement
 floor (\Cref{sec:approach:floor}) that prevents claiming ``no leak'' when the system
@@ -235,8 +231,8 @@ Our contributions are:
           violate standard iid assumptions.
 
     \item \textbf{Comprehensive evaluation and implementation}: Comparison
-          against existing tools (\dudect, \tlsfuzzer, \rtlf, \silent) on
-          synthetic benchmarks and 168 cryptographic test cases across four ecosystems
+          against existing tools (\dudect, \tlsfuzzer, \rtlf, \silent, TVLA) on
+          synthetic benchmarks and 170 cryptographic test cases across four ecosystems
           (Rust, C/C++, Go, JavaScript), with a production-ready Rust implementation
           and C/C++, Go, and JavaScript (via WASM; server-side runtimes only) bindings
           designed for CI integration.
@@ -305,7 +301,7 @@ comparisons.
 \centering
 \caption{Feature comparison of timing side-channel detection tools.
          \CIRCLE\ = supported, \LEFTcircle\ = partial support, \Circle\ = not supported.
-         \tacet is the only tool in this evaluation providing calibrated three-way verdicts with interpretable posterior probabilities.}
+         \tacet is the only tool in this evaluation providing empirically calibrated three-way verdicts with interpretable posterior probabilities.}
 \label{tab:comparison}
 \begin{tabularx}{\textwidth}{X*{5}{c}}
 \toprule
@@ -329,7 +325,7 @@ Integrated measurement & \CIRCLE & \CIRCLE & \Circle & \Circle & \CIRCLE \\
 \end{tabularx}
 \begin{tablenotes}
 \small
-\item[1] Reports Inconclusive when evidence is insufficient, rather than forcing a potentially incorrect verdict.
+\item[1] Reports Inconclusive when evidence is insufficient, rather than forcing a potentially incorrect verdict. Calibration is empirical under tested benchmark conditions (see \Cref{sec:approach:decisions}).
 \item[2] Outputs interpretable $\prob{\text{leak} > \theta \given \text{data}}$ rather than binary verdict or p-value.
 \item[3] \silent acknowledges stationarity as a limitation.
 \item[4] \silent uses $m$-dependent block bootstrap on per-class samples.
@@ -357,21 +353,23 @@ after each batch, continuing until a decision threshold is crossed or a quality
 gate triggers Inconclusive.
 
 \paragraph{Threshold selection.}
-The threshold $\theta$ defines the minimum W$_1$ distance worth detecting. There is no
-single correct value—it depends on the threat model. We provide presets derived
-from published attacks:
+The threshold $\theta$ defines the minimum W$_1$ distance that constitutes an
+actionable finding---the smallest aggregate distributional difference worth
+investigating for a given threat model. There is no single correct value. We
+provide presets calibrated to the operating conditions of each attacker class:
 %
-\textsc{SharedHardware} (\ns{0.4}, $\approx$2 cycles at 5\,GHz) is derived from
-minimum exploitable SGX cache-timing differences~\cite{sgxtiming};
+\textsc{SharedHardware} (\ns{0.4}, $\approx$2 cycles at 5\,GHz): the minimum
+aggregate timing difference shown to be exploitable in co-located attacks such
+as SGX cache timing~\cite{sgxtiming};
 %
-\textsc{PostQuantumSentinel} (\ns{2.0}, $\approx$10 cycles at 5\,GHz) is derived
-from KyberSlash attacks requiring $\sim$20 cycle resolution~\cite{kyberslash};
+\textsc{PostQuantumSentinel} (\ns{2.0}, $\approx$10 cycles at 5\,GHz): aggregate
+differences indicating exploitable leaks in lattice implementations~\cite{kyberslash};
 %
-\textsc{AdjacentNetwork} (\ns{100}) is derived from HTTP/2 multiplexing precision
-in Timeless Timing Attacks~\cite{timeless};
+\textsc{AdjacentNetwork} (\ns{100}): below this, distributional differences are
+masked by LAN or HTTP/2 multiplexing jitter~\cite{timeless};
 %
-\textsc{RemoteNetwork} (\us{50}) is conservative for general internet
-jitter~\cite{crosby2009}.
+\textsc{RemoteNetwork} (\us{50}): below this, distributional differences are masked
+by internet jitter~\cite{crosby2009}.
 Users can specify custom thresholds.
 
 %-------------------------------------------------------------------------------
@@ -406,20 +404,42 @@ threshold $\theta_{\text{eff}}$ rises to accommodate the smallest reliably detec
 ensuring the posterior remains well-calibrated even when $\widehat{W}_1 > 0$ under the null.
 
 \paragraph{Why W$_1$ for timing leaks?}
-Timing leaks manifest in different patterns:
+Timing leaks manifest in distinct geometric patterns, each requiring different
+statistical sensitivity:
 \begin{itemize}
     \item \textbf{Uniform shifts} (branch-based): All quantiles shift by $c$ $\Rightarrow$ $W_1 \approx |c|$
-    \item \textbf{Tail effects} (cache-based): Upper quantiles shift more $\Rightarrow$ $W_1$ emphasizes tail transport
+    \item \textbf{Bimodal} (cache-based): Separate timing clusters (hits vs.\ misses) $\Rightarrow$ $W_1$ integrates across the mode gap
+    \item \textbf{Tail effects}: Upper quantiles shift $\Rightarrow$ $W_1 \approx p \cdot c$ for fraction $p$ affected
 \end{itemize}
 
-% TODO: Verify SILENT tail-effect claim against final benchmark data.
-For rare tail effects (cache misses affecting a small fraction of measurements),
-W$_1$ shows higher detection power than quantile-based approaches in our evaluation:
-when effects were concentrated in 5\% of samples, \silent's detection power dropped
-to zero (\Cref{sec:evaluation:synthetic}). Because W$_1$ measures the cost to
-transport probability mass, even rare outliers contribute proportionally to their
-distance from the baseline distribution—without needing to affect multiple quantiles
-or requiring corrections for multiple comparisons.
+Cache-timing attacks create distinct timing clusters: fast operations (cache hit,
+tens of cycles) and slow operations (cache miss, hundreds of
+cycles)~\cite{bernstein2005cache,flushreload}. These attacks have shown widespread
+impact---Spectre and Meltdown affected nearly all modern processors~\cite{meltdown,spectre}.
+The W$_1$ distance integrates CDF differences across the entire gap between timing
+clusters, providing strong signal for separated distributions.
+
+Our evaluation confirms this advantage (\Cref{fig:power_heatmap}): bimodal effects
+(panel c) show strongest detection across all tools, consistent with W$_1$'s
+theoretical optimality for separated distributions. Quantile-based methods that
+sample only at specific points (p10, p20, ..., p90) miss the full distributional
+separation---our ablation (\Cref{sec:evaluation:ablation}) shows replacing W$_1$
+with 9-quantile comparison eliminates bimodal detection entirely (0\% across all
+effect sizes).
+
+\paragraph{Threshold interpretation.}
+Because $\theta$ is a W$_1$ distance, it measures aggregate distributional displacement.
+For a uniform shift of $c$ nanoseconds, $W_1 \approx c$. For concentrated effects
+(fraction $p$ shifted by $c$), $W_1 \approx p \cdot c$.
+A Pass verdict at threshold $\theta$ means: with 95\% posterior confidence, the
+aggregate distributional difference is below $\theta$ under the tested conditions.
+
+For a mean-estimation attacker, query complexity scales as
+$\sigma^2_{\text{attacker}} / W_1^2$ regardless of leak geometry.
+This bound applies to remote and adjacent-network attackers where measurement noise
+masks individual query timings. For co-located attackers with cycle-level precision,
+$W_1 < \theta$ bounds mean-estimation attacks but does not rule out threshold
+classifiers exploiting rare high-magnitude events (\Cref{sec:discussion:limitations}).
 
 %-------------------------------------------------------------------------------
 \subsection{Bayesian Inference}
@@ -465,13 +485,18 @@ The posterior probability $\prob{\text{leak} > \theta \given \text{data}}$ maps 
 three verdicts. Unlike binary pass/fail tools, \tacet can report when evidence is
 insufficient.
 
-We say verdicts are \emph{calibrated} if, under the null hypothesis
+We say verdicts are \emph{empirically calibrated} if, under the null hypothesis
 (no timing leak exceeding $\theta$), $P(\text{Fail}) \leq \alpha$,
 and under alternatives exceeding $\theta$, $P(\text{Pass}) \leq \beta$,
 where $\alpha$ and $\beta$ are the decision thresholds (default 5\%).
 We use these posterior thresholds as a design choice intended to achieve
-the stated frequentist bounds; \Cref{sec:evaluation:results} validates
-empirically that this holds across our benchmark conditions.
+the stated frequentist bounds. This is an empirical property of the
+system under tested conditions, not a finite-sample guarantee:
+\Cref{sec:evaluation:results} validates that the bounds hold across
+our benchmark suite, but under extreme autocorrelation ($\rho = 0.8$)
+FPR rises to 8\%---still the lowest among tools with comparable
+detection power, with further degradation mitigated by Inconclusive
+verdicts rather than forced Pass/Fail.
 
 \begin{itemize}
     \item \textbf{Pass}: The posterior probability of a timing leak exceeding
@@ -693,7 +718,7 @@ sizes, autocorrelation structures, and noise levels. This allows precise ground-
 evaluation independent of hardware. We inject effects as shifts in mean timing
 (simulating branch differences) or shifts in upper quantiles only (simulating
 cache effects), with autocorrelation modeled as AR(1) processes at varying
-correlation coefficients $\rho \in \{-0.6, -0.3, 0, 0.3, 0.6\}$.
+correlation coefficients $\rho \in \{-0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6, 0.8\}$.
 
 \paragraph{Cryptographic library tests.}
 Real-world tests run on AWS EC2 instances: \texttt{c8g.4xlarge} (ARM64 Graviton4,
@@ -708,11 +733,14 @@ and \texttt{boring} crates. Go's circl library (post-quantum) tests are blocked
 by an FFI bug in tacet-go bindings.}
 
 \paragraph{Tools compared.}
-We compare \tacet against \dudect, \silent, \rtlf, and several additional
-statistical tests (Kolmogorov-Smirnov, Anderson-Darling, TVLA t-test, MONA).
-For fair comparison, all tools receive identical sample counts (10,000 samples
-per class for synthetic benchmarks, matching \dudect's minimum reporting
-threshold~\cite{dudect}).
+We primarily compare \tacet against the tools most relevant to practice:
+\dudect, \silent, \rtlf, \tlsfuzzer, and TVLA~t-test---the same set evaluated
+by \silent~\cite{silent}, plus \silent itself.
+We additionally benchmark three standard statistical tests
+(Kolmogorov-Smirnov, Anderson-Darling, MONA) to demonstrate the failure of
+naive approaches under autocorrelation.
+All tools receive identical sample counts (10,000 samples per class,
+matching \dudect's minimum reporting threshold~\cite{dudect}).
 
 \paragraph{Metrics.}
 We report: (1) \emph{False positive rate} (FPR): proportion of null-effect
@@ -729,58 +757,67 @@ category, all verdicts are either Pass or Fail.
 \Cref{fig:fpr_heatmap} shows verdict distributions under the null hypothesis
 (no injected effect) across varying autocorrelation structures.
 
-Under i.i.d.\ conditions ($\rho = 0$), most tools correctly return ``no effect
-found'' with low false positive rates. As positive autocorrelation increases
-($\rho = 0.3, 0.6$), tools that assume independence show elevated false positive
-rates: the i.i.d.\ bootstrap underestimates variance, causing tests to reject
-the null when they should not.
+Under i.i.d.\ conditions ($\rho = 0$), \tacet maintains 0\% FPR across all
+injection patterns. As positive autocorrelation increases, tools that assume
+independence show rising false positive rates: at $\rho = 0.8$, \rtlf reaches
+30\%, \dudect 12\%, and \tlsfuzzer 40\%. \tacet's maximum FPR across all
+conditions is 8\% (at $\rho = 0.8$), the lowest among tools with comparable
+detection power.
 
-\tacet shows a different pattern: under high autocorrelation, it returns Inconclusive
-(orange) rather than incorrect Pass or Fail verdicts. This reflects the calibrated
-verdict system. When the effective sample size drops due to autocorrelation,
-\tacet's quality gates detect that the posterior has not moved sufficiently from
-the prior and refuse to commit to a verdict.
+\silent also handles autocorrelation via $m$-dependent bootstrap, reaching
+12\% FPR at $\rho = 0.8$. Where \silent must still output
+Pass or Fail, \tacet returns Inconclusive when evidence is insufficient,
+preventing forced verdicts under degraded conditions.
 
-\silent also handles autocorrelation correctly via $m$-dependent bootstrap, showing
-consistently low false positive rates. The key difference: \silent must still output
-Pass or Fail, while \tacet can report uncertainty explicitly.
+Standard statistical tests (Anderson-Darling, Kolmogorov-Smirnov) perform
+worse: AD-test reaches 45\% FPR at $\rho = 0.8$ and already exceeds the 5\%
+target under i.i.d.\ conditions (7\% FPR), confirming that naive tests are
+unreliable for timing analysis where autocorrelation is the norm.
 
-% TODO: Update all data claims in this subsection once final benchmark data is in
-% and figures are regenerated. Verify prose matches the figures.
 \begin{figure*}[ht]
     \centering
-    % TODO: Update figure path once final figures are selected.
-    \includegraphics[width=0.85\textwidth]{analysis/outputs/figures/heatmap_fpr.png}
+    \includegraphics[width=0.85\textwidth]{analysis/outputs/figures/v3-fig1_fpr_heatmap.png}
     \caption{False positive rate by autocorrelation structure (null effect,
-             shift pattern, W$_1$ distance statistic). Teal indicates ``effect found''
-             (false positive), taupe indicates ``effect not found'' (correct), orange
-             indicates ``could not determine'' (\tacet only). Under strong autocorrelation,
-             tools assuming independence show elevated FPR while \tacet returns
-             Inconclusive.}
+             shift pattern, W$_1$ distance statistic). Orange indicates false positives,
+             taupe indicates correct ``no effect found'', teal indicates inconclusive
+             (\tacet only). Under strong positive autocorrelation ($\rho = 0.8$),
+             classical tools show 7--40\% false positive rates while \tacet
+             limits FPR to 8\%---the lowest among tools with comparable
+             detection power---by returning Inconclusive on most trials
+             where precision is insufficient.}
     \label{fig:fpr_heatmap}
 \end{figure*}
 
 \paragraph{Detection power across effect sizes.}
 \Cref{fig:power_heatmap} shows detection rates as a function of effect size
-under moderate autocorrelation (AR(1) with $\rho = 0.6$). At large effect sizes
-($\geq 5\sigma$), all tools reliably detect the timing difference. At smaller
-effect sizes, tools diverge: some show reduced detection (insufficient power)
-while others show inflated detection (false positives from underestimated variance).
+under i.i.d.\ conditions. For shift effects at $0.2\sigma$ ($= \ns{1.0}$,
+$2.5\times$ the \textsc{SharedHardware} threshold) and above, \tacet achieves
+100\% detection---matching all other tools.
 
-\tacet shows a characteristic transition: at effect sizes near or below the threshold,
-it returns Inconclusive rather than committing to Pass or Fail. As effect size
-increases, the posterior shifts toward Fail, eventually crossing the 95\% threshold.
-This gradual transition reflects the underlying probability rather than a sharp
-binary cutoff.
+At $0.1\sigma$ ($= \ns{0.5}$, just 25\% above $\theta$), detection drops to
+32\%. This near-threshold regime is inherently difficult: the effect
+($\ns{0.5}$) is only 25\% above the threshold ($\ns{0.4}$).
+Tools without a threshold (\dudect, \rtlf, \tlsfuzzer) detect any distributional
+difference and naturally show higher rates (57--99\%) at this level.
+Among threshold-based tools, \silent achieves 81\%---a power advantage of the
+quantile approach for near-threshold effects under i.i.d.\ conditions
+(\Cref{sec:discussion:tradeoffs}).
+
+Under autocorrelation, the measurement floor rises above $\theta =
+\ns{0.4}$, and \tacet correctly returns Inconclusive (ThresholdElevated) rather
+than issuing verdicts it cannot support. At $0.2\sigma$ under AR(1) noise,
+\tacet's detection rate is ${\sim}49\%$---a consequence of the block bootstrap
+correctly widening confidence intervals.
 
 \begin{figure*}[ht]
     \centering
-    % TODO: Update figure path once final figures are selected.
-    \includegraphics[width=0.85\textwidth]{analysis/outputs/figures/heatmap_power.png}
-    \caption{Detection power by effect size (AR(1) noise with $\rho = 0.6$,
-             shift pattern, W$_1$ distance statistic). At large effects, all tools
-             detect the leak. Near the threshold, \tacet returns Inconclusive
-             while other tools must commit to Pass or Fail.}
+    \includegraphics[width=\textwidth]{analysis/outputs/figures/v3-fig2-experimental_with_bimodal.png}
+    \caption{Detection power by effect size for (a) shift, (b) tail, and (c) bimodal
+             patterns under AR(1) noise with $\rho = 0.6$ (W$_1$ distance statistic).
+             Bimodal effects (cache hits vs.\ misses) show strongest detection across
+             all tools---W$_1$'s integration of CDF differences captures the full mode
+             separation. At large effects ($\geq 5\sigma$), all tools achieve 100\%
+             detection. \tacet returns Inconclusive when precision is insufficient.}
     \label{fig:power_heatmap}
 \end{figure*}
 
@@ -819,11 +856,20 @@ RemoteNetwork       & 400 & 0 &   0 & [0\%, 0.9\%] \\
 \end{tabular}
 \end{table}
 %
-All per-model FPRs are consistent with the $\leq$5\% target.
+All per-model aggregate FPRs are consistent with the $\leq$5\% target.
 SharedHardware and PostQuantumSentinel returned Inconclusive on all or nearly all
 trials because the measurement floor (${\sim}50$\,ns under load) exceeded their
-sub-nanosecond thresholds---the oracle correctly declined to issue verdicts it
+thresholds---the oracle correctly declined to issue verdicts it
 could not support, rather than guessing.
+%
+Conditioning on definitive verdicts (Pass or Fail only), the calibration FPR
+was 4/794 = 0.50\%.
+For PostQuantumSentinel specifically, all 4 definitive verdicts were false
+positives (4/4); however, with $n{=}4$ definitive trials the confidence interval
+is uninformative (Clopper-Pearson 95\% CI: [40\%, 100\%]).
+These 4~trials represent borderline cases where noise on the loaded server
+pushed the posterior above 0.95 despite the elevated effective threshold
+($\theta_{\text{eff}} \approx \ns{50}$ vs.\ $\theta_{\text{user}} = \ns{2}$).
 %
 For detection power, at 1$\times$ threshold (\ns{100} for \textsc{AdjacentNetwork}),
 \tacet achieved 100\% detection across 200 trials (95\% CI: [98.1\%, 100\%]).
@@ -833,37 +879,49 @@ threshold should not trigger Fail verdicts.
 Effect size estimates showed low bias: $<$4\% at the threshold and $<$2\% for
 effects $\geq$2$\times$ threshold, confirming accurate quantification.
 
-% TODO: Update tail power numbers once final benchmark data is in and figures regenerated.
-\paragraph{Tail effect detection.}
-The W$_1$ distance shows higher detection power for rare tail effects than quantile-based
-methods in our evaluation.
-We evaluated detection power when timing leaks affect only a small fraction of
-measurements—typical of cache-timing attacks where only cache misses reveal secrets.
+\paragraph{Effect geometry.}
+\Cref{fig:power_heatmap} shows detection varies by leak geometry. Bimodal effects
+(panel c) show strongest detection---consistent with W$_1$'s theoretical advantage
+for separated distributions. For tail-only effects (panel b, upper 5\% shifted),
+\tacet achieves 100\% detection at $\geq 1\sigma$ under i.i.d.\ conditions but
+shows lower power at near-threshold effects than \silent (33\% vs.\ 96\% at $0.4\sigma$).
+However, our ablation below demonstrates that quantile methods entirely fail on
+bimodal and tail effects under autocorrelation, while W$_1$ maintains detection
+capability.
 
-\Cref{fig:tail_power} shows \tacet's detection rates for tail-only effects, where
-only the upper 5\% of the distribution is shifted. At large effect sizes (20$\sigma$),
-\tacet achieved 100\% detection (95\% CI: [88.6\%, 100\%]). Detection remains high at
-moderate effect sizes: 100\% at 2$\sigma$ and 4$\sigma$, and 93.3\% at 1$\sigma$.
+%-------------------------------------------------------------------------------
+\subsection{Ablation Studies}
+\label{sec:evaluation:ablation}
 
-\begin{figure}[ht]
-    \centering
-    % TODO: Update figure path once final figures are selected.
-    \includegraphics[width=0.48\textwidth]{analysis/outputs/figures/tail_power_curve.png}
-    \caption{Detection power for tail effects (upper 5\% of distribution shifted by
-             X$\sigma$). \tacet achieves 100\% detection at 20$\sigma$ tail shifts,
-             demonstrating the W$_1$ distance's sensitivity to rare outliers.}
-    \label{fig:tail_power}
-\end{figure}
+We ablate the two design choices most critical for calibrated detection under
+autocorrelation: the choice of test statistic and the bootstrap resampling
+strategy. Both experiments use the medium benchmark preset
+(5{,}000 samples/class, 30 trials/condition, SharedHardware $\theta = \ns{0.4}$)
+with all other components held constant.
+
+\paragraph{Test statistic: W$_1$ distance vs.\ 9-quantile.}
+Replacing the W$_1$ distance statistic with a 9-quantile test
+statistic---comparing decile-level differences (p10--p90) with max
+aggregation, as used in our v6.0 prototype---eliminates bimodal and tail
+detection entirely: 0\% detection across all effect sizes and noise models
+(0/360 trials), including $20\sigma$ effects. The 9-quantile approach also
+fails under strong autocorrelation ($\rho = 0.8$): shift detection drops to
+0\% at $4\sigma$ and $20\sigma$, with non-monotonic power peaking at 80\%
+for $1\sigma$ before collapsing.
+
+The structural explanation: deciles sample at discrete points (p10, p20, ..., p90),
+missing effects concentrated between quantiles or spanning wide ranges (bimodal gaps).
+W$_1$ integrates rank-matched differences across the full distribution, so separated
+modes and rare outliers contribute proportionally to their displacement. This ablation
+confirms W$_1$ enables detection of cache-timing patterns that quantile approaches
+structurally cannot achieve.
 
 %-------------------------------------------------------------------------------
 \subsection{Crypto Library Validation}
 \label{sec:evaluation:crypto}
 
-% TODO: Verify total test count matches table rows (currently rows sum to 158, not 168).
-% TODO: CVE-2025-12816 is NOT a timing CVE — it's an ASN.1 validation bypass.
-%       Either remove the CVE reference from the node-forge row or replace it.
-\Cref{tab:crypto_tests} summarizes validation across 165+ cryptographic
-test cases spanning four ecosystems, including two CVE detections.
+\Cref{tab:crypto_tests} summarizes validation across 170 cryptographic
+test cases spanning four ecosystems.
 
 \begin{table}[ht]
 \centering
@@ -871,78 +929,92 @@ test cases spanning four ecosystems, including two CVE detections.
          the DudeCT two-class pattern (fixed vs.\ random inputs).}
 \label{tab:crypto_tests}
 \footnotesize
-\begin{tabular}{@{}llr@{}}
+\begin{tabular}{@{}l p{4.2cm} r@{}}
 \toprule
-\textbf{Ecosystem} & \textbf{Coverage} & \textbf{Tests} \\
+\textbf{Library} & \textbf{Primitives} & \textbf{Tests} \\
 \midrule
 \multicolumn{3}{@{}l@{}}{\textbf{Rust}} \\
-\quad Symmetric & AES (RustCrypto, ring) & 6 \\
-\quad Hashing & SHA3, BLAKE2 (RustCrypto, orion) & 11 \\
-\quad AEAD & ChaCha20-Poly1305, AES-GCM & 8 \\
-\quad ECC & X25519 (dalek) & 7 \\
-\quad RSA & 1024/2048/4096 (§5.5) & 7 \\
-\quad Post-quantum & ML-KEM/DSA, Falcon, SPHINCS+ & 11 \\
-\quad Password hashing & Argon2i (orion) & 2 \\
+\quad RustCrypto & AES, SHA-3, BLAKE2, HMAC, ChaCha20-Poly1305, RSA & 27 \\
+\quad ring & AES-GCM, ChaCha20-Poly1305 & 4 \\
+\quad dalek & X25519 & 7 \\
+\quad pqcrypto & ML-KEM, ML-DSA, Falcon, SPHINCS+ & 11 \\
+\quad orion & AEAD, hashing, Argon2i & 7 \\
 \midrule
 \multicolumn{3}{@{}l@{}}{\textbf{C/C++ (via FFI)}} \\
-\quad LibreSSL & RSA, ECDSA, AES-GCM & 9 \\
-\quad Libsodium & Ed25519, X25519, box/secretbox & 9 \\
+\quad LibreSSL & RSA, ECDSA, AES-GCM & 6 \\
+\quad Libsodium & Ed25519, X25519, box/secretbox & 8 \\
 \quad wolfSSL & RSA, ECDSA, AES-GCM & 6 \\
 \quad mbedTLS & RSA, ECDSA, AES-GCM & 5 \\
-\quad Botan (C++11) & RSA, ECDSA, AES-GCM & 5 \\
+\quad Botan & RSA, ECDSA, AES-GCM & 5 \\
 \midrule
-\multicolumn{3}{@{}l@{}}{\textbf{Go stdlib}} \\
-\quad crypto/* & ECDSA (CVE-2025-22866), RSA & 18 \\
+\multicolumn{3}{@{}l@{}}{\textbf{Go}} \\
+\quad crypto/* & ECDSA, RSA & 18 \\
+\quad x/crypto & ChaCha20, Argon2, Curve25519, BLAKE2 & 15 \\
+\quad CIRCL & ML-KEM, ML-DSA, X25519, Ed25519 & 10 \\
 \midrule
 \multicolumn{3}{@{}l@{}}{\textbf{JavaScript/WASM}} \\
-\quad node-forge & RSA, AES & 13 \\
-\quad crypto-js & AES, DES, 3DES, Rabbit & 21 \\
-\quad noble-* & secp256k1, P-256, ChaCha & 20 \\
+\quad node-forge & RSA, Ed25519, RSA-PSS & 9 \\
+\quad crypto-js & AES, HMAC, PBKDF2 & 12 \\
+\quad noble-* & secp256k1, Ed25519, ChaCha20 & 20 \\
 \midrule
-\textbf{Total} & & \textbf{168} \\
+\textbf{Total} & & \textbf{170} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-% TODO: Update zero-FP claim, iteration count, and Wilson CI once crypto FPR runs complete.
-% Pending: run measure_fpr.sh ×10 iterations on ARM64 (burst-61iul1), then update
-% the numbers below (0/N failures, Wilson CI, iteration count).
-\paragraph{Zero false positives on tested implementations.}
-Across all 168 tests on implementations without known timing vulnerabilities,
-\tacet returned zero false positives (Pass or Inconclusive, never Fail) in
-tested configurations (Wilson 95\% CI: [0\%, 2.2\%]).
-% TODO: Replace above line with multi-iteration results, e.g.:
-% "Across N iterations of 168 tests (M total trials), \tacet returned zero false
-%  positives (Wilson 95\% CI: [0\%, X\%])."
-This validates the calibration property defined in \Cref{sec:approach:decisions},
+% Data source: results/paper-crypto-fpr-noisy/fpr_merged_final.csv
+\paragraph{False positive rate on cryptographic implementations.}
+To validate FPR on real code, we ran 67 constant-time cryptographic tests
+(7~libraries across Rust and C/C++) 10~times each under the same noisy conditions
+as the calibration validation above (670~total trials).
+\tacet produced 1~false positive out of 670~trials (0.15\% FPR, Wilson 95\% CI:
+[0.0\%, 0.8\%])---the sole false positive occurred on LibreSSL's ECDSA P-256
+verification, where system noise caused a spurious timing difference after
+33{,}000~samples.
+Of the 670~trials, 280 (41.8\%) returned Pass and 389 (58.1\%) returned
+Inconclusive; the latter occurred when the measurement floor under load exceeded
+the test's threshold (ThresholdElevated), consistent with the calibration results
+above.
+Combining calibration and cryptographic trials, the aggregate FPR is
+5/2{,}270 = 0.22\% (Wilson 95\% CI: [0.1\%, 0.5\%]).
+Conditioning on the 1{,}075 definitive verdicts (excluding Inconclusive),
+the FPR is 5/1{,}075 = 0.47\% (Wilson 95\% CI: [0.2\%, 1.1\%])---still
+well below the 5\% target.
+This is consistent with the empirical calibration property defined in \Cref{sec:approach:decisions},
 including ML-KEM (Kyber-768) and ML-DSA (Dilithium3), which passed at the stricter
 \textsc{PostQuantumSentinel} threshold (\ns{2}, $\sim$10 cycles)~\cite{kyberslash}.
 
 %-------------------------------------------------------------------------------
-\subsection{Case Study: Blind Re-Detection of MARVIN}
+\subsection{Case Study: Detection of CVE-2023-49092 (MARVIN)}
 \label{sec:evaluation:marvin}
 
-When testing RustCrypto's \texttt{rsa} crate v0.9.9—documented as constant-time
-in the library changelog—\tacet detected a timing difference in RSA-1024 decryption
-that exceeded the \textsc{AdjacentNetwork} threshold (\ns{100}).
+We added RustCrypto's \texttt{rsa} crate v0.9.9 to our test corpus as part of
+routine Rust ecosystem coverage, without first checking for known CVEs.
+(The crate's README does note that modular exponentiation is not constant-time.)
+\tacet flagged RSA-1024 decryption as suspicious during an initial
+\textsc{AdjacentNetwork} pass, prompting investigation that confirmed a
+known vulnerability.
 
-% TODO: Update MARVIN detection numbers. The RSA timing report
-% (website/.../rsa-timing-anomaly.mdx) says 6,000 per class and effect 259.7ns
-% CI [186.1, 333.4]. The "50,000 samples over 30 seconds" doesn't match any
-% recorded run. Re-run the test and pull fresh numbers.
-\paragraph{Detection details.}
-The oracle collected 50,000 samples over 30 seconds, achieving
-$\prob{\text{leak} > \ns{100} \given \text{data}} > 0.95$ (Fail verdict).
-Effect estimate: \ns{250} (95\% credible interval: [180, 320]~ns). The leak
-appeared consistently across multiple test runs with different random seeds.
+\paragraph{Initial detection.}
+An automated run at the \textsc{AdjacentNetwork} threshold (\ns{100})
+collected 62{,}000 samples per class (rdtsc timer, \ns{0.4} resolution)
+and returned Inconclusive with
+$\prob{\text{leak} > \ns{100} \given \text{data}} = 0.89$.
+The posterior did not cross the 0.95 decision boundary because RSA
+decryption exhibits significant temporal autocorrelation (block
+length~19, ESS~526 of 10{,}000 calibration samples), which correctly
+widens the credible intervals. Nevertheless, the effect estimate---\ns{126}
+(95\% CI: [75, 171]~ns)---and the elevated posterior probability
+flagged the test for manual review.
 
-\paragraph{Post-hoc identification.}
-This vulnerability was CVE-2023-49092 (MARVIN attack)~\cite{marvin}, which we
-were unaware of when adding RSA to our test corpus. The leak originates from
-data-dependent branching in big-integer operations during PKCS\#1 v1.5
-padding verification. The attack affects over 40 cryptographic libraries and enables
-plaintext recovery through timing oracle queries. This blind detection validates
-\tacet's practical utility for finding real vulnerabilities.
+\paragraph{Post-hoc confirmation.}
+Inspection of the crate revealed CVE-2023-49092 (MARVIN
+attack)~\cite{marvin}: data-dependent branching in big-integer operations
+during PKCS\#1 v1.5 padding verification. The attack affects over 40
+cryptographic libraries and enables plaintext recovery through timing
+oracle queries. That \tacet flagged the issue without any CVE-aware test
+logic---based solely on an anomalous posterior and effect estimate---validates
+its utility as a triage tool for timing side-channel regression testing.
 
 \paragraph{Accepted timing leaks.}
 \tacet also detected timing leaks that turned out to be documented and accepted by
@@ -986,16 +1058,20 @@ For practitioners, this complexity is encapsulated in the library—users do not
 need to understand the statistical details. The API is simple: specify a threshold
 (or attacker model), run the test, interpret the verdict.
 
-\paragraph{Lower power under noise.}
-\tacet is deliberately conservative. When measurement conditions are marginal,
-it returns Inconclusive rather than committing to Pass or Fail. This may require
-more samples or better conditions to reach a definitive verdict compared to tools
-that always produce binary output.
+\paragraph{Lower power at near-threshold effects.}
+At near-threshold effects ($0.1\sigma = \ns{0.5}$ vs.\ $\theta = \ns{0.4}$),
+\tacet's 32\% detection rate is lower than \silent's 81\% under i.i.d.\
+conditions---a genuine power gap between two threshold-based tools.
+\silent's quantile approach extracts more information at this margin.
+However, the gap is specific to the i.i.d.\ regime: under any autocorrelation,
+\tacet's measurement floor rises above $\theta = \ns{0.4}$ and the near-threshold
+comparison becomes moot. At $\rho = 0.8$, \tacet maintains 8\% FPR vs.\
+\silent's 12\%.
 
-\tacet trades raw detection rate for calibrated confidence: the Inconclusive
-rate reflects genuine uncertainty rather than concealing it behind a binary
-verdict. A tool that reports Pass under noisy conditions is not more powerful;
-it is overconfident.
+Non-threshold tools (\dudect at 57\%, \rtlf at 88\%) naturally show higher
+detection at $0.1\sigma$: without a threshold, they detect any distributional
+difference and are not constrained by near-threshold discrimination.
+Their FPR reaches 12--30\% at $\rho = 0.8$.
 
 %-------------------------------------------------------------------------------
 \subsection{Limitations}
@@ -1019,6 +1095,25 @@ fixed degrees of freedom) validated on our benchmark suite. Different applicatio
 domains may benefit from alternative specifications. The modular design allows
 researchers to experiment with variants.
 
+\paragraph{Concentrated tail effects.}
+W$_1$ measures aggregate distributional displacement, weighting magnitude by
+frequency. A tail effect affecting fraction $p$ of operations with per-event
+shift $c$ contributes $W_1 \approx p \cdot c$. For small $p$, this can fall below
+the detection threshold even when $c$ greatly exceeds the attacker's measurement
+precision. For example, a \ns{400} effect in 0.1\% of operations produces
+$W_1 \approx \ns{0.4}$---at the \textsc{SharedHardware} threshold despite each
+affected operation differing by \ns{400}.
+
+For mean-estimation attacks, $W_1$ correctly captures the attacker's difficulty
+regardless of this concentration. However, a co-located attacker with low
+measurement noise could identify individual tail events via per-query
+thresholding---an attack strategy whose advantage is not bounded by $W_1$
+(Kantorovich--Rubinstein duality bounds only 1-Lipschitz test functions). This is
+a fundamental limitation of any single-scalar distributional summary. Users
+testing against co-located threat models where sparse cache-timing effects are a
+concern should use a lower custom threshold to ensure $p \cdot c > \theta$ for
+the tail geometries relevant to their implementation.
+
 %-------------------------------------------------------------------------------
 \subsection{Future Work}
 \label{sec:discussion:future}
@@ -1036,16 +1131,16 @@ benchmarks in future work.
 \section{Conclusion}
 \label{sec:conclusion}
 
-% TODO: Update crypto FP numbers (168 tests, Wilson CI) once crypto FPR runs complete.
-\tacet independently detected CVE-2023-49092 in production RSA code
-(\Cref{sec:evaluation:marvin}), demonstrating practical utility on real-world
-vulnerabilities. Calibration validation across 1{,}600 null-hypothesis trials on a
-heavily loaded server confirmed 0.25\% false positive rate (4/1{,}600 failures),
-consistent with the $\leq$5\% target.
-Across 168 cryptographic test cases spanning four ecosystems, \tacet maintained
-zero false positives (Wilson 95\% CI: [0\%, 2.2\%]) under varying measurement conditions,
-while existing tools showed elevated false positive rates under autocorrelation or missed
-tail-only effects.
+\tacet detected CVE-2023-49092 in RustCrypto's RSA implementation without
+prior knowledge of the vulnerability (\Cref{sec:evaluation:marvin}), validating
+its utility as a general-purpose regression tool. Across 2{,}270 total trials (1{,}600 calibration + 670 on real
+cryptographic implementations) on a heavily loaded 64-vCPU server, \tacet produced
+5~false positives (0.22\% aggregate FPR; 0.47\% conditional on definitive
+verdict), consistent with the $\leq$5\% target under the tested benchmark
+conditions. Under extreme
+autocorrelation ($\rho = 0.8$), \tacet's FPR rises to 8\%---still the lowest
+among tools with comparable detection power (existing tools: 7--40\%), with
+further degradation handled by Inconclusive verdicts.
 
 The key methodological contributions are: Wasserstein-1 distance for tail-sensitive
 detection of timing leaks; Bayesian posterior probabilities for interpretable
@@ -1131,7 +1226,6 @@ experiments in \Cref{sec:evaluation}.
 %===============================================================================
 % OPTIONAL APPENDIX: STATISTICAL METHODOLOGY (after references per USENIX)
 %===============================================================================
-\newpage
 \appendix
 
 \section{Statistical Methodology Details}

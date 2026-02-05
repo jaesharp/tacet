@@ -422,6 +422,15 @@ impl TimingOracle {
         self
     }
 
+    /// Set the bootstrap resampling method.
+    ///
+    /// `Joint` (default) preserves cross-class temporal dependencies.
+    /// `Stratified` resamples each class independently (for ablation only).
+    pub fn bootstrap_method(mut self, method: tacet_core::statistics::BootstrapMethod) -> Self {
+        self.config.bootstrap_method = method;
+        self
+    }
+
     /// Enable or disable CPU affinity pinning.
     ///
     /// When enabled (default), the measurement thread is pinned to its
@@ -593,13 +602,15 @@ impl TimingOracle {
     /// - `Fail`: Timing leak confirmed
     /// - `Inconclusive`: Cannot reach a definitive conclusion
     /// - `Unmeasurable`: Operation too fast to measure reliably
-    pub fn test<T, F1, F2, F>(self, inputs: InputPair<T, F1, F2>, mut operation: F) -> Outcome
+    pub fn test<T, F1, F2, F>(mut self, inputs: InputPair<T, F1, F2>, mut operation: F) -> Outcome
     where
         T: Clone + Hash,
         F1: FnMut() -> T,
         F2: FnMut() -> T,
         F: FnMut(&T),
     {
+        // Apply environment variable overrides (TO_CALIBRATION_SAMPLES, etc.)
+        self = self.from_env();
         let start_time = Instant::now();
 
         // Pin to current CPU to reduce migration noise (RAII - auto-restores on drop)
@@ -870,6 +881,7 @@ impl TimingOracle {
             skip_preflight,
             force_discrete_mode: self.config.force_discrete_mode,
             iact_method: self.config.iact_method,
+            bootstrap_method: self.config.bootstrap_method,
         };
 
         let calibration = match calibrate(
@@ -1669,6 +1681,7 @@ impl TimingOracle {
             timer_resolution_ns: 1.0, // Unknown for raw samples
             seed: self.config.measurement_seed.unwrap_or(DEFAULT_SEED),
             kl_min: 0.7,
+            bootstrap_method: self.config.bootstrap_method,
         };
 
         let result = analyze_single_pass(baseline_ns, test_ns, &config);

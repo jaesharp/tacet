@@ -137,6 +137,15 @@ fn main() {
         std::env::set_var("TIMING_ORACLE_QUIET", "1");
     }
 
+    // Parse bootstrap method from env var (for ablation studies)
+    let bootstrap_method = match std::env::var("TACET_BOOTSTRAP_METHOD")
+        .ok()
+        .as_deref()
+    {
+        Some("stratified") | Some("per-class") => tacet::BootstrapMethod::Stratified,
+        _ => tacet::BootstrapMethod::Joint,
+    };
+
     // Parse preset
     let mut config = match args.preset.to_lowercase().as_str() {
         "quick" => SweepConfig::quick(),
@@ -221,7 +230,7 @@ fn main() {
             // All tools for paper comparison
             // Uses R-based RTLF/SILENT (reference implementations) via persistent pools
             vec![
-                Box::new(TimingOracleAdapter::default()),
+                Box::new(TimingOracleAdapter::default().bootstrap_method(bootstrap_method)),
                 Box::new(DudectAdapter::default()),
                 Box::new(TimingTvlaAdapter::default()),
                 Box::new(KsTestAdapter::default()),
@@ -234,7 +243,7 @@ fn main() {
         } else if tool_list.to_lowercase() == "native" {
             // All native Rust tools (no external dependencies)
             vec![
-                Box::new(TimingOracleAdapter::default()),
+                Box::new(TimingOracleAdapter::default().bootstrap_method(bootstrap_method)),
                 Box::new(DudectAdapter::default()),
                 Box::new(TimingTvlaAdapter::default()),
                 Box::new(KsTestAdapter::default()),
@@ -246,13 +255,13 @@ fn main() {
         } else {
             tool_list
                 .split(',')
-                .filter_map(|s| create_tool(s.trim(), &r_pool, &python_pool))
+                .filter_map(|s| create_tool(s.trim(), &r_pool, &python_pool, bootstrap_method))
                 .collect()
         }
     } else {
         // Default: all tools (same as --tools all)
         vec![
-            Box::new(TimingOracleAdapter::default()),
+            Box::new(TimingOracleAdapter::default().bootstrap_method(bootstrap_method)),
             Box::new(DudectAdapter::default()),
             Box::new(TimingTvlaAdapter::default()),
             Box::new(KsTestAdapter::default()),
@@ -527,10 +536,13 @@ fn create_tool(
     name: &str,
     r_pool: &Arc<ProcessPool>,
     python_pool: &Arc<ProcessPool>,
+    bootstrap_method: tacet::BootstrapMethod,
 ) -> Option<Box<dyn ToolAdapter>> {
     match name.to_lowercase().as_str() {
         // Native adapters (always available)
-        "tacet" | "to" => Some(Box::new(TimingOracleAdapter::default())),
+        "tacet" | "to" => Some(Box::new(
+            TimingOracleAdapter::default().bootstrap_method(bootstrap_method),
+        )),
         "dudect" => Some(Box::new(DudectAdapter::default())),
         "timing-tvla" | "tvla" => Some(Box::new(TimingTvlaAdapter::default())),
         "ks-test" | "ks" => Some(Box::new(KsTestAdapter::default())),

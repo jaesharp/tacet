@@ -331,8 +331,9 @@ pub fn run_adaptive(
     // Pass requires both P < pass_threshold AND θ_eff ≤ θ_user + ε (v5.5)
     if posterior.leak_probability < config.pass_threshold {
         // Check if threshold is elevated beyond tolerance
+        // Spec §3.3.3: Recompute theta_eff = max(theta_user, theta_floor(n)) dynamically
         let theta_user = config.theta_ns;
-        let theta_eff = calibration.theta_eff;
+        let theta_eff = calibration.theta_eff_at(state.n_total(), theta_user);
         let theta_tick = calibration.theta_tick;
 
         if is_threshold_elevated(theta_eff, theta_user, theta_tick) {
@@ -342,7 +343,7 @@ pub fn run_adaptive(
                 theta_tick,
                 theta_user,
                 config.max_samples,
-                calibration.block_length, // v5.6: block_length for n_blocks computation
+                calibration.block_length,
             );
 
             return AdaptiveOutcome::ThresholdElevated {
@@ -518,8 +519,9 @@ pub fn adaptive_step(
     // Pass requires both P < pass_threshold AND θ_eff ≤ θ_user + ε (v5.5)
     if posterior.leak_probability < config.pass_threshold {
         // Check if threshold is elevated beyond tolerance
+        // Spec §3.3.3: Recompute theta_eff = max(theta_user, theta_floor(n)) dynamically
         let theta_user = config.theta_ns;
-        let theta_eff = calibration.theta_eff;
+        let theta_eff = calibration.theta_eff_at(state.n_total(), theta_user);
         let theta_tick = calibration.theta_tick;
 
         if is_threshold_elevated(theta_eff, theta_user, theta_tick) {
@@ -529,7 +531,7 @@ pub fn adaptive_step(
                 theta_tick,
                 theta_user,
                 config.max_samples,
-                calibration.block_length, // v5.6: block_length for n_blocks computation
+                calibration.block_length,
             );
 
             return Ok(Some(AdaptiveOutcome::ThresholdElevated {

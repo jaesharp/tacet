@@ -225,6 +225,33 @@ impl Calibration {
         }
     }
 
+    /// Compute the dynamic measurement floor at sample size n (spec §3.3.3).
+    ///
+    /// theta_floor(n) = max(theta_tick, c_floor / sqrt(n_blocks(n)))
+    ///
+    /// This decreases as sample size grows, reflecting improved measurement precision.
+    pub fn theta_floor_at(&self, n: usize) -> f64 {
+        let n_blocks = if self.block_length > 0 {
+            (n / self.block_length).max(1)
+        } else {
+            n.max(1)
+        };
+        libm::fmax(self.c_floor / (n_blocks as f64).sqrt(), self.theta_tick)
+    }
+
+    /// Compute the dynamic effective threshold at sample size n (spec §3.3.3).
+    ///
+    /// theta_eff(n) = max(theta_user, theta_floor(n))
+    ///
+    /// Implementations MUST recompute this after each batch during adaptive sampling.
+    pub fn theta_eff_at(&self, n: usize, theta_user: f64) -> f64 {
+        if theta_user > 0.0 {
+            libm::fmax(theta_user, self.theta_floor_at(n))
+        } else {
+            self.theta_floor_at(n)
+        }
+    }
+
     /// Compute effective sample size accounting for dependence (spec §3.3.2 v5.6).
     ///
     /// Under strong temporal dependence, n samples do not provide n independent observations.
@@ -323,6 +350,9 @@ pub struct CalibrationConfig {
 
     /// IACT computation method (PolitisWhite or GeyersIMS).
     pub iact_method: crate::types::IactMethod,
+
+    /// Bootstrap resampling method (Joint or Stratified).
+    pub bootstrap_method: crate::statistics::BootstrapMethod,
 }
 
 impl Default for CalibrationConfig {
@@ -337,6 +367,7 @@ impl Default for CalibrationConfig {
             skip_preflight: false,
             force_discrete_mode: false,
             iact_method: crate::types::IactMethod::default(),
+            bootstrap_method: crate::statistics::BootstrapMethod::default(),
         }
     }
 }
@@ -467,6 +498,7 @@ pub fn calibrate(
         config.bootstrap_iterations,
         config.seed,
         false, // is_fragile
+        config.bootstrap_method,
     );
 
     // Check variance validity (must be positive and finite)

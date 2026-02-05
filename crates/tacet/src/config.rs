@@ -214,6 +214,16 @@ pub struct Config {
     #[deprecated(since = "0.2.0", note = "Use time_budget instead")]
     pub max_duration_ms: Option<u64>,
 
+    /// Bootstrap resampling method.
+    ///
+    /// Controls how the block bootstrap preserves (or breaks) temporal
+    /// dependencies between measurement classes. `Joint` (default) resamples
+    /// the interleaved stream as one sequence; `Stratified` resamples each
+    /// class independently. Stratified is included for ablation only.
+    ///
+    /// Default: Joint.
+    pub bootstrap_method: tacet_core::statistics::BootstrapMethod,
+
     /// Optional deterministic seed for measurement randomness.
     ///
     /// When set, the measurement order (interleaving of classes) is
@@ -272,6 +282,7 @@ impl Default for Config {
 
             // Optional limits
             max_duration_ms: None,
+            bootstrap_method: tacet_core::statistics::BootstrapMethod::default(),
             measurement_seed: None,
             force_discrete_mode: false,
         }
