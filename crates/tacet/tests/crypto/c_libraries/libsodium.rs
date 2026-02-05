@@ -56,7 +56,7 @@ fn libsodium_ed25519_sign_constant_time() {
     sodiumoxide::init().expect("failed to initialize sodiumoxide");
 
     // Generate Ed25519 keypair
-    let (pk, sk) = ed25519::gen_keypair();
+    let (_pk, sk) = ed25519::gen_keypair();
 
     // Use zeros vs random pattern for message
     let inputs = InputPair::new(|| [0u8; 64], rand_bytes_64);
@@ -653,7 +653,7 @@ fn libsodium_crypto_secretbox_decrypt_constant_time() {
 fn libsodium_harness_sanity_check() {
     sodiumoxide::init().expect("failed to initialize sodiumoxide");
 
-    let (pk, sk) = ed25519::gen_keypair();
+    let (_pk, sk) = ed25519::gen_keypair();
 
     // Use identical message for both classes
     let fixed_msg = [0x42u8; 64];

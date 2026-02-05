@@ -5,7 +5,7 @@ from typing import Optional
 
 import pandas as pd
 
-from tacet_analysis.utils import DATA_DIR
+from tacet_analysis.utils import DATA_DIR, THOROUGH_DATA_DIR
 
 
 def load_benchmark_data(data_dir: Optional[Path] = None) -> pd.DataFrame:
@@ -177,3 +177,13 @@ def aggregate_by_tool_and_conditions(
     agg["inconclusive_rate"] = agg["n_inconclusive"] / agg["n_datasets"]
 
     return agg
+
+
+def load_thorough_data() -> pd.DataFrame:
+    """Load raw benchmark data from the thorough dataset (100 trials/condition)."""
+    return load_benchmark_data(data_dir=THOROUGH_DATA_DIR)
+
+
+def load_thorough_summary() -> pd.DataFrame:
+    """Load summary data from the thorough dataset (100 trials/condition)."""
+    return load_summary_data(data_dir=THOROUGH_DATA_DIR)

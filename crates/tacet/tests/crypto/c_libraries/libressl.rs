@@ -45,10 +45,6 @@ fn rand_bytes_64() -> [u8; 64] {
     arr
 }
 
-fn rand_bytes_vec(len: usize) -> Vec<u8> {
-    (0..len).map(|_| rand::random()).collect()
-}
-
 // ============================================================================
 // RSA PKCS#1 v1.5 Tests (Bleichenbacher-class, MARVIN)
 // ============================================================================
@@ -122,7 +118,7 @@ fn libressl_rsa_2048_pkcs1v15_decrypt_constant_time() {
             let mut decrypted = vec![0u8; 256];
             // PKCS#1 v1.5 padding - historical source of timing leaks
             let result = rsa.private_decrypt(ciphertext, &mut decrypted, Padding::PKCS1);
-            std::hint::black_box(result);
+            let _ = std::hint::black_box(result);
         });
 
     eprintln!("\n[libressl_rsa_2048_pkcs1v15_decrypt_constant_time]");
@@ -238,7 +234,7 @@ fn libressl_rsa_2048_oaep_decrypt_constant_time() {
             let rsa = private_key.rsa().unwrap();
             let mut decrypted = vec![0u8; 256];
             let result = rsa.private_decrypt(ciphertext, &mut decrypted, Padding::PKCS1_OAEP);
-            std::hint::black_box(result);
+            let _ = std::hint::black_box(result);
         });
 
     eprintln!("\n[libressl_rsa_2048_oaep_decrypt_constant_time]");
@@ -419,7 +415,7 @@ fn libressl_ecdsa_p256_verify_constant_time() {
             let mut verifier = Verifier::new(MessageDigest::sha256(), &public_key).unwrap();
             verifier.update(msg).unwrap();
             let result = verifier.verify(sig);
-            std::hint::black_box(result);
+            let _ = std::hint::black_box(result);
         });
 
     eprintln!("\n[libressl_ecdsa_p256_verify_constant_time]");
@@ -568,7 +564,7 @@ fn libressl_harness_sanity_check() {
             let rsa = private_key.rsa().unwrap();
             let mut decrypted = vec![0u8; 256];
             let result = rsa.private_decrypt(ciphertext, &mut decrypted, Padding::PKCS1);
-            std::hint::black_box(result);
+            let _ = std::hint::black_box(result);
         });
 
     eprintln!("\n[libressl_harness_sanity_check]");

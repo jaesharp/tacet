@@ -1,147 +1,157 @@
 fn main() {
-    // Configure library paths for FFI tests (mbedTLS, wolfSSL)
+    // Configure library paths for FFI tests.
+    // Each library is behind a feature gate so builds don't fail when the
+    // system library isn't installed.
 
-    // === mbedTLS Configuration ===
-    // First check environment variable
+    // === mbedTLS Configuration (feature: test-mbedtls) ===
+    if std::env::var("CARGO_FEATURE_TEST_MBEDTLS").is_ok() {
+        configure_mbedtls();
+    }
+
+    // === wolfSSL Configuration (feature: test-wolfssl) ===
+    if std::env::var("CARGO_FEATURE_TEST_WOLFSSL").is_ok() {
+        configure_wolfssl();
+    }
+
+    // === Botan Configuration (feature: test-botan) ===
+    if std::env::var("CARGO_FEATURE_TEST_BOTAN").is_ok() {
+        configure_botan();
+    }
+}
+
+fn configure_mbedtls() {
     if let Ok(mbedtls_dir) = std::env::var("MBEDTLS_DIR") {
         let lib_path = format!("{}/lib", mbedtls_dir);
         println!("cargo:rustc-link-search=native={}", lib_path);
         println!("cargo:warning=Using MBEDTLS_DIR: {}", mbedtls_dir);
-    } else {
-        // Try to find mbedTLS in Nix store
-        let nix_paths = [
-            "/nix/store/rjsl63znrgky1m4vayj5wilxc12kmdap-mbedtls-3.6.5",
-            "/nix/store/fbsg0k5w2ay1wb8dis00shbmnwfg3c54-mbedtls-3.6.5",
-            "/nix/store/yvdl3n3fn45zh1s5bpp5s0wsi6ni104z-mbedtls-3.6.5",
-            "/nix/store/w26jsicdj3l618k3lc2rgiy7a8jqryv4-mbedtls-3.6.5",
-            "/nix/store/0j8ydh92l9hdjibg5d24nasxzha9ibvr-mbedtls-3.6.5",
-        ];
+        return;
+    }
 
-        let mut found_mbedtls = false;
-        for path in &nix_paths {
-            if std::path::Path::new(path).exists() {
-                let lib_path = format!("{}/lib", path);
-                println!("cargo:rustc-link-search=native={}", lib_path);
-                println!("cargo:warning=Found mbedTLS at: {}", path);
-                found_mbedtls = true;
-                break;
+    // Try pkg-config first
+    if try_pkg_config("mbedcrypto", "mbedTLS") {
+        return;
+    }
+
+    // Scan Nix store for mbedTLS
+    if let Ok(entries) = std::fs::read_dir("/nix/store") {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            if name_str.contains("mbedtls-") && !name_str.contains(".drv") {
+                let lib_dir = entry.path().join("lib");
+                if lib_dir.join("libmbedcrypto.a").exists()
+                    || lib_dir.join("libmbedcrypto.so").exists()
+                    || lib_dir.join("libmbedcrypto.dylib").exists()
+                {
+                    println!("cargo:rustc-link-search=native={}", lib_dir.display());
+                    println!("cargo:warning=Found mbedTLS at: {}", entry.path().display());
+                    return;
+                }
             }
-        }
-
-        if !found_mbedtls {
-            println!("cargo:warning=mbedTLS not found in Nix store. Set MBEDTLS_DIR if needed.");
         }
     }
 
-    // === wolfSSL Configuration ===
-    // Check environment variable first
+    println!("cargo:warning=mbedTLS not found. Set MBEDTLS_DIR or install via your package manager.");
+}
+
+fn configure_wolfssl() {
     if let Ok(wolfssl_dir) = std::env::var("WOLFSSL_DIR") {
         let lib_path = format!("{}/lib", wolfssl_dir);
         println!("cargo:rustc-link-search=native={}", lib_path);
         println!("cargo:rustc-link-lib=wolfssl");
         println!("cargo:warning=Using WOLFSSL_DIR: {}", wolfssl_dir);
+        return;
+    }
+
+    // Try pkg-config first
+    if try_pkg_config("wolfssl", "wolfSSL") {
+        return;
+    }
+
+    // Try common library paths
+    let search_paths: &[&str] = if cfg!(target_os = "macos") {
+        &["/opt/homebrew/lib", "/usr/local/lib"]
     } else {
-        // Try Homebrew on macOS
-        #[cfg(target_os = "macos")]
-        {
-            let homebrew_paths = [
-                "/opt/homebrew/lib", // Apple Silicon
-                "/usr/local/lib",    // Intel
-            ];
+        &["/usr/lib", "/usr/local/lib", "/usr/lib/x86_64-linux-gnu"]
+    };
 
-            let mut found_wolfssl = false;
-            for path in &homebrew_paths {
-                let wolfssl_lib = format!("{}/libwolfssl.dylib", path);
-                if std::path::Path::new(&wolfssl_lib).exists() {
-                    println!("cargo:rustc-link-search=native={}", path);
-                    println!("cargo:rustc-link-lib=wolfssl");
-                    println!("cargo:warning=Found wolfSSL at: {}", path);
-                    found_wolfssl = true;
-                    break;
-                }
-            }
+    let lib_ext = if cfg!(target_os = "macos") {
+        "dylib"
+    } else {
+        "so"
+    };
 
-            if !found_wolfssl {
-                println!("cargo:warning=wolfSSL not found. Install with: brew install wolfssl");
-            }
-        }
-
-        // Try standard library paths on Linux
-        #[cfg(target_os = "linux")]
-        {
-            let linux_paths = ["/usr/lib", "/usr/local/lib", "/usr/lib/x86_64-linux-gnu"];
-
-            let mut found_wolfssl = false;
-            for path in &linux_paths {
-                let wolfssl_lib = format!("{}/libwolfssl.so", path);
-                if std::path::Path::new(&wolfssl_lib).exists() {
-                    println!("cargo:rustc-link-search=native={}", path);
-                    println!("cargo:rustc-link-lib=wolfssl");
-                    println!("cargo:warning=Found wolfSSL at: {}", path);
-                    found_wolfssl = true;
-                    break;
-                }
-            }
-
-            if !found_wolfssl {
-                println!("cargo:warning=wolfSSL not found. Install development package.");
-            }
+    for path in search_paths {
+        let lib_file = format!("{}/libwolfssl.{}", path, lib_ext);
+        if std::path::Path::new(&lib_file).exists() {
+            println!("cargo:rustc-link-search=native={}", path);
+            println!("cargo:rustc-link-lib=wolfssl");
+            println!("cargo:warning=Found wolfSSL at: {}", path);
+            return;
         }
     }
 
-    // === Botan Configuration ===
-    // Check environment variable first
+    println!("cargo:warning=wolfSSL not found. Set WOLFSSL_DIR or install via your package manager.");
+}
+
+fn configure_botan() {
     if let Ok(botan_dir) = std::env::var("BOTAN_DIR") {
         let lib_path = format!("{}/lib", botan_dir);
         println!("cargo:rustc-link-search=native={}", lib_path);
         println!("cargo:rustc-link-lib=botan-3");
         println!("cargo:warning=Using BOTAN_DIR: {}", botan_dir);
+        return;
+    }
+
+    // Try pkg-config first
+    if try_pkg_config("botan-3", "Botan") {
+        return;
+    }
+
+    // Try common library paths
+    let search_paths: &[&str] = if cfg!(target_os = "macos") {
+        &["/opt/homebrew/lib", "/usr/local/lib"]
     } else {
-        // Try Homebrew on macOS
-        #[cfg(target_os = "macos")]
-        {
-            let homebrew_paths = [
-                "/opt/homebrew/lib", // Apple Silicon
-                "/usr/local/lib",    // Intel
-            ];
+        &["/usr/lib", "/usr/local/lib", "/usr/lib/x86_64-linux-gnu"]
+    };
 
-            let mut found_botan = false;
-            for path in &homebrew_paths {
-                let botan_lib = format!("{}/libbotan-3.dylib", path);
-                if std::path::Path::new(&botan_lib).exists() {
-                    println!("cargo:rustc-link-search=native={}", path);
-                    println!("cargo:rustc-link-lib=botan-3");
-                    println!("cargo:warning=Found Botan at: {}", path);
-                    found_botan = true;
-                    break;
-                }
-            }
+    let lib_ext = if cfg!(target_os = "macos") {
+        "dylib"
+    } else {
+        "so"
+    };
 
-            if !found_botan {
-                println!("cargo:warning=Botan not found. Install with: brew install botan");
-            }
-        }
-
-        // Try standard library paths on Linux
-        #[cfg(target_os = "linux")]
-        {
-            let linux_paths = ["/usr/lib", "/usr/local/lib", "/usr/lib/x86_64-linux-gnu"];
-
-            let mut found_botan = false;
-            for path in &linux_paths {
-                let botan_lib = format!("{}/libbotan-3.so", path);
-                if std::path::Path::new(&botan_lib).exists() {
-                    println!("cargo:rustc-link-search=native={}", path);
-                    println!("cargo:rustc-link-lib=botan-3");
-                    println!("cargo:warning=Found Botan at: {}", path);
-                    found_botan = true;
-                    break;
-                }
-            }
-
-            if !found_botan {
-                println!("cargo:warning=Botan not found. Install development package.");
-            }
+    for path in search_paths {
+        let lib_file = format!("{}/libbotan-3.{}", path, lib_ext);
+        if std::path::Path::new(&lib_file).exists() {
+            println!("cargo:rustc-link-search=native={}", path);
+            println!("cargo:rustc-link-lib=botan-3");
+            println!("cargo:warning=Found Botan at: {}", path);
+            return;
         }
     }
+
+    println!("cargo:warning=Botan not found. Set BOTAN_DIR or install via your package manager.");
+}
+
+/// Try to use pkg-config to find a library. Returns true if successful.
+fn try_pkg_config(lib_name: &str, display_name: &str) -> bool {
+    let output = std::process::Command::new("pkg-config")
+        .args(["--libs-only-L", lib_name])
+        .output();
+
+    if let Ok(output) = output {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for flag in stdout.split_whitespace() {
+                if let Some(path) = flag.strip_prefix("-L") {
+                    println!("cargo:rustc-link-search=native={}", path);
+                }
+            }
+            println!("cargo:rustc-link-lib={}", lib_name);
+            println!("cargo:warning=Found {} via pkg-config", display_name);
+            return true;
+        }
+    }
+    false
 }

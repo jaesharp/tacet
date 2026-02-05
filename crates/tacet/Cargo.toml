@@ -121,6 +121,12 @@ power = []
 kperf = ["dep:kperf-rs"]  # libc is always available for CPU affinity
 perf = ["dep:perf_event2"]
 
+# C/C++ crypto library integration tests (require system libraries)
+# Enable these only when the corresponding library is installed.
+test-wolfssl = []   # Requires wolfSSL: brew install wolfssl (macOS) or system package (Linux)
+test-mbedtls = []   # Requires mbedTLS: available via Nix or system package
+test-botan = []     # Requires Botan 3: brew install botan (macOS) or system package (Linux)
+
 # EXPERIMENTAL: Zero-overhead mmap-based perf_event reads (ARM64 Linux, kernel ≥5.12)
 #
 # Provides ~7x faster measurements (300ns vs 2μs) but is UNRELIABLE on systems

@@ -102,6 +102,22 @@ TOOL_ORDER = [
     "mona",
 ]
 
+# Primary tools for paper figures (6 tools, cleaner plots)
+PRIMARY_TOOLS = ["tacet", "silent", "rtlf", "dudect", "timing-tvla", "tlsfuzzer"]
+
+# Distinctive color palette for 6 primary tools
+PRIMARY_TOOL_COLORS = {
+    "tacet": "#14b8a6",        # Teal (Tacet brand)
+    "silent": "#8b5cf6",       # Purple
+    "rtlf": "#3b82f6",         # Blue
+    "dudect": "#f59e0b",       # Amber
+    "timing-tvla": "#10b981",  # Emerald
+    "tlsfuzzer": "#6b7280",    # Gray
+}
+
+# Thorough dataset path (higher trial count, more effect sizes)
+THOROUGH_DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "thorough-w1-v7.1-all-tools"
+
 
 def setup_paper_style():
     """Configure matplotlib for paper figures (light background, technical typography)."""
