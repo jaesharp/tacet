@@ -55,16 +55,16 @@
 % Title (14pt bold per USENIX requirements)
 \title{\Large \bf Tacet: Reliable Timing Side-Channel Detection\\via Bayesian Inference}
 
-% Authors - ANONYMIZED for submission
-% Replace with actual author info for camera-ready
-\author{
-{\rm Anonymous}\\
-Anonymous Institution
-% Add more authors as needed:
-% \and
-% {\rm Second Author}\\
-% Second Institution
-}
+% Authors omitted for anonymous submission
+% Uncomment for camera-ready:
+% \author{
+% {\rm Your Name}\\
+% Your Institution
+% % Add co-authors:
+% % \and
+% % {\rm Second Author}\\
+% % Second Institution
+% }
 
 \maketitle
 
@@ -88,9 +88,9 @@ This three-way decision framework (Pass/Fail/Inconclusive) prevents false confid
 %
 \tacet uses Bayesian inference over the Wasserstein-1 (earth-mover) distance, outputting
 posterior probabilities $\prob{\text{leak} > \theta \given \text{data}}$ instead of p-values.
-This single metric captures both uniform timing shifts and rare tail effects, providing
-superior detection power for cache-timing attacks and other microarchitectural leaks
-that manifest as outliers in a small fraction of measurements.
+This single metric is sensitive to both uniform timing shifts and rare tail effects—important
+for detecting cache-timing attacks and other microarchitectural leaks that affect only a
+small fraction of measurements.
 The system handles autocorrelated measurements via block bootstrap, detects degraded
 conditions through quality gates, and tracks an explicit measurement floor.
 %
@@ -148,19 +148,18 @@ crosses a decision threshold (5\% or 95\%). When evidence is insufficient,
 quality gates detect this and return Inconclusive rather than guessing.
 
 \silent~\cite{silent} introduced an important insight: timing distributions should
-be compared via quantiles rather than means, capturing both uniform shifts (from branches)
-and tail effects (from cache behavior). However, their 9-quantile approach has a fundamental
-limitation for rare tail effects: when only a small fraction of samples exhibit the leak,
-the signal dilutes across 9 dimensions, making detection unreliable. We build on \silent's
-insight but use the Wasserstein-1 (W$_1$) distance—a single metric that captures the same
-distributional information with superior power for rare tail effects. Transporting outlier
-probability mass across the distribution makes rare leaks visible in a single metric
-without multiple-comparison corrections.
+be compared via quantiles rather than means to detect both uniform shifts (from branches)
+and tail effects (from cache behavior). However, when a leak affects only a small fraction
+of samples, the 9-quantile approach dilutes the signal across 9 dimensions. We build on
+\silent's insight but use the Wasserstein-1 (W$_1$) distance—a single metric that is more
+sensitive to rare tail effects. The W$_1$ distance measures how far probability mass must
+move to transform one distribution into another, so even rare outliers contribute visibly
+to the statistic.
 
-Our contributions beyond the W$_1$ statistic include: a robust Bayesian framework with
-calibrated three-way verdicts (Pass/Fail/Inconclusive), quality gates that detect
-degraded measurement conditions, and an explicit measurement floor that prevents
-claiming ``no leak'' when the system can't resolve effects at the requested threshold.
+Beyond the W$_1$ statistic, we contribute a Bayesian framework with calibrated three-way
+verdicts (Pass/Fail/Inconclusive), quality gates that detect degraded measurement conditions,
+and an explicit measurement floor that prevents claiming ``no leak'' when the system can't
+resolve effects at the requested threshold.
 
 %-------------------------------------------------------------------------------
 \subsection{Contributions}
@@ -361,12 +360,11 @@ Unlike binary pass/fail tools, \tacet outputs three possible verdicts:
           measurement conditions cannot support a reliable verdict.
 \end{itemize}
 
-This resolves a fundamental problem with binary tools: they conflate ``no leak
-above threshold'' with ``we couldn't tell.'' When \dudect reports ``Pass'' under
-noisy conditions, this may reflect genuine constant-time behavior or just
-insufficient statistical power. \tacet makes this explicit—Inconclusive means
-the test should be re-run under better conditions or with more samples, not that
-the implementation has no exploitable leak.
+Binary tools do not distinguish between ``no leak above threshold'' and ``insufficient
+evidence.'' When \dudect reports ``Pass'' under noisy conditions, this may reflect
+genuine constant-time behavior or just insufficient statistical power. \tacet makes
+this explicit—Inconclusive means the test should be re-run under better conditions
+or with more samples, not that the implementation is safe.
 
 For CI integration, this prevents flaky tests. Rather than randomly passing or
 failing based on environmental noise, \tacet returns Inconclusive when conditions
@@ -375,12 +373,11 @@ based on their security requirements.
 
 \paragraph{Example.}
 Suppose \tacet tests an AES implementation with threshold $\theta = 100$\,ns.
-After collecting 50,000 samples, it observes a maximum quantile difference of
-30\,ns. The posterior probability $\prob{\text{leak} > 100\text{ns} \given
-\text{data}} = 0.03$, well below the 5\% Pass threshold. Quality gates confirm:
-KL divergence is 1.4 nats (sufficient learning), no condition drift detected,
-and the measurement floor is 15\,ns (below $\theta$). \tacet returns
-\textsc{Pass}.
+After collecting 50,000 samples, it observes an effect magnitude of 30\,ns. The
+posterior probability $\prob{\text{leak} > 100\text{ns} \given \text{data}} = 0.03$,
+well below the 5\% Pass threshold. Quality gates confirm: KL divergence is 1.4 nats
+(sufficient learning), no condition drift detected, and the measurement floor is
+15\,ns (below $\theta$). \tacet returns \textsc{Pass}.
 
 %-------------------------------------------------------------------------------
 \subsection{Test Statistic: Wasserstein-1 Distance}
@@ -411,15 +408,16 @@ Timing leaks manifest in different patterns:
     \item \textbf{Tail effects} (cache-based): Upper quantiles shift more $\Rightarrow$ $W_1$ emphasizes tail transport
 \end{itemize}
 
-For rare tail effects (e.g., cache misses affecting a small fraction of measurements),
-W$_1$ provides superior detection power compared to quantile-based approaches. Transporting
-outlier probability mass across the full distance makes rare leaks visible in a single
-metric without multiple-comparison corrections.
+For rare tail effects (cache misses affecting a small fraction of measurements),
+W$_1$ is more sensitive than quantile-based approaches. Since W$_1$ measures the cost
+to transport probability mass, even rare outliers contribute proportionally to their
+distance from the baseline distribution—without needing to affect multiple quantiles
+or requiring corrections for multiple comparisons.
 
-\paragraph{Advantages over quantile methods.}
-\silent~\cite{silent} and \rtlf~\cite{rtlf} compare 9 quantiles or deciles, which dilutes
-signal when only upper quantiles are affected. W$_1$ uses all rank information, captures
-the transport cost directly, and avoids the 9-dimensional correlation structure.
+\paragraph{Comparison to quantile methods.}
+\silent~\cite{silent} and \rtlf~\cite{rtlf} compare 9 quantiles or deciles. When only
+upper quantiles differ, the signal dilutes across 9 dimensions. W$_1$ uses all rank
+information in a single scalar, avoiding the 9-dimensional correlation structure.
 
 %-------------------------------------------------------------------------------
 \subsection{Bayesian Inference}
@@ -756,10 +754,9 @@ Effect size estimates showed low bias: $<$4\% at the threshold and $<$2\% for
 effects $\geq$2$\times$ threshold, confirming accurate quantification.
 
 \paragraph{Tail effect detection.}
-A key advantage of W$_1$ distance over quantile-based methods is superior power for
-rare tail effects. We evaluated detection power for tail patterns where timing leaks
-affect only a small fraction of measurements---representative of cache-timing attacks
-where only cache misses reveal secrets.
+The W$_1$ distance is more sensitive to rare tail effects than quantile-based methods.
+We evaluated detection power when timing leaks affect only a small fraction of
+measurements—typical of cache-timing attacks where only cache misses reveal secrets.
 
 % TODO: Update with actual W$_1$ distance benchmark results once available
 % Figure showing power curves for tail effects (tacet vs SILENT vs dudect)
@@ -775,16 +772,14 @@ For tail effects affecting only the upper percentiles of the timing distribution
           as mean comparisons are insensitive to changes in distribution shape.
 \end{itemize}
 
-\textbf{Why quantile methods struggle.} For a leak affecting only upper percentiles,
-at most 1-2 of SILENT's 9 quantiles shift detectably. The maximum over 9 standardized
-differences dilutes the signal. In contrast, W$_1$ distance naturally emphasizes tail
-mass: transporting outlier probability across the distribution makes rare leaks
-visible in a single metric without multiple-comparison burden.
+For a leak affecting only upper percentiles, at most 1-2 of SILENT's 9 quantiles shift
+detectably. The maximum over 9 standardized differences dilutes this signal. W$_1$ distance
+measures how far each sorted sample must move, so outliers contribute proportionally to
+their distance—no multiple-comparison corrections needed.
 
-\textbf{Why this matters.} Cache timing attacks, speculative execution side-channels,
-and other microarchitectural leaks often manifest as rare outliers rather than uniform
-shifts. A tool that cannot detect rare tail effects cannot reliably catch real-world
-cache-timing vulnerabilities.
+Cache timing attacks, speculative execution side-channels, and other microarchitectural
+leaks often appear as rare outliers rather than uniform shifts. A tool that cannot detect
+rare tail effects will miss real-world cache-timing vulnerabilities.
 
 %-------------------------------------------------------------------------------
 \subsection{Crypto Library Validation}
@@ -940,8 +935,8 @@ benchmarks in future work.
 We present \tacet, a timing side-channel detection tool that provides calibrated
 verdicts. Unlike existing tools that output binary pass/fail decisions, \tacet
 explicitly reports when evidence is insufficient, returning Inconclusive rather
-than guessing. This is achieved through Bayesian inference over quantile differences,
-outputting interpretable posterior probabilities instead of p-values.
+than guessing. This is achieved through Bayesian inference over the Wasserstein-1
+distance, outputting interpretable posterior probabilities instead of p-values.
 
 Our evaluation shows that \tacet maintains calibrated verdicts across varying
 noise levels and autocorrelation conditions where existing tools produce unreliable

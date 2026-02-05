@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025/nixos.org) (preloaded format=pdflatex 1980.1.1)  5 FEB 2026 00:22
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2025/nixos.org) (preloaded format=pdflatex 1980.1.1)  5 FEB 2026 00:31
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -1039,6 +1039,9 @@ File: mt-msa.cfg 2006/02/04 v1.1 microtype config. file: AMS symbols (a) (RS)
 ex/microtype/mt-msb.cfg
 File: mt-msb.cfg 2005/06/01 v1.0 microtype config. file: AMS symbols (b) (RS)
 )
+
+LaTeX Warning: No \author given.
+
 LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <10> not available
 (Font)              Font shape `OT1/ptm/b/n' tried instead on input line 90.
 LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <7.4> not available
@@ -1055,24 +1058,24 @@ LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <6> not available
 
 
 ]
-Underfull \hbox (badness 3189) in paragraph at lines 191--195
+Underfull \hbox (badness 3189) in paragraph at lines 190--194
 []\T1/ptm/b/n/10 (+20) Comprehensive eval-u-a-tion\T1/ptm/m/n/10 (+20) : We eva
 l-u-ate \T1/ptm/m/sc/10 (+20) Tacet
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 213--217
+Underfull \hbox (badness 10000) in paragraph at lines 212--216
  []\T1/ptm/b/n/10 (+20) Remote net-work at-tack-ers.[] \T1/ptm/m/n/10 (+20) Tra
 -di-tional tim-ing at-
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 213--217
+Underfull \hbox (badness 10000) in paragraph at lines 212--216
 \T1/ptm/m/n/10 (+20) tacks over the in-ter-net face millisecond-level jit-ter.
  []
 
 
-Underfull \hbox (badness 1019) in paragraph at lines 213--217
+Underfull \hbox (badness 1019) in paragraph at lines 212--216
 \T1/ptm/m/n/10 (+20) Van Goethem et al. [[]13[]] showed that HTTP/2 re-quest
  []
 
@@ -1082,7 +1085,7 @@ Underfull \hbox (badness 1019) in paragraph at lines 213--217
 
 [2]
 LaTeX Font Info:    Trying to load font information for TS1+ptm on input line 3
-50.
+49.
 
 (/nix/store/b8rzk544rrx5vsf2y2filkk7r8jq7w74-texlive-2025-env-texmfdist/tex/lat
 ex/psnfss/ts1ptm.fd
@@ -1094,16 +1097,20 @@ File: ts1ptm.fd 2001/06/04 font definitions for TS1/ptm.
 [3]
 
 
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+
 
 [4]
 
+
+
+[5]
 Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             `pcr' (encoding: T1).
 (microtype)             For optimal results, create family-specific settings.
 (microtype)             See the microtype manual for details.
 
-
-[5]
 Underfull \hbox (badness 1199) in paragraph at lines 586--590
 []\T1/ptm/m/n/10 (+20) For cycle-level pre-ci-sion on ARM64, \T1/ptm/m/sc/10 (+
 20) Tacet \T1/ptm/m/n/10 (+20) op-tion-
@@ -1146,12 +1153,12 @@ put line 732.
 
 
 
-Overfull \hbox (15.09058pt too wide) in paragraph at lines 803--817
+Overfull \hbox (15.09058pt too wide) in paragraph at lines 800--814
  [][] 
  []
 
 
-Underfull \hbox (badness 2027) in paragraph at lines 825--833
+Underfull \hbox (badness 2027) in paragraph at lines 822--830
 \T1/ptm/m/n/10 (+20) test cor-pus, we tested im-ple-men-ta-tions doc-u-mented a
 s
  []
@@ -1167,13 +1174,13 @@ s
 
 
 [9 <./analysis/outputs/figures/heatmap_power.png>]
-Underfull \hbox (badness 1917) in paragraph at lines 982--987
+Underfull \hbox (badness 1917) in paragraph at lines 979--984
 \T1/ptm/b/n/10 (+20) Stakeholders. \T1/ptm/m/n/10 (+20) We iden-tify three pri-
 mary stake-hold-ers:
  []
 
 
-Overfull \hbox (19.38324pt too wide) in paragraph at lines 1021--1022
+Overfull \hbox (19.38324pt too wide) in paragraph at lines 1018--1019
 []\T1/ptm/b/n/10 (-20) Specification\T1/ptm/m/n/10 (-20) : \T1/pcr/m/n/10 websi
 te/.../reference/specification.md
  []
@@ -1209,11 +1216,11 @@ Package rerunfilecheck Info: File `paper.out' has not changed.
 (rerunfilecheck)             Checksum: 927E17E83CA3BA5C76F6846685688A5F;5130.
  ) 
 Here is how much of TeX's memory you used:
- 27254 strings out of 467890
- 502397 string characters out of 5410143
+ 27242 strings out of 467890
+ 502286 string characters out of 5410143
  900007 words of memory out of 5000000
- 54597 multiletter control sequences out of 15000+600000
- 747677 words of font info for 553 fonts, out of 8000000 for 9000
+ 54595 multiletter control sequences out of 15000+600000
+ 745099 words of font info for 547 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  102i,15n,131p,1002b,524s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </nix/store/b8rzk544rrx5vsf2y2filkk7r8jq7w74-texlive-2025-env-texmfdist/fonts
@@ -1232,10 +1239,10 @@ ix/store/b8rzk544rrx5vsf2y2filkk7r8jq7w74-texlive-2025-env-texmfdist/fonts/type
 filkk7r8jq7w74-texlive-2025-env-texmfdist/fonts/type1/urw/times/utmri8a.pfb></n
 ix/store/b8rzk544rrx5vsf2y2filkk7r8jq7w74-texlive-2025-env-texmfdist/fonts/type
 1/urw/zapfchan/uzcmi8a.pfb>
-Output written on paper.pdf (13 pages, 390202 bytes).
+Output written on paper.pdf (13 pages, 390083 bytes).
 PDF statistics:
  435 PDF objects out of 1000 (max. 8388607)
  390 compressed objects within 4 object streams
  152 named destinations out of 1000 (max. 500000)
- 113959 words of extra memory for PDF output out of 128383 (max. 10000000)
+ 109863 words of extra memory for PDF output out of 128383 (max. 10000000)
 

@@ -327,7 +327,7 @@ We collect timing samples from two classes:
 - **Fixed class (F)**: A specific input (e.g., all zeros)
 - **Random class (R)**: Randomly sampled inputs
 
-Rather than comparing means or individual quantiles, we measure the **Wasserstein-1 (W₁) distance** between the two timing distributions. The W₁ distance measures the minimum cost to transform one distribution into another, where cost is the amount of probability mass times the distance it must be moved.
+We measure the **Wasserstein-1 (W₁) distance** between the two timing distributions. The W₁ distance measures the minimum cost to transform one distribution into another, where cost is the amount of probability mass times the distance it must be moved.
 
 The test statistic is a **1D scalar** (in nanoseconds):
 
@@ -345,7 +345,7 @@ $$
 W_1^{\text{deb}} = \max\left(0, W_1(\text{Fixed}, \text{Random}) - \theta_{\text{floor}}\right)
 $$
 
-where $\theta_{\text{floor}}$ is the measurement noise floor (§3.3.3). This estimator is used only for display purposes to help users interpret the effect magnitude above measurement noise. Inference (§3.4) uses the raw W₁ distance without debiasing or clamping.
+where $\theta_{\text{floor}}$ is the measurement noise floor (§3.3.3). The debiased estimator provides a display-friendly interpretation of effect magnitude relative to measurement noise. Inference (§3.4) uses the raw W₁ distance.
 
 **Why W₁ distance?**
 
@@ -353,16 +353,16 @@ Timing leaks manifest in different ways:
 - **Uniform shift**: A different code path adds constant overhead → entire distribution shifts
 - **Tail effect**: Cache misses occur probabilistically → upper quantiles shift more
 
-The W₁ distance naturally captures both patterns in a single scalar metric:
+The W₁ distance captures both patterns in a single scalar metric:
 - For uniform shifts, W₁ ≈ shift magnitude (median difference)
 - For tail effects, W₁ emphasizes the tail differences
 - Mixed patterns are captured proportionally
 
-**Advantages over previous 9D quantile-difference approach (v6.0):**
-- **5-10× faster inference**: 1D Gibbs sampler converges much faster than 9D
-- **Better tail sensitivity**: Optimal transport weights distributional differences optimally
-- **Simpler interpretation**: Single distance in nanoseconds, not 9 correlated quantile differences
-- **Natural debiasing**: W₁ between identical distributions equals zero (unlike quantile differences which vary due to sampling)
+**W₁ properties:**
+- **Single metric**: Captures distributional differences in nanoseconds
+- **Optimal transport**: Weights differences by their quantile position
+- **Natural zero**: W₁ between identical distributions equals zero
+- **1D inference**: Enables fast Bayesian updating with simple conjugacy
 
 **W₁ computation:** Implementations MUST compute W₁ using the sorted-samples method for discrete distributions. See the [Implementation Guide](/reference/implementation-guide) for the algorithm.
 
@@ -458,7 +458,7 @@ Timing measurements exhibit autocorrelation: nearby samples are more similar tha
 
 **Variance rate (scalar):**
 
-The variance of the W₁ estimator scales as 1/n. We compute the **variance rate** (a scalar for the 1D W₁ distance):
+The variance of the W₁ estimator scales as 1/n. The **variance rate** is a scalar for the 1D W₁ distance:
 
 $$
 \text{var}_{\text{rate}} = \hat{\sigma}^2_{\text{cal}} \cdot n_{\text{cal}}
@@ -497,7 +497,7 @@ $$
 \text{var}_n = \frac{V_{\text{cal}}}{n}
 $$
 
-**No additional IACT scaling is applied** to the variance—the block bootstrap already accounts for autocorrelation. IACT estimates are computed and reported as diagnostics but do not affect inference.
+The block bootstrap accounts for autocorrelation in the variance estimate. IACT estimates are computed and reported as diagnostics but do not affect inference.
 
 #### 3.3.3 Measurement Floor and Effective Threshold
 
@@ -569,7 +569,7 @@ $$
 
 where $\nu$ is a fixed degrees-of-freedom parameter and $\sigma$ is a scale parameter calibrated to an exceedance target.
 
-The half-t prior is appropriate because W₁ distances are non-negative by definition. This is implemented via a scale mixture of Gaussians (see §3.4.3).
+W₁ distances are non-negative, so the prior is a half-t distribution (Student's t restricted to positive values). This is implemented via a scale mixture of Gaussians (see §3.4.3).
 
 **Degrees of freedom ($\nu$):**
 
@@ -585,9 +585,9 @@ $$
 
 This MUST be solved by deterministic 1D root-finding using Monte Carlo integration. See the [Implementation Guide](/reference/implementation-guide#7-prior-scale-calibration) for the algorithm.
 
-The prior is calibrated against $\theta_{\text{user}}$ (the user's threat-model threshold). The measurement floor $\theta_{\text{floor}}$ reflects measurement limitations and is handled separately in the decision logic (§3.3.3).
+The prior is calibrated against $\theta_{\text{user}}$ (the user's threat-model threshold). The measurement floor $\theta_{\text{floor}}$ is handled separately in the decision logic (§3.3.3).
 
-**Rationale:** The half-t prior with ν = 4 provides heavy tails (allowing for large effects when data supports them) while maintaining finite variance. Calibrating against the user threshold ensures the prior encodes security requirements rather than measurement constraints. The calibrated scale σ ensures genuine uncertainty: the prior is neither too informative (overly skeptical of leaks) nor too diffuse (vacuous).
+**Design properties:** The half-t with ν = 4 provides heavy tails while maintaining finite variance. The calibrated scale σ balances informativeness and flexibility: the prior is weakly informative (allowing data to dominate when signal is strong) without being vacuous.
 
 #### 3.3.5 Deterministic Seeding Policy
 
@@ -608,7 +608,7 @@ To ensure reproducible results, all random number generation MUST be determinist
 
 ### 3.4 Bayesian Model
 
-We use a half-t prior over the 1D W₁ distance, implemented via Gibbs sampling on the scale-mixture representation.
+The prior is a half-t distribution over the 1D W₁ distance, implemented via Gibbs sampling on the scale-mixture representation.
 
 #### 3.4.1 Latent Parameter
 
@@ -644,7 +644,7 @@ $$
 
 Implementations MUST use $\nu_{\ell}$ := 4.
 
-**Rationale:** When $\text{var}_n$ is underestimated (common when dependence is worse than calibration captured), $\kappa$ is pulled downward and inflates uncertainty automatically, preventing pathological certainty. Using ν_ℓ = 4 (matching the prior degrees of freedom) provides robust inference while maintaining consistency between prior and likelihood tail behavior.
+**Robustness mechanism:** When $\text{var}_n$ is underestimated, $\kappa$ is pulled downward and inflates uncertainty automatically. The parameter ν_ℓ = 4 matches the prior degrees of freedom, maintaining consistency in tail behavior between prior and likelihood.
 
 **Likelihood inflation warning:**
 
@@ -1117,11 +1117,11 @@ This release fixes inference semantics in the v7.0 W₁ implementation based on 
 
 - **Inference uses raw W₁ (§3.1):** Bayesian inference uses raw W₁ distance without debiasing or clamping. Debiased W₁ is computed only for display purposes to help users interpret effect magnitude above measurement noise.
 
-- **Floor from null distribution (§3.3.3):** Measurement floor $c_{\text{floor}}$ is calibrated from the 95th percentile of null W₁ replicates (via within-class splits) rather than heuristic formulas. This ensures correct Type I error control under the null hypothesis.
+- **Floor from null distribution (§3.3.3):** Measurement floor $c_{\text{floor}}$ is calibrated from the 95th percentile of null W₁ replicates (via within-class splits). This provides correct Type I error control under the null hypothesis.
 
 - **Block count terminology (Appendix A):** Variable $n_{\text{blocks}} = \max(1, \lfloor n / L \rfloor)$ replaces ambiguous $n_{\text{eff}}$ in floor calculations. Effective sample size $n_{\text{eff}} = n / \hat{\tau}$ remains for IACT-based diagnostics.
 
-- **Prior targets user threshold (§3.3.4):** Half-t prior scale $\sigma$ is calibrated so that $P(\delta > \theta_{\text{user}}) = \pi_0$, not $P(\delta > \theta_{\text{eff}})$. The prior encodes security requirements, not measurement limitations.
+- **Prior targets user threshold (§3.3.4):** Half-t prior scale $\sigma$ is calibrated so that $P(\delta > \theta_{\text{user}}) = \pi_0$. The prior encodes the user's security threshold.
 
 - **Robust likelihood (§3.4.2):** Student-t likelihood degrees of freedom changed from $\nu_{\ell} = 8$ to $\nu_{\ell} = 4$ (matching prior ν = 4) for consistency. Robustness parameter $\kappa \sim \text{Gamma}(\nu_{\ell}/2, \nu_{\ell}/2)$ guards against variance underestimation.
 
