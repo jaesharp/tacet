@@ -78,42 +78,47 @@ This adaptive approach:
 - **Gathers more evidence** when the signal is near the threshold
 - **Returns Inconclusive** when hitting resource limits or quality gates
 
-## Quantile-based statistics
+## Wasserstein distance
 
-Rather than comparing means (which can miss distributional differences), tacet compares **nine deciles** between baseline and sample classes:
+Rather than comparing means (which can miss distributional differences), tacet uses the **Wasserstein-1 distance** (also known as the earth mover's distance) to measure how different the timing distributions are:
 
 $$
-\begin{aligned}
-\text{Baseline:} \quad & [q_{10}, q_{20}, q_{30}, q_{40}, q_{50}, q_{60}, q_{70}, q_{80}, q_{90}] \\
-\text{Sample:} \quad & [q_{10}, q_{20}, q_{30}, q_{40}, q_{50}, q_{60}, q_{70}, q_{80}, q_{90}] \\[0.5em]
-& \Downarrow \\[0.5em]
-\text{Difference:} \quad & \boldsymbol{\Delta} \in \mathbb{R}^9
-\end{aligned}
+W_1(\text{baseline}, \text{sample}) = \frac{1}{n} \sum_{i=1}^{n} \left| x_{\text{baseline}}^{(i)} - x_{\text{sample}}^{(i)} \right|
 $$
 
-This captures two types of effects:
+where $x_{\text{baseline}}^{(i)}$ and $x_{\text{sample}}^{(i)}$ are the $i$-th smallest values from each class.
 
-- **Uniform shift**: All quantiles move by the same amount (e.g., different code path)
-- **Tail effect**: Upper quantiles move more than lower (e.g., cache misses)
+**Why W₁?** The Wasserstein-1 distance captures the "cost" of transforming one distribution into another via optimal transport. Unlike a simple mean comparison, it's sensitive to both location shifts and shape changes in the distribution.
 
 ### Effect decomposition
 
-The difference vector $\boldsymbol{\Delta}$ is projected onto an orthogonalized basis:
+The W₁ distance can be decomposed into two interpretable components:
 
 $$
-\boldsymbol{\Delta} = \mu \cdot \mathbf{1} + \tau \cdot \mathbf{v}_{\text{tail}} + \boldsymbol{\varepsilon}
+W_1 = |\text{shift}| + \text{tail}
 $$
 
-where $\mathbf{1} = [1,1,\ldots,1]^\top$ is the uniform vector and $\mathbf{v}_{\text{tail}}$ is a linear contrast vector $[-0.5, -0.375, \ldots, 0.375, 0.5]^\top$.
+where:
 
-- **$\mu$ (shift)**: Uniform component affecting all quantiles equally
-- **$\tau$ (tail)**: Linear component affecting upper quantiles more
-- **$\boldsymbol{\varepsilon}$**: Residual noise
+- **shift** = median of rank-matched differences $\{x_{\text{baseline}}^{(i)} - x_{\text{sample}}^{(i)}\}$
+- **tail** = mean of centered residuals $\left| (x_{\text{baseline}}^{(i)} - x_{\text{sample}}^{(i)}) - \text{shift} \right|$
+
+The **tail share** ratio distinguishes timing leak patterns:
+
+$$
+\text{tail\_share} = \frac{\text{tail}}{|\text{shift}| + \text{tail}}
+$$
+
+| Tail Share | Pattern | Likely cause |
+|------------|---------|--------------|
+| < 0.20 | **UniformShift** | Branch on secret data (all timings shift uniformly) |
+| 0.20–0.50 | **Mixed** | Multiple leak sources (branches + cache effects) |
+| > 0.50 | **TailEffect** | Data-dependent cache behavior (upper quantiles affected more) |
 
 This decomposition is useful because:
-- A pure **UniformShift** suggests a branch on secret data
-- A pure **TailEffect** suggests data-dependent cache behavior
-- **Mixed** patterns suggest multiple leak sources
+- A pure **UniformShift** suggests a conditional branch on secret data
+- A pure **TailEffect** suggests data-dependent cache misses or memory access patterns
+- **Mixed** patterns suggest multiple leak sources or complex microarchitectural effects
 
 ## Bayesian inference
 
@@ -130,24 +135,24 @@ We start by assuming "probably no leak":
 
 ### Likelihood
 
-Each batch of samples updates our belief. The likelihood tells us: "How probable is this data if the true effect is X?" We model timing differences using multivariate normal distributions.
+Each batch of samples updates our belief. The likelihood tells us: "How probable is this data if the true W₁ distance is δ?" We model the W₁ distance using a Student's t distribution with robust variance estimation to handle measurement uncertainty.
 
 ### Posterior
 
 After each batch, we combine our prior belief with the new evidence using Bayes' theorem:
 
 $$
-p(\boldsymbol{\theta} \mid \text{data}) \propto p(\text{data} \mid \boldsymbol{\theta}) \cdot p(\boldsymbol{\theta})
+p(\delta \mid \text{data}) \propto p(\text{data} \mid \delta) \cdot p(\delta)
 $$
 
-This gives us an updated probability distribution over possible effect sizes $\boldsymbol{\theta} = (\mu, \tau)$.
+This gives us an updated probability distribution over the true W₁ distance $\delta$.
 
 ### Decision
 
-We integrate the posterior to answer: "What's the probability that the effect exceeds the security threshold $\theta$?"
+We integrate the posterior to answer: "What's the probability that the W₁ distance exceeds the security threshold θ?"
 
 $$
-P(\text{leak}) = P\bigl(\|\boldsymbol{\Delta}\| > \theta \mid \text{all data}\bigr)
+P(\text{leak}) = P(\delta > \theta \mid \text{all data})
 $$
 
 | Probability | Decision |
@@ -198,12 +203,12 @@ Batching is disabled when:
 
 ## Block bootstrap
 
-Covariance estimation uses **circular block bootstrap** to account for potential autocorrelation in timing data:
+Variance estimation uses **circular block bootstrap** to account for potential autocorrelation in timing data:
 
 1. Divide samples into overlapping blocks of length $\ell \approx n^{1/3}$
 2. Resample blocks with replacement
-3. Compute quantile differences on resampled data
-4. Repeat $B = 2{,}000$ times to estimate covariance matrix $\hat{\Sigma}$
+3. Compute W₁ distance on resampled data
+4. Repeat $B = 2{,}000$ times to estimate variance $\hat{\sigma}^2$
 
 Block bootstrap handles short-range dependencies that might arise from CPU state, cache effects, or measurement overhead.
 

@@ -79,12 +79,12 @@ function stream_block_bootstrap(stream, block_length, n_iterations):
         F_star = [y for (c, y) in resampled_stream if c == Fixed]
         R_star = [y for (c, y) in resampled_stream if c == Random]
 
-        // Compute quantile differences
-        delta_star = quantiles(F_star) - quantiles(R_star)
-        delta_samples.append(delta_star)
+        // Compute W₁ distance
+        w1_star = wasserstein_1(F_star, R_star)
+        w1_samples.append(w1_star)
 
-    // Compute covariance using Welford's algorithm
-    return welford_covariance(delta_samples)
+    // Compute variance using Welford's algorithm
+    return welford_variance(w1_samples)
 ```
 
 ### 2.2 Politis-White Block Length Selection
@@ -165,22 +165,22 @@ if in_fragile_regime or rho_max[b_min] > 0.3:
     b_hat = ceil(1.5 * b_hat)  // or 2.0 for severe cases
 ```
 
-### 2.3 Welford's Online Covariance Algorithm
+### 2.3 Welford's Online Variance Algorithm
 
-For numerical stability when computing covariance from bootstrap samples:
+For numerical stability when computing variance from bootstrap samples:
 
 ```
-function welford_covariance(samples):
+function welford_variance(samples):
     n = 0
-    mean = zeros(d)
-    M2 = zeros(d, d)
+    mean = 0.0
+    M2 = 0.0
 
     for x in samples:
         n += 1
         delta = x - mean
         mean += delta / n
         delta2 = x - mean
-        M2 += outer(delta, delta2)
+        M2 += delta * delta2
 
     return M2 / (n - 1)
 ```
@@ -285,6 +285,8 @@ function timing_iact(stream):
 ***
 
 ## 4. Numerical Stability
+
+**Note:** With the v7.0 migration to 1D W₁ distance, most matrix operations are replaced by scalar operations. This section documents techniques that were used in the previous 9D implementation and remain useful for bootstrap covariance estimation and potential future extensions.
 
 ### 4.1 Cholesky Decomposition
 
@@ -404,102 +406,108 @@ function apply_diagonal_floor(Sigma):
 
 ## 5. Gibbs Sampler Implementation
 
-### 5.1 Sampling Without Explicit Inverses
+The Gibbs sampler for the 1D W₁ model samples from the joint posterior of (δ, λ, κ).
 
-The Gibbs sampler for (δ, λ, κ) requires careful numerical implementation.
+### 5.1 Conditional Distributions
 
-**Precomputation (once per n):**
+**Full conditionals (1D case):**
+
+1. **δ | λ, κ, Δ** ~ TruncatedNormal(μ_δ, σ²_δ) where δ ≥ 0
+   - Posterior variance: σ²_δ = 1 / (κ/σ²_n + λ/σ²)
+   - Posterior mean: μ_δ = σ²_δ · (κ·Δ/σ²_n)
+   - Truncated to [0, ∞) for half-normal prior
+
+2. **λ | δ** ~ Gamma(shape_λ, rate_λ)
+   - shape_λ = (ν + 1) / 2
+   - rate_λ = (ν + δ²/σ²) / 2
+
+3. **κ | δ, Δ** ~ Gamma(shape_κ, rate_κ)
+   - shape_κ = (ν_ℓ + 1) / 2
+   - rate_κ = (ν_ℓ + (Δ - δ)²/σ²_n) / 2
+
+where:
+- Δ = observed W₁ distance
+- σ²_n = variance estimate (scaled by n)
+- σ² = prior scale
+- ν = prior degrees of freedom (default: 4)
+- ν_ℓ = likelihood degrees of freedom (default: 4)
+
+### 5.2 Gibbs Iteration
 
 ```
-// Given: R (prior correlation), Sigma_n (likelihood covariance), sigma (prior scale)
-
-L_R = cholesky(R)
-L_Sigma = cholesky(Sigma_n)
-
-// Precompute Sigma_n^{-1} @ Delta via solve
-Sigma_inv_Delta = cholesky_solve(Sigma_n, Delta)
-```
-
-**Per-iteration sampling:**
-
-```
-function gibbs_iteration(delta, lambda, kappa,
-                         L_R, L_Sigma, Sigma_inv_Delta, Delta, sigma, nu, nu_ell):
-    d = length(delta)
-
+function gibbs_iteration(delta, lambda, kappa, Delta, sigma_n_sq, sigma_sq, nu, nu_ell):
     // --- Sample delta | lambda, kappa ---
 
-    // Q = kappa * Sigma_n^{-1} + (lambda / sigma^2) * R^{-1}
-    // We need to form Q and factor it
+    // Posterior precision and variance
+    prec_delta = kappa / sigma_n_sq + lambda / sigma_sq
+    var_delta = 1.0 / prec_delta
 
-    // Compute R^{-1} via L_R
-    R_inv = cholesky_inverse(L_R)  // or form implicitly
-    Sigma_inv = cholesky_inverse(L_Sigma)
+    // Posterior mean
+    mu_delta = var_delta * (kappa * Delta / sigma_n_sq)
 
-    Q = kappa * Sigma_inv + (lambda / sigma^2) * R_inv
-    L_Q = cholesky(Q)
-
-    // Posterior mean: mu = Q^{-1} @ (kappa * Sigma_n^{-1} @ Delta)
-    rhs = kappa * Sigma_inv_Delta
-    mu = cholesky_solve_from_factor(L_Q, rhs)
-
-    // Sample: delta = mu + L_Q^{-T} @ z
-    z = sample_standard_normal(d)
-    delta_new = mu + backward_solve(L_Q.T, z)
+    // Sample from truncated normal [0, ∞)
+    delta_new = sample_truncated_normal(mu_delta, var_delta, lower=0.0)
 
     // --- Sample lambda | delta ---
 
-    // q = delta^T @ R^{-1} @ delta
-    q = quadratic_form(R, delta_new)  // using L_R
-
-    shape_lambda = (nu + d) / 2
-    rate_lambda = (nu + q / sigma^2) / 2
+    shape_lambda = (nu + 1.0) / 2.0
+    rate_lambda = (nu + delta_new * delta_new / sigma_sq) / 2.0
     lambda_new = sample_gamma(shape_lambda, rate_lambda)
 
     // --- Sample kappa | delta, Delta ---
 
-    // s = (Delta - delta)^T @ Sigma_n^{-1} @ (Delta - delta)
-    residual = Delta - delta_new
-    s = quadratic_form(Sigma_n, residual)  // using L_Sigma
-
-    shape_kappa = (nu_ell + d) / 2
-    rate_kappa = (nu_ell + s) / 2
+    residual_sq = (Delta - delta_new) * (Delta - delta_new)
+    shape_kappa = (nu_ell + 1.0) / 2.0
+    rate_kappa = (nu_ell + residual_sq / sigma_n_sq) / 2.0
     kappa_new = sample_gamma(shape_kappa, rate_kappa)
 
     return delta_new, lambda_new, kappa_new
 ```
 
-### 5.2 Full Gibbs Sampler
+**Truncated normal sampling:**
 
 ```
-function run_gibbs(Delta, Sigma_n, R, sigma, nu=4, nu_ell=8,
-                   N_gibbs=256, N_burn=64, seed=0x74696D696E67):
+function sample_truncated_normal(mu, var, lower=0.0):
+    // Use inverse CDF method for half-normal (truncated at 0)
+    sigma = sqrt(var)
+
+    // CDF at lower bound in standard normal coordinates
+    alpha = (lower - mu) / sigma
+    Phi_alpha = normal_cdf(alpha)
+
+    // Sample uniform in [Phi_alpha, 1.0]
+    u = uniform(0, 1)
+    p = Phi_alpha + u * (1.0 - Phi_alpha)
+
+    // Inverse CDF
+    return mu + sigma * normal_quantile(p)
+```
+
+### 5.3 Full Gibbs Sampler
+
+```
+function run_gibbs(Delta, sigma_n_sq, sigma_sq, nu=4, nu_ell=4,
+                   N_gibbs=5000, N_burn=1000, seed=0x74696D696E67):
 
     set_rng_seed(seed)
-    d = length(Delta)
-
-    // Precomputation
-    L_R = cholesky(R)
-    L_Sigma = cholesky(Sigma_n)
-    Sigma_inv_Delta = cholesky_solve(Sigma_n, Delta)
 
     // Initialization
     lambda = 1.0
     kappa = 1.0
-    delta = zeros(d)
+    delta = 0.0  // Start at prior mode
 
-    // Storage
+    // Storage for retained samples
     delta_samples = []
     lambda_samples = []
     kappa_samples = []
 
-    // Iteration
+    // Gibbs iterations
     for t in 1..N_gibbs:
         delta, lambda, kappa = gibbs_iteration(
-            delta, lambda, kappa,
-            L_R, L_Sigma, Sigma_inv_Delta, Delta, sigma, nu, nu_ell
+            delta, lambda, kappa, Delta, sigma_n_sq, sigma_sq, nu, nu_ell
         )
 
+        // Retain samples after burn-in
         if t > N_burn:
             delta_samples.append(delta)
             lambda_samples.append(lambda)
@@ -507,6 +515,11 @@ function run_gibbs(Delta, Sigma_n, R, sigma, nu=4, nu_ell=8,
 
     return delta_samples, lambda_samples, kappa_samples
 ```
+
+**Normative parameters (from specification §3.4.4):**
+- N_gibbs = 5000 total iterations
+- N_burn = 1000 burn-in iterations (discarded)
+- N_keep = 4000 retained samples
 
 ***
 
@@ -559,23 +572,23 @@ function mid_distribution_quantile(sorted_x, p):
 
 ## 7. Prior Scale Calibration
 
+For the 1D half-t prior, the prior scale σ is calibrated so that P(δ > θ_user) = π₀ (default: 0.62).
+
 ### 7.1 Monte Carlo Exceedance Estimation
 
 ```
-function estimate_exceedance(sigma, R, theta_eff, nu=4, M=50000, seed):
+function estimate_exceedance(sigma, theta_user, nu=4, M=50000, seed):
     set_rng_seed(seed)
-    L_R = cholesky(R)
-    d = R.shape[0]
 
     exceed_count = 0
     for i in 1..M:
-        // Sample from Student's t via scale mixture
+        // Sample from half-t via scale mixture
         lambda = sample_gamma(nu/2, nu/2)
-        z = sample_standard_normal(d)
-        delta = (sigma / sqrt(lambda)) * (L_R @ z)
+        z = abs(sample_standard_normal())  // Half-normal: positive only
+        delta = (sigma / sqrt(lambda)) * z
 
         // Check exceedance
-        if max(abs(delta)) > theta_eff:
+        if delta > theta_user:
             exceed_count += 1
 
     return exceed_count / M
@@ -584,14 +597,14 @@ function estimate_exceedance(sigma, R, theta_eff, nu=4, M=50000, seed):
 ### 7.2 Root-Finding for σ
 
 ```
-function calibrate_prior_scale(R, theta_eff, SE_med, pi_0=0.62, nu=4, seed):
+function calibrate_prior_scale(theta_user, SE_med, pi_0=0.62, nu=4, seed):
     // Search bounds
-    sigma_lo = 0.05 * theta_eff
-    sigma_hi = max(50 * theta_eff, 10 * SE_med)
+    sigma_lo = 0.05 * theta_user
+    sigma_hi = max(50 * theta_user, 10 * SE_med)
 
     // Target function: f(sigma) = exceedance(sigma) - pi_0
     function f(sigma):
-        return estimate_exceedance(sigma, R, theta_eff, nu, seed=seed) - pi_0
+        return estimate_exceedance(sigma, theta_user, nu, seed=seed) - pi_0
 
     // Bisection (or Brent's method)
     tolerance = 0.001
@@ -624,7 +637,7 @@ function compute_leak_probability(delta_samples, theta_eff):
     exceed_count = 0
 
     for delta in delta_samples:
-        if max(abs(delta)) > theta_eff:
+        if delta > theta_eff:
             exceed_count += 1
 
     return exceed_count / N
@@ -633,41 +646,47 @@ function compute_leak_probability(delta_samples, theta_eff):
 ### 8.2 Posterior Summaries
 
 ```
-function compute_posterior_summaries(delta_samples, theta_eff):
+function compute_posterior_summaries(delta_samples, theta_eff, baseline_sorted, sample_sorted):
     N = length(delta_samples)
-    d = length(delta_samples[0])
 
-    // Posterior mean
-    delta_post = mean(delta_samples, axis=0)
+    // Posterior mean W₁ distance
+    delta_post = mean(delta_samples)
 
-    // Max effect samples
-    max_effects = [max(abs(delta)) for delta in delta_samples]
+    // Credible interval for δ
+    ci_lo = quantile(delta_samples, 0.025)
+    ci_hi = quantile(delta_samples, 0.975)
 
-    // Credible interval for max|δ|
-    ci_lo = quantile(max_effects, 0.025)
-    ci_hi = quantile(max_effects, 0.975)
+    // Compute shift and tail decomposition from observed data
+    n = length(baseline_sorted)
+    diff = [baseline_sorted[i] - sample_sorted[i] for i in 0..n]
 
-    // Top quantiles by exceedance probability
-    top_quantiles = []
-    for k in 0..d:
-        k_effects = [abs(delta[k]) for delta in delta_samples]
-        exceed_prob = mean([1 if e > theta_eff else 0 for e in k_effects])
+    shift = median(diff)
+    tail = mean([abs(d - shift) for d in diff])
+    tail_share = tail / (abs(shift) + tail)
 
-        top_quantiles.append({
-            quantile_p: 0.1 * (k + 1),  // 0.1, 0.2, ..., 0.9
-            mean_ns: mean(k_effects),
-            ci95_ns: (quantile(k_effects, 0.025), quantile(k_effects, 0.975)),
-            exceed_prob: exceed_prob
-        })
+    // Compute tail_slow_share from p95+ quantiles
+    p95_idx = ceil(0.95 * n)
+    tail_diffs = diff[p95_idx:]
+    tail_magnitude = sum([abs(d - shift) for d in tail_diffs])
+    tail_slow_magnitude = sum([max(0, d - shift) for d in tail_diffs])
+    tail_slow_share = tail_slow_magnitude / tail_magnitude if tail_magnitude > 0 else 0.5
 
-    // Sort by exceedance probability, take top 3
-    top_quantiles.sort(by=exceed_prob, descending=True)
+    // Pattern classification
+    if tail_share < 0.20:
+        pattern = "UniformShift"
+    else if tail_share < 0.50:
+        pattern = "Mixed"
+    else:
+        pattern = "TailEffect"
 
     return {
         delta_post: delta_post,
-        max_effect_ns: mean(max_effects),
         credible_interval_ns: (ci_lo, ci_hi),
-        top_quantiles: top_quantiles[:3]
+        shift_ns: shift,
+        tail_ns: tail,
+        tail_share: tail_share,
+        tail_slow_share: tail_slow_share,
+        pattern_label: pattern
     }
 ```
 
