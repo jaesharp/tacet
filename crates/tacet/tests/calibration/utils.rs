@@ -17,7 +17,7 @@ use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use tacet::Outcome;
+use tacet::{InconclusiveReason, Outcome};
 
 // Re-export effect injection from the shared module
 // These are used by other calibration test files via `mod calibration_utils;`
@@ -916,6 +916,14 @@ pub struct TrialRecord {
     pub ci_high_ns: Option<f64>,
     pub samples_per_class: Option<usize>,
     pub elapsed_ms: Option<u64>,
+    // Diagnostic columns for EDA
+    pub inconclusive_reason: Option<String>,
+    pub quality: Option<String>,
+    pub timer_name: Option<String>,
+    pub timer_resolution_ns: Option<f64>,
+    pub theta_user: Option<f64>,
+    pub theta_eff: Option<f64>,
+    pub theta_floor: Option<f64>,
 }
 
 impl TrialRecord {
@@ -928,49 +936,60 @@ impl TrialRecord {
         attacker_model: &str,
         outcome: &Outcome,
     ) -> Self {
-        let (decision, leak_probability, max_effect_ns, ci_low_ns, ci_high_ns, samples_used) =
+        // Extract common fields and diagnostic info from each variant
+        let (decision, leak_probability, max_effect_ns, ci_low_ns, ci_high_ns, samples_used,
+             inconclusive_reason, quality, diagnostics_opt, theta_user, theta_eff, theta_floor) =
             match outcome {
                 Outcome::Pass {
-                    leak_probability,
-                    effect,
-                    samples_used,
-                    ..
+                    leak_probability, effect, samples_used, quality, diagnostics,
+                    theta_user, theta_eff, theta_floor, ..
                 } => (
-                    "pass",
-                    Some(*leak_probability),
-                    Some(effect.max_effect_ns),
-                    Some(effect.credible_interval_ns.0),
-                    Some(effect.credible_interval_ns.1),
-                    Some(*samples_used),
+                    "pass", Some(*leak_probability),
+                    Some(effect.max_effect_ns), Some(effect.credible_interval_ns.0),
+                    Some(effect.credible_interval_ns.1), Some(*samples_used),
+                    None, Some(format!("{:?}", quality)), Some(diagnostics),
+                    Some(*theta_user), Some(*theta_eff), Some(*theta_floor),
                 ),
                 Outcome::Fail {
-                    leak_probability,
-                    effect,
-                    samples_used,
-                    ..
+                    leak_probability, effect, samples_used, quality, diagnostics,
+                    theta_user, theta_eff, theta_floor, ..
                 } => (
-                    "fail",
-                    Some(*leak_probability),
-                    Some(effect.max_effect_ns),
-                    Some(effect.credible_interval_ns.0),
-                    Some(effect.credible_interval_ns.1),
-                    Some(*samples_used),
+                    "fail", Some(*leak_probability),
+                    Some(effect.max_effect_ns), Some(effect.credible_interval_ns.0),
+                    Some(effect.credible_interval_ns.1), Some(*samples_used),
+                    None, Some(format!("{:?}", quality)), Some(diagnostics),
+                    Some(*theta_user), Some(*theta_eff), Some(*theta_floor),
                 ),
                 Outcome::Inconclusive {
-                    leak_probability,
-                    effect,
-                    samples_used,
-                    ..
-                } => (
-                    "inconclusive",
-                    Some(*leak_probability),
-                    Some(effect.max_effect_ns),
-                    Some(effect.credible_interval_ns.0),
-                    Some(effect.credible_interval_ns.1),
-                    Some(*samples_used),
+                    reason, leak_probability, effect, samples_used, quality, diagnostics,
+                    theta_user, theta_eff, theta_floor, ..
+                } => {
+                    // Extract short reason variant name
+                    let reason_name = match reason {
+                        InconclusiveReason::DataTooNoisy { .. } => "DataTooNoisy",
+                        InconclusiveReason::NotLearning { .. } => "NotLearning",
+                        InconclusiveReason::WouldTakeTooLong { .. } => "WouldTakeTooLong",
+                        InconclusiveReason::TimeBudgetExceeded { .. } => "TimeBudgetExceeded",
+                        InconclusiveReason::SampleBudgetExceeded { .. } => "SampleBudgetExceeded",
+                        InconclusiveReason::ConditionsChanged { .. } => "ConditionsChanged",
+                        InconclusiveReason::ThresholdElevated { .. } => "ThresholdElevated",
+                    };
+                    (
+                        "inconclusive", Some(*leak_probability),
+                        Some(effect.max_effect_ns), Some(effect.credible_interval_ns.0),
+                        Some(effect.credible_interval_ns.1), Some(*samples_used),
+                        Some(reason_name.to_string()), Some(format!("{:?}", quality)),
+                        Some(diagnostics), Some(*theta_user), Some(*theta_eff), Some(*theta_floor),
+                    )
+                },
+                Outcome::Unmeasurable { .. } => (
+                    "unmeasurable", None, None, None, None, None,
+                    None, None, None, None, None, None,
                 ),
-                Outcome::Unmeasurable { .. } => ("unmeasurable", None, None, None, None, None),
-                Outcome::Research(_) => ("research", None, None, None, None, None),
+                Outcome::Research(_) => (
+                    "research", None, None, None, None, None,
+                    None, None, None, None, None, None,
+                ),
             };
 
         Self {
@@ -985,19 +1004,26 @@ impl TrialRecord {
             ci_low_ns,
             ci_high_ns,
             samples_per_class: samples_used,
-            elapsed_ms: None, // Not available in Outcome
+            elapsed_ms: None,
+            inconclusive_reason,
+            quality,
+            timer_name: diagnostics_opt.map(|d| d.timer_name.clone()),
+            timer_resolution_ns: diagnostics_opt.map(|d| d.timer_resolution_ns),
+            theta_user,
+            theta_eff,
+            theta_floor,
         }
     }
 
     /// CSV header line.
     pub fn csv_header() -> &'static str {
-        "trial,test_name,test_type,injected_effect_ns,attacker_model,decision,leak_probability,max_effect_ns,ci_low_ns,ci_high_ns,samples_per_class,elapsed_ms"
+        "trial,test_name,test_type,injected_effect_ns,attacker_model,decision,leak_probability,max_effect_ns,ci_low_ns,ci_high_ns,samples_per_class,elapsed_ms,inconclusive_reason,quality,timer_name,timer_resolution_ns,theta_user,theta_eff,theta_floor"
     }
 
     /// Format as CSV line.
     pub fn to_csv(&self) -> String {
         format!(
-            "{},{},{},{},{},{},{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
             self.trial,
             self.test_name,
             self.test_type,
@@ -1015,6 +1041,17 @@ impl TrialRecord {
             self.samples_per_class
                 .map_or("".to_string(), |v| v.to_string()),
             self.elapsed_ms.map_or("".to_string(), |v| v.to_string()),
+            self.inconclusive_reason.as_deref().unwrap_or(""),
+            self.quality.as_deref().unwrap_or(""),
+            self.timer_name.as_deref().unwrap_or(""),
+            self.timer_resolution_ns
+                .map_or("".to_string(), |v| format!("{:.4}", v)),
+            self.theta_user
+                .map_or("".to_string(), |v| format!("{:.4}", v)),
+            self.theta_eff
+                .map_or("".to_string(), |v| format!("{:.4}", v)),
+            self.theta_floor
+                .map_or("".to_string(), |v| format!("{:.4}", v)),
         )
     }
 }

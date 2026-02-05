@@ -15,6 +15,7 @@ use crate::calibration_utils;
 #[allow(unused_imports)]
 use calibration_utils::{rand_bytes, CalibrationConfig, Decision, TimerBackend, TrialRunner};
 use tacet::helpers::InputPair;
+use sha3::Digest;
 use tacet::{AttackerModel, TimingOracle};
 
 // =============================================================================
@@ -345,10 +346,11 @@ fn fpr_validation_per_attacker_model() {
                 .max_samples(config.samples_per_trial)
                 .time_budget(config.time_budget_per_trial)
                 .test(inputs, |data| {
-                    // Do a measurable operation - XOR all bytes to produce a single result
-                    // This is constant-time and identical for both classes
-                    let result: u8 = data.iter().fold(0u8, |acc, &b| acc ^ b);
-                    std::hint::black_box(result);
+                    // SHA3-256: constant-time hash, ~200-500ns per call
+                    // Gives the oracle enough signal to reach Pass/Fail decisions
+                    // even at tight thresholds (SharedHardware 0.4ns)
+                    let hash = sha3::Sha3_256::digest(data);
+                    std::hint::black_box(hash[0]);
                 });
 
             runner.record(&outcome);
