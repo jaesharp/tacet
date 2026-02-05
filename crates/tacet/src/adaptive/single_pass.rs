@@ -25,7 +25,7 @@
 use std::time::{Duration, Instant};
 
 use tacet_core::adaptive::{
-    calibrate_halft_prior_scale_1d, compute_achievable_at_max, compute_c_floor_1d,
+    calibrate_floor_from_null, calibrate_halft_prior_scale_1d, compute_achievable_at_max,
     is_threshold_elevated,
 };
 use tacet_core::analysis::{compute_effect_estimate, estimate_mde};
@@ -241,12 +241,14 @@ pub fn analyze_single_pass(
     // Step 4: Compute variance rate and measurement floor (spec §3.3.4)
     // var_rate = variance * n (variance scales as 1/n)
     let var_rate = variance * (n as f64);
+    let block_length = var_estimate.block_size;
 
-    // Compute c_floor: 95th percentile of |Z| where Z ~ N(0, var_rate)
-    let c_floor = compute_c_floor_1d(var_rate, config.seed);
+    // Compute c_floor from null distribution
+    let c_floor = calibrate_floor_from_null(&interleaved, block_length, config.bootstrap_iterations, config.seed);
 
-    // Statistical floor: c_floor / √n
-    let theta_floor_stat = c_floor / (n as f64).sqrt();
+    // Statistical floor: c_floor / √n_blocks
+    let n_blocks = if block_length > 0 { (n / block_length).max(1) } else { n.max(1) };
+    let theta_floor_stat = c_floor / (n_blocks as f64).sqrt();
 
     // Timer tick floor (spec §3.3.4)
     let theta_tick = config.timer_resolution_ns;
@@ -343,8 +345,6 @@ pub fn analyze_single_pass(
     }
 
     // Build diagnostics
-    // Use block_size from variance estimation (spec §3.3.2 compliant)
-    let block_length = var_estimate.block_size;
     let diagnostics = Diagnostics {
         dependence_length: block_length,
         effective_sample_size: n / block_length.max(1),

@@ -69,7 +69,7 @@ use std::ptr;
 use std::slice;
 
 use tacet_core::adaptive::{
-    calibrate_halft_prior_scale_1d, compute_c_floor_1d, AdaptiveState, AdaptiveStepConfig,
+    calibrate_floor_from_null, calibrate_halft_prior_scale_1d, AdaptiveState, AdaptiveStepConfig,
     Calibration, CalibrationSnapshot, StepResult,
 };
 use tacet_core::analysis::compute_bayes_1d;
@@ -372,8 +372,8 @@ pub unsafe extern "C" fn to_calibrate(
     let var_rate = var_estimate.variance * count as f64; // Convert to rate: var_rate = var_cal * n_cal
     let block_length = var_estimate.block_size;
 
-    // Compute c_floor for theta_floor estimation
-    let c_floor = compute_c_floor_1d(var_rate, seed);
+    // Compute c_floor from null distribution
+    let c_floor = calibrate_floor_from_null(&interleaved, block_length, DEFAULT_BOOTSTRAP_ITERATIONS, seed);
 
     // Compute initial theta_floor
     let n_blocks = (count / block_length).max(1);
@@ -957,7 +957,7 @@ pub unsafe extern "C" fn to_analyze(
     let block_length = var_estimate.block_size;
 
     // Compute theta_eff
-    let c_floor = compute_c_floor_1d(var_rate, seed);
+    let c_floor = calibrate_floor_from_null(&interleaved, block_length, DEFAULT_BOOTSTRAP_ITERATIONS, seed);
     let n_blocks = (count / block_length).max(1);
     let theta_floor = (c_floor / (n_blocks as f64).sqrt()).max(ns_per_tick);
     let theta_eff = theta_ns.max(theta_floor);
