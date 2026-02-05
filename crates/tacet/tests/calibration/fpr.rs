@@ -300,7 +300,10 @@ fn fpr_validation_per_attacker_model() {
         ("RemoteNetwork", AttackerModel::RemoteNetwork),
     ];
 
-    let trials_per_model = 200;
+    let trials_per_model: usize = std::env::var("FPR_TRIALS_PER_MODEL")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(200);
 
     for (model_name, attacker_model) in attacker_models {
         // Skip tight thresholds without cycle-accurate timer

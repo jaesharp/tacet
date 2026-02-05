@@ -1,159 +1,124 @@
 #!/usr/bin/env bash
-# Measure False Positive Rate (FPR) across all crypto library tests
+# Measure False Positive Rate (FPR) across all Rust crypto library tests
 #
-# Usage: ./measure_fpr.sh [iterations] [output_file]
+# Usage: ./scripts/measure_fpr.sh [iterations] [output_file]
 #
-# This script runs all crypto library tests N times and collects outcomes
-# to calculate the empirical false positive rate. All tests are on implementations
-# WITHOUT known timing vulnerabilities, so any Fail outcome is a false positive.
+# Dynamically discovers all tests in the crypto binary, filters out
+# sanity checks, and runs each test N times to compute empirical FPR.
+# All included tests are on constant-time implementations, so any
+# Fail outcome is a false positive.
+#
+# Requires: cargo build --release -p tacet --test crypto
 
 set -euo pipefail
 
-ITERATIONS="${1:-10}"  # Default: 10 iterations
+ITERATIONS="${1:-10}"
 OUTPUT_FILE="${2:-fpr_results_$(date +%Y%m%d_%H%M%S).csv}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEST_BINARY="$REPO_ROOT/target/debug/deps/crypto-1de28dece211c887"
 
 # Color output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-log() {
-    echo -e "${BLUE}[$(date +%H:%M:%S)]${NC} $*"
+log()         { echo -e "${BLUE}[$(date +%H:%M:%S)]${NC} $*"; }
+log_success() { echo -e "${GREEN}[$(date +%H:%M:%S)]${NC} $*"; }
+log_warn()    { echo -e "${YELLOW}[$(date +%H:%M:%S)]${NC} $*"; }
+log_error()   { echo -e "${RED}[$(date +%H:%M:%S)]${NC} $*"; }
+
+# Find the release crypto test binary dynamically
+find_test_binary() {
+    local bin
+    bin=$(find "$REPO_ROOT/target/release/deps" -name 'crypto-*' -type f -executable -not -name '*.d' 2>/dev/null | head -1)
+    if [[ -z "$bin" ]]; then
+        log_error "No crypto test binary found in target/release/deps/"
+        log_error "Build first: cargo build --release -p tacet --test crypto"
+        exit 1
+    fi
+    echo "$bin"
 }
 
-log_success() {
-    echo -e "${GREEN}[$(date +%H:%M:%S)]${NC} $*"
+# Discover all tests, filtering out sanity checks
+discover_tests() {
+    local binary="$1"
+    "$binary" --list 2>/dev/null \
+        | grep ': test$' \
+        | sed 's/: test$//' \
+        | grep -v 'sanity_check'
 }
 
-log_warn() {
-    echo -e "${YELLOW}[$(date +%H:%M:%S)]${NC} $*"
+# Extract library name from test path (e.g., "rustcrypto::aes::foo" → "RustCrypto")
+extract_library() {
+    local test_name="$1"
+    local prefix
+    prefix=$(echo "$test_name" | cut -d: -f1)
+    case "$prefix" in
+        rustcrypto)       echo "RustCrypto" ;;
+        ring)             echo "ring" ;;
+        dalek)            echo "dalek" ;;
+        pqcrypto)         echo "pqcrypto" ;;
+        rust_libraries)   echo "$(echo "$test_name" | cut -d: -f3)" ;;  # e.g., orion
+        c_libraries)      echo "$(echo "$test_name" | cut -d: -f3)" ;;  # e.g., libressl
+        *)                echo "$prefix" ;;
+    esac
 }
 
-log_error() {
-    echo -e "${RED}[$(date +%H:%M:%S)]${NC} $*"
+# Extract ecosystem from test path
+extract_ecosystem() {
+    local test_name="$1"
+    local prefix
+    prefix=$(echo "$test_name" | cut -d: -f1)
+    case "$prefix" in
+        c_libraries)  echo "C/C++" ;;
+        *)            echo "Rust" ;;
+    esac
 }
 
-# Initialize CSV file
+# Parse outcome from test output (portable, no PCRE)
+parse_outcome() {
+    local output="$1"
+    local exit_code="$2"
+    local outcome="UNKNOWN"
+    local leak_prob="0.0"
+    local samples="0"
+
+    # Check for each outcome in priority order
+    if echo "$output" | grep -q "Test passed:"; then
+        outcome="PASS"
+    elif echo "$output" | grep -q "test result:.*FAILED\|FAILED\|panicked"; then
+        outcome="FAIL"
+    elif echo "$output" | grep -q "Inconclusive:"; then
+        outcome="INCONCLUSIVE"
+    elif echo "$output" | grep -q "Skipping:\|Unmeasurable:"; then
+        outcome="SKIP"
+    elif [[ "$exit_code" -ne 0 ]]; then
+        outcome="FAIL"
+    fi
+
+    # Extract P(leak) — portable alternative to grep -oP
+    leak_prob=$(echo "$output" | grep -o 'P(leak)=[0-9.]*%' | head -1 | sed 's/P(leak)=//;s/%//' || echo "0.0")
+    if [[ -z "$leak_prob" ]]; then
+        leak_prob="0.0"
+    fi
+
+    # Extract samples
+    samples=$(echo "$output" | grep -o 'Samples: [0-9]*' | head -1 | sed 's/Samples: //' || echo "0")
+    if [[ -z "$samples" ]]; then
+        samples="0"
+    fi
+
+    echo "$outcome,$leak_prob,$samples"
+}
+
+# Initialize CSV
 init_csv() {
     echo "ecosystem,library,test_name,iteration,outcome,leak_probability,samples,elapsed_sec,timestamp" > "$OUTPUT_FILE"
     log "Initialized output file: $OUTPUT_FILE"
 }
 
-# Parse Rust test output
-parse_rust_outcome() {
-    local output="$1"
-    local outcome="UNKNOWN"
-    local leak_prob="0.0"
-    local samples="0"
-
-    if echo "$output" | grep -q "test result: ok"; then
-        outcome="PASS"
-    elif echo "$output" | grep -q "FAIL.*timing leak"; then
-        outcome="FAIL"
-        # Try to extract leak probability
-        leak_prob=$(echo "$output" | grep -oP "P\(leak\)=\K[0-9.]+%" | head -1 | sed 's/%//' || echo "100.0")
-    elif echo "$output" | grep -q "inconclusive\|Inconclusive"; then
-        outcome="INCONCLUSIVE"
-        leak_prob=$(echo "$output" | grep -oP "P\(leak\)=\K[0-9.]+%" | head -1 | sed 's/%//' || echo "0.0")
-    elif echo "$output" | grep -q "SKIPPED\|skipped"; then
-        outcome="SKIP"
-    fi
-
-    # Extract samples if available
-    samples=$(echo "$output" | grep -oP "samples[_:= ]+\K[0-9]+" | head -1 || echo "0")
-
-    echo "$outcome,$leak_prob,$samples"
-}
-
-# Run a Rust test N times
-run_rust_test() {
-    local test_pattern="$1"
-    local test_name="$2"
-    local library="$3"
-
-    log "Running Rust test: $library / $test_name"
-
-    for ((i=1; i<=ITERATIONS; i++)); do
-        log "  Iteration $i/$ITERATIONS..."
-
-        local start_time=$(date +%s)
-        local output
-        local exit_code=0
-
-        # Run test and capture output (using pre-built binary)
-        output=$(cd "$REPO_ROOT" && sudo -E "$TEST_BINARY" "$test_pattern" --nocapture --test-threads=1 2>&1) || exit_code=$?
-
-        local elapsed=$(($(date +%s) - start_time))
-        local timestamp=$(date -Iseconds)
-
-        # Parse outcome
-        local parsed
-        parsed=$(parse_rust_outcome "$output")
-        local outcome=$(echo "$parsed" | cut -d, -f1)
-        local leak_prob=$(echo "$parsed" | cut -d, -f2)
-        local samples=$(echo "$parsed" | cut -d, -f3)
-
-        # Log result
-        if [[ "$outcome" == "FAIL" ]]; then
-            log_error "    → FAIL (P=$leak_prob%)"
-        elif [[ "$outcome" == "PASS" ]]; then
-            log_success "    → PASS"
-        else
-            log_warn "    → $outcome"
-        fi
-
-        # Write to CSV
-        echo "Rust,$library,$test_name,$i,$outcome,$leak_prob,$samples,$elapsed,$timestamp" >> "$OUTPUT_FILE"
-    done
-}
-
-# Run JavaScript/WASM test N times
-run_js_test() {
-    local test_pattern="$1"
-    local test_name="$2"
-    local library="$3"
-
-    log "Running JS test: $library / $test_name"
-
-    for ((i=1; i<=ITERATIONS; i++)); do
-        log "  Iteration $i/$ITERATIONS..."
-
-        local start_time=$(date +%s)
-        local output
-        local exit_code=0
-
-        # Run test and capture output
-        output=$(cd "$REPO_ROOT/crates/tacet-wasm" && bun test --timeout 300000 "$test_pattern" 2>&1) || exit_code=$?
-
-        local elapsed=$(($(date +%s) - start_time))
-        local timestamp=$(date -Iseconds)
-
-        # Parse outcome (similar to Rust)
-        local parsed
-        parsed=$(parse_rust_outcome "$output")
-        local outcome=$(echo "$parsed" | cut -d, -f1)
-        local leak_prob=$(echo "$parsed" | cut -d, -f2)
-        local samples=$(echo "$parsed" | cut -d, -f3)
-
-        # Log result
-        if [[ "$outcome" == "FAIL" ]]; then
-            log_error "    → FAIL (P=$leak_prob%)"
-        elif [[ "$outcome" == "PASS" ]]; then
-            log_success "    → PASS"
-        else
-            log_warn "    → $outcome"
-        fi
-
-        # Write to CSV
-        echo "JavaScript,$library,$test_name,$i,$outcome,$leak_prob,$samples,$elapsed,$timestamp" >> "$OUTPUT_FILE"
-    done
-}
-
-# Generate summary report
+# Generate summary report with Wilson CIs
 generate_report() {
     log ""
     log "=========================================="
@@ -163,48 +128,39 @@ generate_report() {
     log "Output file: $OUTPUT_FILE"
     log ""
 
-    # Count outcomes by ecosystem
-    local total_runs=$(grep -v "^ecosystem," "$OUTPUT_FILE" | wc -l)
-    local pass_count=$(grep -c ",PASS," "$OUTPUT_FILE" || echo 0)
-    local fail_count=$(grep -c ",FAIL," "$OUTPUT_FILE" || echo 0)
-    local inconclusive_count=$(grep -c ",INCONCLUSIVE," "$OUTPUT_FILE" || echo 0)
-    local skip_count=$(grep -c ",SKIP," "$OUTPUT_FILE" || echo 0)
-    local unknown_count=$(grep -c ",UNKNOWN," "$OUTPUT_FILE" || echo 0)
+    local total_runs pass_count fail_count inconclusive_count skip_count unknown_count
+    total_runs=$(tail -n +2 "$OUTPUT_FILE" | wc -l | tr -d ' ')
+    pass_count=$(grep -c ",PASS," "$OUTPUT_FILE" || echo 0)
+    fail_count=$(grep -c ",FAIL," "$OUTPUT_FILE" || echo 0)
+    inconclusive_count=$(grep -c ",INCONCLUSIVE," "$OUTPUT_FILE" || echo 0)
+    skip_count=$(grep -c ",SKIP," "$OUTPUT_FILE" || echo 0)
+    unknown_count=$(grep -c ",UNKNOWN," "$OUTPUT_FILE" || echo 0)
 
     log "Overall Results:"
     log "  Total runs:        $total_runs"
-    log "  Pass:              $pass_count ($(awk "BEGIN {printf \"%.1f\", 100*$pass_count/$total_runs}")%)"
-    log "  Fail (FP):         $fail_count ($(awk "BEGIN {printf \"%.1f\", 100*$fail_count/$total_runs}")%)"
-    log "  Inconclusive:      $inconclusive_count ($(awk "BEGIN {printf \"%.1f\", 100*$inconclusive_count/$total_runs}")%)"
+    log "  Pass:              $pass_count ($(awk "BEGIN {if ($total_runs>0) printf \"%.1f\", 100*$pass_count/$total_runs; else print \"0.0\"}")%)"
+    log "  Fail (FP):         $fail_count ($(awk "BEGIN {if ($total_runs>0) printf \"%.1f\", 100*$fail_count/$total_runs; else print \"0.0\"}")%)"
+    log "  Inconclusive:      $inconclusive_count ($(awk "BEGIN {if ($total_runs>0) printf \"%.1f\", 100*$inconclusive_count/$total_runs; else print \"0.0\"}")%)"
     log "  Skipped:           $skip_count"
     log "  Unknown:           $unknown_count"
     log ""
 
-    # Calculate FPR with Wilson confidence interval
+    # Wilson CI via Python (already available in devenv)
     if [[ $total_runs -gt 0 ]]; then
-        local fpr=$(awk "BEGIN {printf \"%.4f\", $fail_count/$total_runs}")
-        log "False Positive Rate: $fpr ($(awk "BEGIN {printf \"%.2f\", 100*$fpr}")%)"
-
-        # Wilson score interval (95% CI)
         python3 -c "
 import math
 n = $total_runs
 x = $fail_count
-z = 1.96  # 95% CI
-
-if n == 0:
-    print('Wilson 95% CI: N/A (no data)')
-else:
-    p = x / n
-    denominator = 1 + z**2 / n
-    center = (p + z**2 / (2*n)) / denominator
-    margin = z * math.sqrt((p * (1 - p) / n + z**2 / (4 * n**2))) / denominator
-
-    lower = max(0, center - margin)
-    upper = min(1, center + margin)
-
-    print(f'Wilson 95% CI: [{lower*100:.2f}%, {upper*100:.2f}%]')
-" 2>/dev/null || log_warn "  (Install Python 3 for confidence intervals)"
+z = 1.96
+p = x / n
+denom = 1 + z**2 / n
+center = (p + z**2 / (2*n)) / denom
+margin = z * math.sqrt((p*(1-p)/n + z**2/(4*n**2))) / denom
+lo = max(0, center - margin)
+hi = min(1, center + margin)
+print(f'False Positive Rate: {p:.4f} ({100*p:.2f}%)')
+print(f'Wilson 95% CI: [{100*lo:.2f}%, {100*hi:.2f}%]')
+" 2>/dev/null || log_warn "  (Python 3 not available for CI calculation)"
     fi
 
     log ""
@@ -212,24 +168,23 @@ else:
     log "Per-Ecosystem Breakdown"
     log "=========================================="
 
-    # Breakdown by ecosystem
-    for ecosystem in Rust JavaScript "C/C++"; do
-        local eco_total=$(grep "^$ecosystem," "$OUTPUT_FILE" | wc -l)
+    for ecosystem in Rust "C/C++"; do
+        local eco_total eco_pass eco_fail eco_inc
+        eco_total=$(grep "^$ecosystem," "$OUTPUT_FILE" | wc -l | tr -d ' ')
         if [[ $eco_total -gt 0 ]]; then
-            local eco_pass=$(grep "^$ecosystem," "$OUTPUT_FILE" | grep -c ",PASS," || echo 0)
-            local eco_fail=$(grep "^$ecosystem," "$OUTPUT_FILE" | grep -c ",FAIL," || echo 0)
-            local eco_inc=$(grep "^$ecosystem," "$OUTPUT_FILE" | grep -c ",INCONCLUSIVE," || echo 0)
-
+            eco_pass=$(grep "^$ecosystem," "$OUTPUT_FILE" | grep -c ",PASS," || echo 0)
+            eco_fail=$(grep "^$ecosystem," "$OUTPUT_FILE" | grep -c ",FAIL," || echo 0)
+            eco_inc=$(grep "^$ecosystem," "$OUTPUT_FILE" | grep -c ",INCONCLUSIVE," || echo 0)
             log "$ecosystem:"
-            log "  Runs:   $eco_total"
-            log "  Pass:   $eco_pass ($(awk "BEGIN {printf \"%.1f\", 100*$eco_pass/$eco_total}")%)"
-            log "  Fail:   $eco_fail ($(awk "BEGIN {printf \"%.1f\", 100*$eco_fail/$eco_total}")%)"
+            log "  Runs:    $eco_total"
+            log "  Pass:    $eco_pass ($(awk "BEGIN {printf \"%.1f\", 100*$eco_pass/$eco_total}")%)"
+            log "  Fail:    $eco_fail ($(awk "BEGIN {printf \"%.1f\", 100*$eco_fail/$eco_total}")%)"
             log "  Inconcl: $eco_inc ($(awk "BEGIN {printf \"%.1f\", 100*$eco_inc/$eco_total}")%)"
             log ""
         fi
     done
 
-    # List any failures
+    # List failures
     if [[ $fail_count -gt 0 ]]; then
         log_error "=========================================="
         log_error "FALSE POSITIVES DETECTED:"
@@ -244,128 +199,76 @@ else:
     fi
 }
 
-# Main execution
+# Main
 main() {
     log "=========================================="
-    log "Crypto Library FPR Measurement"
+    log "Crypto Library FPR Measurement (Rust)"
     log "=========================================="
     log "Iterations: $ITERATIONS"
     log "Output: $OUTPUT_FILE"
     log ""
 
-    # Background process to refresh sudo credentials every 50 seconds
-    # (assumes sudo was authenticated before script start)
+    # Find binary
+    local test_binary
+    test_binary=$(find_test_binary)
+    log "Test binary: $test_binary"
+
+    # Discover tests
+    local tests
+    tests=$(discover_tests "$test_binary")
+    local test_count
+    test_count=$(echo "$tests" | wc -l | tr -d ' ')
+    log "Discovered $test_count FPR-relevant tests (sanity checks excluded)"
+    log ""
+
+    # Sudo credential keeper
     (while true; do sleep 50; sudo -n true 2>/dev/null || exit; done) &
     SUDO_KEEPER_PID=$!
-    # Ensure sudo keeper is killed when script exits
     trap "kill $SUDO_KEEPER_PID 2>/dev/null" EXIT
 
     init_csv
 
-    # =========================================================================
-    # RUST TESTS
-    # =========================================================================
-    log ""
-    log "========================================"
-    log "RUST ECOSYSTEM"
-    log "========================================"
+    local completed=0
+    local total=$((test_count * ITERATIONS))
 
-    # RustCrypto tests
-    run_rust_test "rustcrypto::aes::aes128_block_encrypt_constant_time" "AES-128 Encrypt" "RustCrypto"
-    run_rust_test "rustcrypto::sha3::rustcrypto_sha3_256_ct" "SHA3-256 Hash" "RustCrypto"
-    run_rust_test "rustcrypto::blake2::rustcrypto_blake2b512_ct" "BLAKE2b Hash" "RustCrypto"
-    run_rust_test "rustcrypto::chacha20poly1305::rustcrypto_chacha20poly1305_encrypt_ct" "ChaCha20-Poly1305" "RustCrypto"
-    run_rust_test "rustcrypto::rsa::rsa_2048_sign_constant_time" "RSA-2048 Sign" "RustCrypto"
+    while IFS= read -r test_name; do
+        local library ecosystem
+        library=$(extract_library "$test_name")
+        ecosystem=$(extract_ecosystem "$test_name")
 
-    # ring tests
-    run_rust_test "ring::aes_gcm::ring_aes256gcm_encrypt_ct" "AES-256-GCM Encrypt" "ring"
-    run_rust_test "ring::aes_gcm::ring_aes256gcm_decrypt_ct" "AES-256-GCM Decrypt" "ring"
+        log "[$((completed / ITERATIONS + 1))/$test_count] $ecosystem / $library / $test_name"
 
-    # dalek tests
-    run_rust_test "dalek::x25519::x25519_scalar_mult_constant_time" "X25519 ScalarMult" "dalek"
+        for ((i=1; i<=ITERATIONS; i++)); do
+            completed=$((completed + 1))
+            log "  Iteration $i/$ITERATIONS ($completed/$total total)..."
 
-    # pqcrypto tests (sample)
-    run_rust_test "pqcrypto::kyber::pqcrypto_kyber768_encapsulate_ct" "Kyber-768 Encap" "pqcrypto"
-    run_rust_test "pqcrypto::dilithium::pqcrypto_dilithium3_sign_ct" "Dilithium3 Sign" "pqcrypto"
+            local start_time exit_code output
+            start_time=$(date +%s)
+            exit_code=0
+            output=$(sudo -E "$test_binary" "$test_name" --nocapture --test-threads=1 2>&1) || exit_code=$?
 
-    # orion tests (NEW)
-    run_rust_test "rust_libraries::orion::orion_auth_constant_time" "BLAKE2b-MAC" "orion"
-    run_rust_test "rust_libraries::orion::orion_hash_constant_time" "BLAKE2b Hash" "orion"
-    run_rust_test "rust_libraries::orion::orion_aead_encrypt_constant_time" "XChaCha20-Poly1305 Encrypt" "orion"
-    run_rust_test "rust_libraries::orion::orion_aead_decrypt_constant_time" "XChaCha20-Poly1305 Decrypt" "orion"
-    run_rust_test "rust_libraries::orion::orion_pwhash_constant_time" "Argon2i" "orion"
+            local elapsed timestamp parsed outcome leak_prob samples
+            elapsed=$(($(date +%s) - start_time))
+            timestamp=$(date -Iseconds)
 
-    # =========================================================================
-    # C/C++ TESTS (via FFI)
-    # =========================================================================
-    log ""
-    log "========================================"
-    log "C/C++ ECOSYSTEM (via FFI)"
-    log "========================================"
+            parsed=$(parse_outcome "$output" "$exit_code")
+            outcome=$(echo "$parsed" | cut -d, -f1)
+            leak_prob=$(echo "$parsed" | cut -d, -f2)
+            samples=$(echo "$parsed" | cut -d, -f3)
 
-    # LibreSSL tests
-    run_rust_test "c_libraries::libressl::libressl_rsa_2048_pkcs1v15_decrypt_constant_time" "RSA-2048 PKCS1v15" "LibreSSL"
-    run_rust_test "c_libraries::libressl::libressl_ecdsa_p256_sign_constant_time" "ECDSA P-256 Sign" "LibreSSL"
-    run_rust_test "c_libraries::libressl::libressl_aes_256_gcm_encrypt_constant_time" "AES-256-GCM" "LibreSSL"
+            case "$outcome" in
+                FAIL)          log_error   "    → FAIL (P=${leak_prob}%)" ;;
+                PASS)          log_success "    → PASS (P=${leak_prob}%, ${elapsed}s)" ;;
+                INCONCLUSIVE)  log_warn    "    → INCONCLUSIVE (P=${leak_prob}%)" ;;
+                SKIP)          log_warn    "    → SKIP" ;;
+                *)             log_warn    "    → $outcome" ;;
+            esac
 
-    # Libsodium tests
-    run_rust_test "c_libraries::libsodium::libsodium_ed25519_sign_constant_time" "Ed25519 Sign" "Libsodium"
-    run_rust_test "c_libraries::libsodium::libsodium_x25519_scalar_mult_constant_time" "X25519 ScalarMult" "Libsodium"
+            echo "$ecosystem,$library,$test_name,$i,$outcome,$leak_prob,$samples,$elapsed,$timestamp" >> "$OUTPUT_FILE"
+        done
+    done <<< "$tests"
 
-    # wolfSSL tests (NEW)
-    run_rust_test "c_libraries::wolfssl::wolfssl_rsa_2048_pkcs1v15_decrypt_constant_time" "RSA-2048 PKCS1v15" "wolfSSL"
-    run_rust_test "c_libraries::wolfssl::wolfssl_rsa_2048_oaep_decrypt_constant_time" "RSA-2048 OAEP" "wolfSSL"
-    run_rust_test "c_libraries::wolfssl::wolfssl_ecdsa_p256_sign_constant_time" "ECDSA P-256 Sign" "wolfSSL"
-    run_rust_test "c_libraries::wolfssl::wolfssl_aes_256_gcm_encrypt_constant_time" "AES-256-GCM Encrypt" "wolfSSL"
-    run_rust_test "c_libraries::wolfssl::wolfssl_aes_256_gcm_decrypt_constant_time" "AES-256-GCM Decrypt" "wolfSSL"
-
-    # mbedTLS tests (NEW)
-    run_rust_test "c_libraries::mbedtls::mbedtls_aes_256_gcm_encrypt_constant_time" "AES-256-GCM Encrypt" "mbedTLS"
-    run_rust_test "c_libraries::mbedtls::mbedtls_rsa_2048_pkcs1v15_decrypt_constant_time" "RSA-2048 PKCS1v15" "mbedTLS"
-    run_rust_test "c_libraries::mbedtls::mbedtls_rsa_2048_oaep_decrypt_constant_time" "RSA-2048 OAEP" "mbedTLS"
-
-    # Botan tests (NEW)
-    run_rust_test "c_libraries::botan::botan_rsa_2048_pkcs1v15_decrypt_constant_time" "RSA-2048 PKCS1v15" "Botan"
-    run_rust_test "c_libraries::botan::botan_rsa_2048_oaep_decrypt_constant_time" "RSA-2048 OAEP" "Botan"
-    run_rust_test "c_libraries::botan::botan_ecdsa_p256_sign_constant_time" "ECDSA P-256 Sign" "Botan"
-    run_rust_test "c_libraries::botan::botan_aes_256_gcm_encrypt_constant_time" "AES-256-GCM" "Botan"
-
-    # =========================================================================
-    # JAVASCRIPT TESTS
-    # =========================================================================
-    log ""
-    log "========================================"
-    log "JAVASCRIPT ECOSYSTEM (WASM)"
-    log "========================================"
-
-    # node-forge tests
-    run_js_test "node-forge" "RSA PKCS1v15 Encrypt" "node-forge"
-    run_js_test "node-forge" "ECDSA P-256 Sign" "node-forge"
-
-    # crypto-js tests
-    run_js_test "crypto-js" "AES-128 Encrypt" "crypto-js"
-    run_js_test "crypto-js" "DES Encrypt" "crypto-js"
-
-    # Noble tests
-    run_js_test "noble/curves" "P-256 Sign" "Noble"
-    run_js_test "noble/curves" "secp256k1 Sign" "Noble"
-
-    # =========================================================================
-    # GO TESTS (SKIP - blocked by FFI bug)
-    # =========================================================================
-    log ""
-    log_warn "========================================"
-    log_warn "GO ECOSYSTEM - SKIPPED"
-    log_warn "========================================"
-    log_warn "All Go tests blocked by tacet-go FFI bug"
-    log_warn "See: crates/tacet-go/README.md"
-
-    # =========================================================================
-    # GENERATE REPORT
-    # =========================================================================
-    log ""
     generate_report
 }
 
-# Run main function
 main
