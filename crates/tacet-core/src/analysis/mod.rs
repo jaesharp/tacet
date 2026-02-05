@@ -11,5 +11,7 @@ pub mod effect;
 pub mod mde;
 
 pub use bayes::{compute_bayes_1d, BayesW1Result};
-pub use effect::{compute_effect_estimate, compute_effect_estimate_analytical, compute_tail_diagnostics};
+pub use effect::{
+    compute_effect_estimate, compute_effect_estimate_analytical, compute_tail_diagnostics,
+};
 pub use mde::{analytical_mde, estimate_mde, MdeEstimate};

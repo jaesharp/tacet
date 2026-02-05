@@ -584,7 +584,9 @@ impl SweepConfig {
                     } else {
                         vec![default_sigma]
                     };
-                    sigmas.into_iter().map(move |sigma| (pattern, mult, noise, sigma))
+                    sigmas
+                        .into_iter()
+                        .map(move |sigma| (pattern, mult, noise, sigma))
                 })
             })
         })
@@ -593,12 +595,14 @@ impl SweepConfig {
     /// Iterate over all configuration points including attacker model and sigma_ns.
     pub fn iter_configs_with_attacker(
         &self,
-    ) -> impl Iterator<Item = (EffectPattern, f64, NoiseModel, f64, Option<AttackerModel>)> + '_ {
-        self.iter_configs().flat_map(move |(pattern, mult, noise, sigma)| {
-            self.attacker_models
-                .iter()
-                .map(move |&model| (pattern, mult, noise, sigma, model))
-        })
+    ) -> impl Iterator<Item = (EffectPattern, f64, NoiseModel, f64, Option<AttackerModel>)> + '_
+    {
+        self.iter_configs()
+            .flat_map(move |(pattern, mult, noise, sigma)| {
+                self.attacker_models
+                    .iter()
+                    .map(move |&model| (pattern, mult, noise, sigma, model))
+            })
     }
 }
 

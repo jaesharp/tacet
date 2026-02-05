@@ -10,15 +10,16 @@ plot_dir := env("CALIBRATION_PLOT_DIR", justfile_directory() + "/plots")
 profile_dir := env("PROFILE_DIR", "/var/tmp/tacet-profile")
 
 # Load subcommand modules
-mod build
-mod test
-mod calibrate
-mod bench
-mod example
-mod doc
-mod quality
-mod profile
-mod bindings
+mod build '.just/build.just'
+mod test '.just/test.just'
+mod calibrate '.just/calibrate.just'
+mod bench '.just/bench.just'
+mod example '.just/example.just'
+mod doc '.just/doc.just'
+mod quality '.just/quality.just'
+mod profile '.just/profile.just'
+mod bindings '.just/bindings.just'
+mod paper '.just/paper.just'
 
 # ============================================================================
 # TOP-LEVEL COMMANDS

@@ -291,41 +291,19 @@ fn fpr_validation_per_attacker_model() {
     let test_name = "fpr_validation_per_attacker_model";
     let config = CalibrationConfig::from_env(test_name);
 
-    // Only used on non-ARM64 platforms
-    #[cfg(not(target_arch = "aarch64"))]
     let pmu_available = TimerBackend::cycle_accurate_available();
 
     let attacker_models = [
-        ("Research", AttackerModel::Research),
+        ("SharedHardware", AttackerModel::SharedHardware),
         ("PostQuantumSentinel", AttackerModel::PostQuantumSentinel),
         ("AdjacentNetwork", AttackerModel::AdjacentNetwork),
         ("RemoteNetwork", AttackerModel::RemoteNetwork),
     ];
 
-    let trials_per_model = 50;
+    let trials_per_model = 200;
 
     for (model_name, attacker_model) in attacker_models {
-        // Skip tight thresholds on ARM64 - even PMU isn't precise enough for ≤2ns thresholds.
-        // PostQuantumSentinel (2ns), SharedHardware (0.4ns), and Research (0ns) have too much
-        // noise on ARM64 due to PMU read overhead (~5-10ns). These thresholds are only
-        // reliable on x86_64 where rdtsc has ~0.3ns resolution.
-        #[cfg(target_arch = "aarch64")]
-        if matches!(
-            attacker_model,
-            AttackerModel::PostQuantumSentinel
-                | AttackerModel::SharedHardware
-                | AttackerModel::Research
-        ) {
-            eprintln!(
-                "[{}] Skipping {} (tight thresholds not reliable on ARM64)",
-                test_name, model_name
-            );
-            continue;
-        }
-
-        // On x86_64 without PMU (which shouldn't happen since rdtsc is always available),
-        // still skip tight thresholds as a safety measure
-        #[cfg(not(target_arch = "aarch64"))]
+        // Skip tight thresholds without cycle-accurate timer
         if !pmu_available
             && matches!(
                 attacker_model,

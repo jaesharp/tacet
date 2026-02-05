@@ -543,7 +543,9 @@ fn create_tool(
         "rtlf" => Some(Box::new(RtlfAdapter::default().with_pool(r_pool.clone()))),
         "silent" => Some(Box::new(SilentAdapter::default().with_pool(r_pool.clone()))),
         // Python-based tlsfuzzer (uses persistent pool)
-        "tlsfuzzer" => Some(Box::new(TlsfuzzerAdapter::default().with_pool(python_pool.clone()))),
+        "tlsfuzzer" => Some(Box::new(
+            TlsfuzzerAdapter::default().with_pool(python_pool.clone()),
+        )),
         // Shorthand for all native + external
         "all" => None, // Handled separately
         _ => None,
@@ -565,11 +567,8 @@ fn create_r_pool() -> Option<Arc<ProcessPool>> {
     // Create pool with ~92% of CPU count (leave headroom for system, rayon, I/O)
     let cpus = num_cpus::get();
     let pool_size = ((cpus * 92) / 100).max(2);
-    let config = ProcessConfig::r_worker(
-        &script_path,
-        silent_path.as_deref(),
-        rtlf_path.as_deref(),
-    );
+    let config =
+        ProcessConfig::r_worker(&script_path, silent_path.as_deref(), rtlf_path.as_deref());
 
     match ProcessPool::new(config, pool_size) {
         pool => Some(Arc::new(pool)),
@@ -591,7 +590,9 @@ fn find_r_tool_script(command: &str, relative_path: &str) -> Option<String> {
         return None;
     }
 
-    let wrapper_path = String::from_utf8_lossy(&which_output.stdout).trim().to_string();
+    let wrapper_path = String::from_utf8_lossy(&which_output.stdout)
+        .trim()
+        .to_string();
     if wrapper_path.is_empty() {
         return None;
     }
@@ -606,12 +607,14 @@ fn find_r_tool_script(command: &str, relative_path: &str) -> Option<String> {
         // Look for the relative path in the wrapper
         if let Some(idx) = line.find(relative_path) {
             // Find the start of the nix store path (starts with /nix/store/)
-            let search_start = line[..idx].rfind("/nix/store/")
+            let search_start = line[..idx]
+                .rfind("/nix/store/")
                 .or_else(|| line[..idx].rfind("/"))
                 .unwrap_or(0);
             // Find the end (next quote or whitespace)
             let path_start = &line[search_start..];
-            let path_end = path_start.find(|c: char| c == '"' || c == '\'' || c.is_whitespace())
+            let path_end = path_start
+                .find(|c: char| c == '"' || c == '\'' || c.is_whitespace())
                 .map(|i| search_start + i)
                 .unwrap_or(line.len());
             let path = line[search_start..path_end].trim_matches(|c| c == '"' || c == '\'');
@@ -669,7 +672,13 @@ fn find_script(name: &str) -> Option<String> {
             // Check ../../scripts/ (for development builds)
             let script_path = exe_dir.join("../../scripts").join(name);
             if script_path.exists() {
-                return Some(script_path.canonicalize().ok()?.to_string_lossy().to_string());
+                return Some(
+                    script_path
+                        .canonicalize()
+                        .ok()?
+                        .to_string_lossy()
+                        .to_string(),
+                );
             }
         }
     }
@@ -677,14 +686,26 @@ fn find_script(name: &str) -> Option<String> {
     // Check current directory
     let script_path = PathBuf::from("scripts").join(name);
     if script_path.exists() {
-        return Some(script_path.canonicalize().ok()?.to_string_lossy().to_string());
+        return Some(
+            script_path
+                .canonicalize()
+                .ok()?
+                .to_string_lossy()
+                .to_string(),
+        );
     }
 
     // Check workspace root (for cargo run)
     if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
         let workspace_root = PathBuf::from(manifest_dir).join("../../scripts").join(name);
         if workspace_root.exists() {
-            return Some(workspace_root.canonicalize().ok()?.to_string_lossy().to_string());
+            return Some(
+                workspace_root
+                    .canonicalize()
+                    .ok()?
+                    .to_string_lossy()
+                    .to_string(),
+            );
         }
     }
 

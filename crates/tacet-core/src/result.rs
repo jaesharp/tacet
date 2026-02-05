@@ -297,10 +297,7 @@ pub struct EffectEstimate {
 
 impl EffectEstimate {
     /// Create a new EffectEstimate with the given values.
-    pub fn new(
-        max_effect_ns: f64,
-        credible_interval_ns: (f64, f64),
-    ) -> Self {
+    pub fn new(max_effect_ns: f64, credible_interval_ns: (f64, f64)) -> Self {
         Self {
             max_effect_ns,
             credible_interval_ns,

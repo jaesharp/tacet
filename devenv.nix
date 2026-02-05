@@ -134,6 +134,11 @@ let
       license = lib.licenses.asl20;
     };
   };
+
+  # Custom TexLive with packages needed for the paper
+  texlive-paper = pkgs.texlive.combine {
+    inherit (pkgs.texlive) scheme-full;
+  };
 in
 {
   languages.rust = {
@@ -178,6 +183,10 @@ in
     cmake
     pkg-config
 
+    # C/C++ cryptographic libraries for cross-language testing
+    libressl.dev  # Include dev outputs for headers
+    libsodium.dev  # Include dev outputs for headers
+
     # Documentation website (Starlight + CF Workers)
     bun
     nodePackages.wrangler
@@ -186,6 +195,12 @@ in
     wasmtime
     wasm-pack
     wasm-bindgen-cli
+
+    # LaTeX for paper compilation (USENIX Security 2026)
+    texlive-paper
+    aspell
+    aspellDicts.en
+    poppler-utils  # for pdfinfo
   ];
 
   env = {

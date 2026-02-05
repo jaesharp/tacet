@@ -126,7 +126,9 @@ fn test_autocorr_robustness_geyers() {
     // Should not false positive (Fail) on constant-time operation
     // even with potential autocorrelation
     match &outcome {
-        Outcome::Fail { leak_probability, .. } => {
+        Outcome::Fail {
+            leak_probability, ..
+        } => {
             panic!(
                 "Geyer's IMS false positive with autocorrelation: P={:.1}%",
                 leak_probability * 100.0
@@ -135,7 +137,9 @@ fn test_autocorr_robustness_geyers() {
         Outcome::Pass { .. } => {
             eprintln!("[test_autocorr_robustness_geyers] PASSED: No false positive");
         }
-        Outcome::Inconclusive { leak_probability, .. } => {
+        Outcome::Inconclusive {
+            leak_probability, ..
+        } => {
             eprintln!(
                 "[test_autocorr_robustness_geyers] INCONCLUSIVE: P={:.1}% (acceptable)",
                 leak_probability * 100.0

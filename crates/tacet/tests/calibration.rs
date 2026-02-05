@@ -22,11 +22,11 @@ mod discrete_mode;
 mod estimation;
 #[path = "calibration/fpr.rs"]
 mod fpr;
+#[path = "calibration/iact_methods.rs"]
+mod iact_methods;
 #[path = "calibration/power.rs"]
 mod power;
 #[path = "calibration/power_curve.rs"]
 mod power_curve;
 #[path = "calibration/stress.rs"]
 mod stress;
-#[path = "calibration/iact_methods.rs"]
-mod iact_methods;

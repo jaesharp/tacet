@@ -152,10 +152,7 @@ mod tests {
         );
         let cal = result.unwrap();
 
-        assert!(
-            cal.var_rate > 0.0,
-            "Variance rate should be positive"
-        );
+        assert!(cal.var_rate > 0.0, "Variance rate should be positive");
         assert!(cal.block_length >= 1, "Block length should be at least 1");
         assert!(cal.sigma_t > 0.0, "Sigma t should be positive");
         assert!(

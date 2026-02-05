@@ -13,6 +13,20 @@
 
 ---
 
+## ⚠️ Known Issues
+
+**CRITICAL BUG (As of 2026-02-05):** All tacet-go tests are currently failing with false positives. The FFI layer has been partially fixed (enums changed from `int` to `int32`, integer fields to `uint64`), but integration tests still report `P(leak)=100%` for identical inputs (should be 0%).
+
+**Status:**
+- ✅ Direct FFI calls work correctly
+- ❌ Integration through `tacet.Test()` produces inverted results (negative effects, 100% leak probability on sanity checks)
+
+**Workaround:** Use the Rust API directly (`tacet` crate) until this is resolved.
+
+**Tracking:** The root cause is likely in how results flow from FFI through `resultFromFFI()` conversion - struct field alignment or sign errors.
+
+---
+
 ## Installation
 
 ```bash

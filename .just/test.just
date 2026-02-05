@@ -48,9 +48,9 @@ ignored:
 crypto: aes ecc hash aead
     @echo "Note: RSA and PQ tests excluded (slow). Run 'just test rsa' or 'just test pqcrypto' separately."
 
-# Run ALL crypto tests including slow ones
+# Run ALL crypto tests including slow ones (Rust + JavaScript)
 [group('test')]
-crypto-all: aes ecc hash aead rsa pqcrypto
+crypto-all: aes ecc hash aead rsa pqcrypto noble
 
 # Run AES timing tests
 [group('test')]
@@ -101,3 +101,23 @@ kperf:
 [group('test')]
 perf:
     sudo -E cargo nextest run --release -p tacet --test test_perf --no-capture
+
+# Run noble-crypto JavaScript timing tests
+[group('test')]
+noble:
+    cd {{justfile_directory()}}/crates/tacet-wasm && bun test tests/noble/
+
+# Run noble curves tests only
+[group('test')]
+noble-curves:
+    cd {{justfile_directory()}}/crates/tacet-wasm && bun test tests/noble/curves.test.ts
+
+# Run noble ciphers tests only
+[group('test')]
+noble-ciphers:
+    cd {{justfile_directory()}}/crates/tacet-wasm && bun test tests/noble/ciphers.test.ts
+
+# Generate noble test report for paper
+[group('test')]
+noble-report:
+    cd {{justfile_directory()}}/crates/tacet-wasm && bun run ts/noble-test-runner.ts --output=tests/noble/results/

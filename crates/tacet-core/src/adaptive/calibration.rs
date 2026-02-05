@@ -656,7 +656,6 @@ fn compute_calibration_snapshot(baseline_ns: &[f64], sample_ns: &[f64]) -> Calib
 
 // DELETED: compute_c_floor_9d() - 9D version (replaced by compute_c_floor_1d)
 
-
 /// Calibrate half-t prior scale to achieve target exceedance probability (W₁ distance).
 ///
 /// Finds σ_t such that P(|δ| > theta_user | δ ~ half-t(ν=4, σ_t)) ≈ 0.62

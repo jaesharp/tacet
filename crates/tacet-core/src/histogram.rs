@@ -62,11 +62,7 @@ impl Default for HistogramConfig {
 /// p50      p90  │ p50      p90
 /// 123ns   156ns │ 135ns   178ns
 /// ```
-pub fn render_histogram(
-    baseline: &[f64],
-    sample: &[f64],
-    config: &HistogramConfig,
-) -> String {
+pub fn render_histogram(baseline: &[f64], sample: &[f64], config: &HistogramConfig) -> String {
     render_histogram_with_w1(baseline, sample, config, None)
 }
 
@@ -119,13 +115,7 @@ pub fn render_histogram_with_w1(
         )
         .unwrap();
     } else {
-        writeln!(
-            out,
-            "{:width$} │ Sample",
-            "Baseline",
-            width = left_width
-        )
-        .unwrap();
+        writeln!(out, "{:width$} │ Sample", "Baseline", width = left_width).unwrap();
     }
 
     // Bars (top to bottom)
@@ -270,10 +260,7 @@ fn normalize_histogram(counts: &[usize], height: usize) -> Vec<usize> {
         return vec![0; counts.len()];
     }
 
-    counts
-        .iter()
-        .map(|&c| (c * height) / max_count)
-        .collect()
+    counts.iter().map(|&c| (c * height) / max_count).collect()
 }
 
 /// Compute percentile of a distribution.

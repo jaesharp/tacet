@@ -553,7 +553,9 @@ impl TrialRunner {
                 self.completed += 1;
                 self.fail += 1;
             }
-            Outcome::Inconclusive { leak_probability, .. } => {
+            Outcome::Inconclusive {
+                leak_probability, ..
+            } => {
                 self.completed += 1;
                 // Count high-confidence Inconclusive (P≥90%) as detections.
                 // Rationale: The oracle detected the leak but refused to give a Fail

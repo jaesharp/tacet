@@ -80,7 +80,7 @@ pub use adapters::{
     TlsfuzzerAdapter, ToolAdapter, ToolResult,
 };
 pub use checkpoint::{IncrementalCsvWriter, WorkItemKey};
-pub use process_pool::{ProcessConfig, ProcessPool, PoolGuard, Request, Response};
+pub use process_pool::{PoolGuard, ProcessConfig, ProcessPool, Request, Response};
 pub use realistic::{
     collect_realistic_dataset, realistic_to_generated, standard_realistic_configs,
     RealisticBlockedData, RealisticConfig, RealisticDataset,

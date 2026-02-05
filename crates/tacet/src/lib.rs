@@ -91,8 +91,8 @@ pub use measurement::{BoxedTimer, Timer, TimerError, TimerSpec};
 pub use oracle::{compute_min_uniqueness_ratio, TimingOracle};
 pub use result::{
     BatchingInfo, Diagnostics, EffectEstimate, EffectPattern, Exploitability, InconclusiveReason,
-    IssueCode, MeasurementQuality, Metadata, MinDetectableEffect, Outcome, QuantileShifts,
-    QualityIssue, TailDiagnostics, TopQuantile, UnmeasurableInfo, UnreliablePolicy,
+    IssueCode, MeasurementQuality, Metadata, MinDetectableEffect, Outcome, QualityIssue,
+    QuantileShifts, TailDiagnostics, TopQuantile, UnmeasurableInfo, UnreliablePolicy,
 };
 pub use types::{AttackerModel, Class, IactMethod, TimingSample};
 

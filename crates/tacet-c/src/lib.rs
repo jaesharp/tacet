@@ -363,7 +363,12 @@ pub unsafe extern "C" fn to_calibrate(
     }
 
     // Bootstrap W₁ variance estimation
-    let var_estimate = bootstrap_w1_variance(&interleaved, DEFAULT_BOOTSTRAP_ITERATIONS, seed, discrete_mode);
+    let var_estimate = bootstrap_w1_variance(
+        &interleaved,
+        DEFAULT_BOOTSTRAP_ITERATIONS,
+        seed,
+        discrete_mode,
+    );
     let var_rate = var_estimate.variance * count as f64; // Convert to rate: var_rate = var_cal * n_cal
     let block_length = var_estimate.block_size;
 
@@ -397,7 +402,7 @@ pub unsafe extern "C" fn to_calibrate(
     let calibration = Calibration::new(
         var_rate,
         block_length,
-        1.0, // iact (default for PolitisWhite mode)
+        1.0,                                         // iact (default for PolitisWhite mode)
         tacet_core::types::IactMethod::PolitisWhite, // iact_method
         sigma_t,
         theta_ns,
@@ -942,7 +947,12 @@ pub unsafe extern "C" fn to_analyze(
         / count as f64;
 
     // Bootstrap W₁ variance
-    let var_estimate = bootstrap_w1_variance(&interleaved, DEFAULT_BOOTSTRAP_ITERATIONS, seed, discrete_mode);
+    let var_estimate = bootstrap_w1_variance(
+        &interleaved,
+        DEFAULT_BOOTSTRAP_ITERATIONS,
+        seed,
+        discrete_mode,
+    );
     let var_rate = var_estimate.variance * count as f64;
     let block_length = var_estimate.block_size;
 
@@ -992,11 +1002,11 @@ pub unsafe extern "C" fn to_analyze(
         stationarity_ok: true,
         discrete_mode,
         timer_resolution_ns: ns_per_tick,
-        lambda_mean: 1.0,  // Not available in 1D version
+        lambda_mean: 1.0, // Not available in 1D version
         lambda_sd: 0.0,
         lambda_ess: 0.0,
         lambda_mixing_ok: true,
-        kappa_mean: 1.0,   // Not available in 1D version
+        kappa_mean: 1.0, // Not available in 1D version
         kappa_cv: 0.0,
         kappa_ess: 0.0,
         kappa_mixing_ok: true,

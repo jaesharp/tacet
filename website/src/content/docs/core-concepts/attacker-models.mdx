@@ -122,7 +122,7 @@ Don't use Research in CI; it will flag timing differences that aren't security-r
 
 ## Threshold vs exploitability
 
-The relationship between timing difference and attack feasibility, based on [Crosby et al. (2009)](https://www.usenix.org/legacy/events/usenix09/tech/full_papers/crosby/crosby.pdf):
+How timing differences map to attack feasibility ([Crosby et al. 2009](https://www.usenix.org/legacy/events/usenix09/tech/full_papers/crosby/crosby.pdf)):
 
 | Timing difference | Approximate queries needed | Attack scenario |
 |-------------------|---------------------------|-----------------|
@@ -167,14 +167,14 @@ The key constraint: **your threshold must be above your measurement floor**. Oth
 
 ## Threshold elevation
 
-If you request a threshold below your measurement floor, the library automatically elevates it to an achievable value.
+If you request a threshold below your measurement floor, the library raises it to something achievable.
 
-For example:
+Example:
 - You request `SharedHardware` (0.6ns)
 - Your measurement floor is 21ns
 - The effective threshold becomes 21ns
 
-When this happens, results tell you whether there's a leak above 21ns, not 0.6ns. Check `theta_eff` vs `theta_user` in diagnostics to see if elevation occurred.
+When this happens, results tell you about leaks above 21ns, not 0.6ns. Check `theta_eff` vs `theta_user` in diagnostics to see if elevation occurred.
 
 See [Measurement Precision](/core-concepts/measurement-precision) for details on improving precision and understanding platform limits.
 

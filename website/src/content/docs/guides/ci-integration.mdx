@@ -351,7 +351,7 @@ oracle.TimeBudget(60 * time.Second).
 
 ## Handling noisy environments
 
-CI runners are often noisier than local development machines. The library provides utilities for handling unreliable conditions:
+CI runners are often noisier than local development machines. The library gives you tools for handling this:
 
 ### Skip unreliable tests (fail-open)
 
@@ -679,24 +679,24 @@ For macOS runners, `sudo` is available but you'll need to handle authentication.
 
 ### Cloud VMs
 
-Cloud VMs typically have:
-- **Higher noise** from noisy neighbors and hypervisor overhead
-- **Variable CPU frequency** unless you pin to specific instance types
-- **No cycle-accurate timer access** in most configurations
+Cloud VMs have:
+- Higher noise from noisy neighbors and hypervisor overhead
+- Variable CPU frequency unless you pin to specific instance types
+- No cycle-accurate timer access in most configurations
 
-Recommendations:
-- Use `AdjacentNetwork` (100ns) threshold, not `SharedHardware`
+For CI on cloud VMs:
+- Use `AdjacentNetwork` (100ns), not `SharedHardware`
 - Increase time budgets (60s for thorough testing)
 - Use `skip_if_unreliable!` for graceful degradation
 
 ### Bare metal
 
-Bare metal runners provide the best measurement quality:
+Bare metal runners give you better measurement quality:
 - Lower noise
 - Stable CPU frequency (if configured)
 - Cycle-accurate timers available
 
-If you have access to bare metal CI (GitHub large runners, self-hosted), use it for security-critical timing tests.
+If you have bare metal CI (GitHub large runners, self-hosted), use it for security-critical timing tests.
 
 ### Self-hosted runners
 

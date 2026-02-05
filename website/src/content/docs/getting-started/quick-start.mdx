@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
-This guide walks through writing and running your first timing test. You've seen the [basic pattern on the landing page](/); now let's create a complete, runnable test.
+This guide shows you how to write and run your first timing test. You've seen the [basic pattern on the landing page](/); now we'll build a complete, runnable test.
 
 ## Add the dependencies
 
@@ -378,7 +378,7 @@ go test -v -p 1 ./...
 ```
 
 <Aside type="tip">
-Running tests sequentially is important: parallel tests interfere with timing measurements. Each language has its own flag (`--test-threads=1` for Rust, `--concurrent=1` for Bun, `-p 1` for Go). See [CI Integration](/guides/ci-integration) for details.
+Timing tests must run sequentially—parallel tests interfere with measurements. Each language has its own flag for this: `--test-threads=1` for Rust, `--concurrent=1` for Bun, `-p 1` for Go. See [CI Integration](/guides/ci-integration) for details.
 </Aside>
 
 You should see output like:
@@ -401,9 +401,9 @@ tacet
 
 ## What just happened
 
-The library ran your function thousands of times with two types of inputs (baseline zeros and random samples), measured execution times, and compared the timing distributions using Bayesian statistics. The result tells you whether there's a security-relevant timing difference above your chosen threshold.
+The library ran your function thousands of times with two types of inputs: baseline (zeros) and sample (random). It measured execution times and compared the timing distributions using Bayesian statistics. The output tells you if there's a security-relevant timing difference above your threshold.
 
-For details on the statistical methodology, see [How It Works](/reference/how-it-works).
+For the statistical details, see [How It Works](/reference/how-it-works).
 
 ## Next steps
 

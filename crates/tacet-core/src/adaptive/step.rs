@@ -781,12 +781,12 @@ mod tests {
 
     fn make_test_posterior(leak_prob: f64) -> Posterior {
         Posterior::new(
-            0.0,         // w1_post
-            1.0,         // var_post
-            Vec::new(),  // w1_draws
-            leak_prob,   // leak_probability
-            1.0,         // theta
-            1000,        // n
+            0.0,        // w1_post
+            1.0,        // var_post
+            Vec::new(), // w1_draws
+            leak_prob,  // leak_probability
+            1.0,        // theta
+            1000,       // n
         )
     }
 

@@ -1,10 +1,8 @@
 \begin{thebibliography}{10}
 
-\bibitem{lucky13}
-Nadhem~J. Al~Fardan and Kenneth~G. Paterson.
-\newblock {Lucky Thirteen: Breaking the TLS and DTLS Record Protocols}.
-\newblock In {\em 2013 IEEE Symposium on Security and Privacy}, pages 526--540.
-  IEEE, 2013.
+\bibitem{bernstein2005cache}
+Daniel~J. Bernstein.
+\newblock {Cache-timing attacks on AES}, 2005.
 
 \bibitem{kyberslash}
 Daniel~J. Bernstein, Karthikeyan Bhargavan, Shivam Bhasin, Anupam
@@ -62,6 +60,12 @@ Robert Merget, Marcus Brinkmann, Nimrod Aviram, Juraj Somorovsky, Johannes
 \newblock In {\em 30th USENIX Security Symposium (USENIX Security 21)}, pages
   213--230. USENIX Association, 2021.
 
+\bibitem{noble}
+Paul Miller.
+\newblock {noble-ciphers: Audited \& minimal JS implementation of Salsa20,
+  ChaCha and AES}, 2024.
+\newblock Audited by Cure53, September 2024.
+
 \bibitem{politiswhite}
 Dimitris~N. Politis and Halbert White.
 \newblock {Automatic Block-Length Selection for the Dependent Bootstrap}.
@@ -72,6 +76,11 @@ Oscar Reparaz, Josep Balasch, and Ingrid Verbauwhede.
 \newblock {dude, is my code constant time?}
 \newblock In {\em Design, Automation \& Test in Europe Conference \& Exhibition
   (DATE)}, pages 1697--1702. IEEE, 2017.
+
+\bibitem{go-rsa-docs}
+{The Go Authors}.
+\newblock {Package crypto/rsa}, 2024.
+\newblock Go standard library documentation.
 
 \bibitem{trailofbits-dudect}
 {Trail of Bits}.
@@ -84,5 +93,11 @@ Tom Van~Goethem, Christina P{\"o}pper, Wouter Joosen, and Mathy Vanhoef.
   Remote Connections}.
 \newblock In {\em 29th USENIX Security Symposium (USENIX Security 20)}, pages
   1985--2002. USENIX Association, 2020.
+
+\bibitem{villani2009}
+C{\'e}dric Villani.
+\newblock {\em {Optimal Transport: Old and New}}, volume 338 of {\em
+  Grundlehren der Mathematischen Wissenschaften}.
+\newblock Springer, 2009.
 
 \end{thebibliography}

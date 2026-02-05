@@ -31,7 +31,6 @@ package ffi
 import "C"
 import (
 	"errors"
-	"time"
 	"unsafe"
 )
 
@@ -66,7 +65,7 @@ func ErrorFromC(err int) error {
 }
 
 // AttackerModel represents the threat model
-type AttackerModel int
+type AttackerModel int32
 
 const (
 	SharedHardware AttackerModel = iota
@@ -77,7 +76,7 @@ const (
 )
 
 // Outcome represents the test result
-type Outcome int
+type Outcome int32
 
 const (
 	Pass Outcome = iota
@@ -87,7 +86,7 @@ const (
 )
 
 // Quality assessment
-type Quality int
+type Quality int32
 
 const (
 	Excellent Quality = iota
@@ -97,7 +96,7 @@ const (
 )
 
 // Exploitability assessment
-type Exploitability int
+type Exploitability int32
 
 const (
 	SharedHardwareOnly Exploitability = iota
@@ -107,7 +106,7 @@ const (
 )
 
 // InconclusiveReason explains why a test was inconclusive
-type InconclusiveReason int
+type InconclusiveReason int32
 
 const (
 	ReasonNone InconclusiveReason = iota
@@ -129,8 +128,8 @@ type Effect struct {
 
 // Diagnostics holds detailed diagnostic information from the analysis
 type Diagnostics struct {
-	DependenceLength    int
-	EffectiveSampleSize int
+	DependenceLength    uint64
+	EffectiveSampleSize uint64
 	StationarityRatio   float64
 	StationarityOK      bool
 	DiscreteMode        bool
@@ -147,19 +146,21 @@ type Diagnostics struct {
 
 // Result holds the complete analysis result
 type Result struct {
-	Outcome            Outcome
-	LeakProbability    float64
-	Effect             Effect
-	Quality            Quality
-	SamplesUsed        int
-	ElapsedTime        time.Duration
-	Exploitability     Exploitability
-	InconclusiveReason InconclusiveReason
-	MDENs float64
-	ThetaUserNs        float64
-	ThetaEffNs         float64
-	ThetaFloorNs       float64
-	Diagnostics        *Diagnostics
+	Outcome              Outcome
+	LeakProbability      float64
+	Effect               Effect
+	Quality              Quality
+	SamplesUsed          uint64
+	ElapsedTime          float64
+	Exploitability       Exploitability
+	InconclusiveReason   InconclusiveReason
+	MDENs                float64
+	ThetaUserNs          float64
+	ThetaEffNs           float64
+	ThetaFloorNs         float64
+	TimerResolutionNs    float64
+	DecisionThresholdNs  float64
+	Diagnostics          Diagnostics
 }
 
 // StepResult holds the result of an adaptive step
@@ -168,7 +169,7 @@ type StepResult struct {
 	LeakProbability float64
 	SamplesUsed     uint64
 	ElapsedSecs     float64
-	Result          *Result
+	Result          Result
 }
 
 // Config holds the configuration for timing analysis
@@ -337,10 +338,7 @@ func Step(calibration *Calibration, state *State, baseline, sample []uint64, con
 		LeakProbability: float64(cResult.leak_probability),
 		SamplesUsed:     uint64(cResult.samples_used),
 		ElapsedSecs:     float64(cResult.elapsed_secs),
-	}
-
-	if stepResult.HasDecision {
-		stepResult.Result = resultFromC(&cResult.result)
+		Result:          *resultFromC(&cResult.result),
 	}
 
 	return stepResult, nil
@@ -406,11 +404,11 @@ func resultFromC(r *C.struct_ToResult) *Result {
 		return nil
 	}
 
-	// Convert diagnostics
+	// Convert diagnostics (embedded struct, not pointer)
 	d := r.diagnostics
-	diagnostics := &Diagnostics{
-		DependenceLength:    int(d.dependence_length),
-		EffectiveSampleSize: int(d.effective_sample_size),
+	diagnostics := Diagnostics{
+		DependenceLength:    uint64(d.dependence_length),
+		EffectiveSampleSize: uint64(d.effective_sample_size),
 		StationarityRatio:   float64(d.stationarity_ratio),
 		StationarityOK:      bool(d.stationarity_ok),
 		DiscreteMode:        bool(d.discrete_mode),
@@ -434,14 +432,16 @@ func resultFromC(r *C.struct_ToResult) *Result {
 			CIHigh:      float64(r.effect.ci_high_ns),
 		},
 		Quality:            qualityFromC(r.quality),
-		SamplesUsed:        int(r.samples_used),
-		ElapsedTime:        time.Duration(float64(r.elapsed_secs) * float64(time.Second)),
+		SamplesUsed:        uint64(r.samples_used),
+		ElapsedTime:        float64(r.elapsed_secs),
 		Exploitability:     exploitabilityFromC(r.exploitability),
 		InconclusiveReason: inconclusiveReasonFromC(r.inconclusive_reason),
 		MDENs:              float64(r.mde_ns),
 		ThetaUserNs:        float64(r.theta_user_ns),
 		ThetaEffNs:         float64(r.theta_eff_ns),
 		ThetaFloorNs:       float64(r.theta_floor_ns),
+		TimerResolutionNs:  float64(r.timer_resolution_ns),
+		DecisionThresholdNs: float64(r.decision_threshold_ns),
 		Diagnostics:        diagnostics,
 	}
 }

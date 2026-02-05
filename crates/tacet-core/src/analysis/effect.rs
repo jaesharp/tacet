@@ -100,11 +100,7 @@ pub fn compute_effect_estimate_analytical(
 /// 6. tail_slow_share = among top 5% (p95+), fraction of deviations that are slowdowns
 /// 7. Compute quantile shifts (p50/p90/p95/p99)
 /// 8. Pattern labeling based on tail_share
-pub fn compute_tail_diagnostics(
-    baseline: &[f64],
-    sample: &[f64],
-    w1_deb: f64,
-) -> TailDiagnostics {
+pub fn compute_tail_diagnostics(baseline: &[f64], sample: &[f64], w1_deb: f64) -> TailDiagnostics {
     // Handle edge cases
     if baseline.is_empty() || sample.is_empty() || baseline.len() != sample.len() {
         return TailDiagnostics {
@@ -473,9 +469,9 @@ mod tests {
         // Baseline has higher odd quantiles, sample has higher even quantiles
         for i in (n * 95 / 100)..n {
             if i % 2 == 0 {
-                sample[i] += 2.0;  // Sample's even quantiles higher
+                sample[i] += 2.0; // Sample's even quantiles higher
             } else {
-                baseline[i] += 2.0;  // Baseline's odd quantiles higher
+                baseline[i] += 2.0; // Baseline's odd quantiles higher
             }
         }
 

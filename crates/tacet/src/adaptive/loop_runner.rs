@@ -578,7 +578,7 @@ mod tests {
             block_length: 10,
             iact: 1.0,
             iact_method: tacet_core::types::IactMethod::PolitisWhite,
-            sigma_t: 100.0,   // t-prior scale
+            sigma_t: 100.0, // t-prior scale
             theta_ns: 100.0,
             calibration_samples: 5000,
             discrete_mode: false,

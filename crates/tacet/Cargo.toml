@@ -72,6 +72,12 @@ pqcrypto-traits = "0.3.5"
 # For macro compile-time error tests
 trybuild = "1.0"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+openssl = "0.10.75"
+sodiumoxide = "0.2.7"
+# NOTE: boring crate (BoringSSL) conflicts with openssl crate - cannot coexist in same binary
+# See BORINGSSL_INVESTIGATION_REPORT.md
+# Pure Rust constant-time crypto
+orion = "0.17"
 
 [[bench]]
 name = "comparison"

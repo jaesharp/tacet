@@ -294,7 +294,11 @@ fn format_fail_body(
     // Show tail diagnostics if available
     if let Some(ref tail_diag) = effect.tail_diagnostics {
         writeln!(out).unwrap();
-        writeln!(out, "    Diagnostics (paired differences Δ = Sample − Baseline):").unwrap();
+        writeln!(
+            out,
+            "    Diagnostics (paired differences Δ = Sample − Baseline):"
+        )
+        .unwrap();
         writeln!(
             out,
             "      Δ median:   {:+.1} ns",

@@ -106,10 +106,6 @@ mod tests {
         // For 1D with same mean: KL = 0.5 × (σ²_p/σ²_q - 1 + ln(σ²_q/σ²_p))
         // = 0.5 × (2 - 1 + ln(1/2)) = 0.5 × (1 - 0.693) ≈ 0.153
         assert!(kl > 0.0, "KL should be positive for different variances");
-        assert!(
-            (kl - 0.153).abs() < 0.01,
-            "KL should be ~0.153, got {}",
-            kl
-        );
+        assert!((kl - 0.153).abs() < 0.01, "KL should be ~0.153, got {}", kl);
     }
 }

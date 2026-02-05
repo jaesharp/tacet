@@ -546,13 +546,7 @@ pub struct Posterior1D {
 
 impl Posterior1D {
     /// Create a new 1D posterior.
-    pub fn new(
-        w1_post: f64,
-        var_post: f64,
-        leak_probability: f64,
-        n: usize,
-        theta: f64,
-    ) -> Self {
+    pub fn new(w1_post: f64, var_post: f64, leak_probability: f64, n: usize, theta: f64) -> Self {
         Self {
             w1_post,
             var_post,
@@ -602,9 +596,7 @@ pub fn check_gate1_1d(
                 "Posterior variance is {:.0}% of prior; data not informative",
                 variance_ratio * 100.0
             ),
-            guidance: String::from(
-                "Try: cycle counter, reduce system load, increase batch size",
-            ),
+            guidance: String::from("Try: cycle counter, reduce system load, increase batch size"),
             variance_ratio,
         })
     } else {
@@ -636,10 +628,7 @@ pub fn check_gate1_1d(
 /// If θ_eff = 10ns and Var_post = 900ns², then SD = 30ns > 3×10ns = 30ns.
 /// This triggers the gate because the measurement uncertainty is too large
 /// relative to the threshold we're trying to detect.
-pub fn check_variance_floor_exceeded(
-    var_post: f64,
-    theta_eff: f64,
-) -> Option<InconclusiveReason> {
+pub fn check_variance_floor_exceeded(var_post: f64, theta_eff: f64) -> Option<InconclusiveReason> {
     const K: f64 = 3.0; // Conservative factor: require SD < 3× threshold
     let sd_estimate = libm::sqrt(var_post);
 
@@ -648,7 +637,9 @@ pub fn check_variance_floor_exceeded(
         Some(InconclusiveReason::DataTooNoisy {
             message: alloc::format!(
                 "Estimate SD ({:.1}ns) exceeds {}× threshold ({:.1}ns)",
-                sd_estimate, K, theta_eff
+                sd_estimate,
+                K,
+                theta_eff
             ),
             guidance: String::from("Measurement noise too high for this threshold"),
             variance_ratio,
@@ -675,10 +666,10 @@ mod tests {
 
         // Posterior variance = 10 ns² (10% of prior, well below 50% threshold)
         let posterior = Posterior1D::new(
-            5.0,  // w1_post
-            10.0, // var_post
-            0.3,  // leak_probability
-            5000, // n
+            5.0,   // w1_post
+            10.0,  // var_post
+            0.3,   // leak_probability
+            5000,  // n
             100.0, // theta
         );
 
@@ -698,10 +689,10 @@ mod tests {
 
         // Posterior variance = 60 ns² (60% of prior, exceeds 50% threshold)
         let posterior = Posterior1D::new(
-            5.0,  // w1_post
-            60.0, // var_post
-            0.5,  // leak_probability
-            5000, // n
+            5.0,   // w1_post
+            60.0,  // var_post
+            0.5,   // leak_probability
+            5000,  // n
             100.0, // theta
         );
 
@@ -713,10 +704,7 @@ mod tests {
             "Uninformative data (variance ratio = 0.6) should trigger Gate 1"
         );
 
-        if let Some(InconclusiveReason::DataTooNoisy {
-            variance_ratio, ..
-        }) = result
-        {
+        if let Some(InconclusiveReason::DataTooNoisy { variance_ratio, .. }) = result {
             assert!(
                 (variance_ratio - 0.6).abs() < 1e-6,
                 "Variance ratio should be 0.6"
@@ -731,10 +719,10 @@ mod tests {
 
         // Posterior variance = 50 ns² (exactly at 50% threshold)
         let posterior = Posterior1D::new(
-            5.0,  // w1_post
-            50.0, // var_post
-            0.5,  // leak_probability
-            5000, // n
+            5.0,   // w1_post
+            50.0,  // var_post
+            0.5,   // leak_probability
+            5000,  // n
             100.0, // theta
         );
 
@@ -781,10 +769,7 @@ mod tests {
             "SD (31ns) > 3× threshold (30ns) should trigger gate"
         );
 
-        if let Some(InconclusiveReason::DataTooNoisy {
-            variance_ratio, ..
-        }) = result
-        {
+        if let Some(InconclusiveReason::DataTooNoisy { variance_ratio, .. }) = result {
             // variance_ratio = (SD / theta_eff)² = (31 / 10)² = 9.61
             assert!(
                 (variance_ratio - 9.61).abs() < 0.01,

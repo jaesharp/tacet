@@ -82,8 +82,8 @@ fn test_serde_serialization() {
     assert!(json.contains("TailEffect"));
 
     // Test JSON deserialization
-    let deserialized: TailDiagnostics = serde_json::from_str(&json)
-        .expect("Should deserialize from JSON");
+    let deserialized: TailDiagnostics =
+        serde_json::from_str(&json).expect("Should deserialize from JSON");
     assert_eq!(deserialized.shift_ns, tail_diag.shift_ns);
     assert_eq!(deserialized.tail_ns, tail_diag.tail_ns);
     assert_eq!(deserialized.pattern_label, tail_diag.pattern_label);

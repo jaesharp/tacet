@@ -133,7 +133,7 @@ func Test(gen Generator, op Operation, inputSize int, opts ...Option) (*Result, 
 			return &Result{
 				Outcome:            Inconclusive,
 				InconclusiveReason: ReasonTimeBudgetExceeded,
-				SamplesUsed:        int(state.TotalSamples() / 2), // Per class
+				SamplesUsed:        state.TotalSamples() / 2, // Per class
 				ElapsedTime:        elapsed,
 				LeakProbability:    state.LeakProbability(),
 			}, nil
@@ -159,8 +159,8 @@ func Test(gen Generator, op Operation, inputSize int, opts ...Option) (*Result, 
 		}
 
 		// Check if we have a decision
-		if stepResult.HasDecision && stepResult.Result != nil {
-			return resultFromFFI(stepResult.Result), nil
+		if stepResult.HasDecision {
+			return resultFromFFI(&stepResult.Result), nil
 		}
 
 		// Check sample budget
@@ -168,7 +168,7 @@ func Test(gen Generator, op Operation, inputSize int, opts ...Option) (*Result, 
 			return &Result{
 				Outcome:            Inconclusive,
 				InconclusiveReason: ReasonSampleBudgetExceeded,
-				SamplesUsed:        int(state.TotalSamples() / 2),
+				SamplesUsed:        state.TotalSamples() / 2,
 				ElapsedTime:        time.Since(startTime),
 				LeakProbability:    state.LeakProbability(),
 			}, nil
@@ -272,7 +272,7 @@ func resultFromFFI(r *ffi.Result) *Result {
 		},
 		Quality:            qualityFromFFI(r.Quality),
 		SamplesUsed:        r.SamplesUsed,
-		ElapsedTime:        r.ElapsedTime,
+		ElapsedTime:        time.Duration(r.ElapsedTime * float64(time.Second)),
 		Exploitability:     exploitabilityFromFFI(r.Exploitability),
 		InconclusiveReason: inconclusiveReasonFromFFI(r.InconclusiveReason),
 		MDENs:              r.MDENs,
@@ -281,24 +281,22 @@ func resultFromFFI(r *ffi.Result) *Result {
 		ThetaFloorNs:       r.ThetaFloorNs,
 	}
 
-	// Convert diagnostics if available
-	if r.Diagnostics != nil {
-		result.Diagnostics = &Diagnostics{
-			DependenceLength:    r.Diagnostics.DependenceLength,
-			EffectiveSampleSize: r.Diagnostics.EffectiveSampleSize,
-			StationarityRatio:   r.Diagnostics.StationarityRatio,
-			StationarityOK:      r.Diagnostics.StationarityOK,
-			DiscreteMode:        r.Diagnostics.DiscreteMode,
-			TimerResolutionNs:   r.Diagnostics.TimerResolutionNs,
-			LambdaMean:          r.Diagnostics.LambdaMean,
-			LambdaSD:            r.Diagnostics.LambdaSD,
-			LambdaESS:           r.Diagnostics.LambdaESS,
-			LambdaMixingOK:      r.Diagnostics.LambdaMixingOK,
-			KappaMean:           r.Diagnostics.KappaMean,
-			KappaCV:             r.Diagnostics.KappaCV,
-			KappaESS:            r.Diagnostics.KappaESS,
-			KappaMixingOK:       r.Diagnostics.KappaMixingOK,
-		}
+	// Convert diagnostics (always present in FFI result, not a pointer)
+	result.Diagnostics = &Diagnostics{
+		DependenceLength:    r.Diagnostics.DependenceLength,
+		EffectiveSampleSize: r.Diagnostics.EffectiveSampleSize,
+		StationarityRatio:   r.Diagnostics.StationarityRatio,
+		StationarityOK:      r.Diagnostics.StationarityOK,
+		DiscreteMode:        r.Diagnostics.DiscreteMode,
+		TimerResolutionNs:   r.Diagnostics.TimerResolutionNs,
+		LambdaMean:          r.Diagnostics.LambdaMean,
+		LambdaSD:            r.Diagnostics.LambdaSD,
+		LambdaESS:           r.Diagnostics.LambdaESS,
+		LambdaMixingOK:      r.Diagnostics.LambdaMixingOK,
+		KappaMean:           r.Diagnostics.KappaMean,
+		KappaCV:             r.Diagnostics.KappaCV,
+		KappaESS:            r.Diagnostics.KappaESS,
+		KappaMixingOK:       r.Diagnostics.KappaMixingOK,
 	}
 
 	return result

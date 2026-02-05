@@ -1576,7 +1576,11 @@ impl TimingOracle {
             use tacet_core::analysis::compute_effect_estimate;
             let effect = compute_effect_estimate(&p.w1_draws);
             let detectable = effect.credible_interval_ns.0 > theta_floor;
-            (effect.max_effect_ns, effect.credible_interval_ns, detectable)
+            (
+                effect.max_effect_ns,
+                effect.credible_interval_ns,
+                detectable,
+            )
         } else {
             (0.0, (0.0, 0.0), false)
         };

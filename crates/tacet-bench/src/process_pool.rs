@@ -55,11 +55,7 @@ impl ProcessConfig {
     ///
     /// If `silent_path` or `rtlf_path` are provided, the worker will source
     /// those scripts on startup, enabling persistent mode for those tools.
-    pub fn r_worker(
-        script_path: &str,
-        silent_path: Option<&str>,
-        rtlf_path: Option<&str>,
-    ) -> Self {
+    pub fn r_worker(script_path: &str, silent_path: Option<&str>, rtlf_path: Option<&str>) -> Self {
         let mut args = vec!["--vanilla".to_string(), script_path.to_string()];
 
         // Add optional paths for SILENT and RTLF scripts
@@ -119,10 +115,9 @@ impl ChildProcess {
 
         let mut child = cmd.spawn()?;
 
-        let stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "Failed to open stdin"))?;
+        let stdin = child.stdin.take().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::Other, "Failed to open stdin")
+        })?;
         let stdout = child.stdout.take().ok_or_else(|| {
             std::io::Error::new(std::io::ErrorKind::Other, "Failed to open stdout")
         })?;
@@ -262,7 +257,10 @@ impl std::fmt::Debug for ProcessPool {
         f.debug_struct("ProcessPool")
             .field("size", &self.processes.len())
             .field("config", &self.config)
-            .field("total_requests", &self.total_requests.load(Ordering::Relaxed))
+            .field(
+                "total_requests",
+                &self.total_requests.load(Ordering::Relaxed),
+            )
             .field("total_spawns", &self.total_spawns.load(Ordering::Relaxed))
             .finish()
     }
@@ -290,7 +288,10 @@ impl ProcessPool {
         rtlf_path: Option<&str>,
         size: usize,
     ) -> Self {
-        Self::new(ProcessConfig::r_worker(script_path, silent_path, rtlf_path), size)
+        Self::new(
+            ProcessConfig::r_worker(script_path, silent_path, rtlf_path),
+            size,
+        )
     }
 
     /// Create a pool for Python workers.
@@ -336,7 +337,9 @@ impl ProcessPool {
     }
 
     /// Find and lock an available process slot, spawning if needed.
-    fn get_or_spawn_process(&self) -> std::io::Result<(usize, std::sync::MutexGuard<'_, Option<ChildProcess>>)> {
+    fn get_or_spawn_process(
+        &self,
+    ) -> std::io::Result<(usize, std::sync::MutexGuard<'_, Option<ChildProcess>>)> {
         // Try to find an existing healthy process
         for (i, slot) in self.processes.iter().enumerate() {
             if let Ok(mut guard) = slot.try_lock() {

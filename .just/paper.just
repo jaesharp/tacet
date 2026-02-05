@@ -1,5 +1,8 @@
 # Paper (LaTeX) commands
 # USENIX Security 2026 paper compilation
+#
+# NOTE: Requires LaTeX tools (pdflatex, bibtex, latexmk) from devenv.
+# These are available when direnv is loaded (automatic in your terminal).
 
 paper_dir := justfile_directory() + "/paper"
 
@@ -73,18 +76,20 @@ wordcount:
 # Show page count (13 max for body)
 [group('paper')]
 pagecount:
-    @if [ -f "{{paper_dir}}/paper.pdf" ]; then \
-        if command -v pdfinfo > /dev/null 2>&1; then \
-            pages=$$(pdfinfo "{{paper_dir}}/paper.pdf" 2>/dev/null | grep Pages | awk '{print $$2}'); \
-            echo "Page count: $$pages pages (13 max for body)"; \
-        elif command -v pdftk > /dev/null 2>&1; then \
-            pages=$$(pdftk "{{paper_dir}}/paper.pdf" dump_data 2>/dev/null | grep NumberOfPages | awk '{print $$2}'); \
-            echo "Page count: $$pages pages (13 max for body)"; \
-        else \
-            echo "Page count: install pdfinfo or pdftk to check"; \
-        fi \
-    else \
-        echo "Page count: paper.pdf not found"; \
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -f "{{paper_dir}}/paper.pdf" ]; then
+        if command -v pdfinfo > /dev/null 2>&1; then
+            pages=$(pdfinfo "{{paper_dir}}/paper.pdf" 2>/dev/null | grep Pages | awk '{print $2}')
+            echo "Page count: $pages pages (13 max for body)"
+        elif command -v pdftk > /dev/null 2>&1; then
+            pages=$(pdftk "{{paper_dir}}/paper.pdf" dump_data 2>/dev/null | grep NumberOfPages | awk '{print $2}')
+            echo "Page count: $pages pages (13 max for body)"
+        else
+            echo "Page count: install pdfinfo or pdftk to check"
+        fi
+    else
+        echo "Page count: paper.pdf not found"
     fi
 
 # Check for common LaTeX issues

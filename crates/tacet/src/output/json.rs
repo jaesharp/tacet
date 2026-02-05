@@ -234,7 +234,10 @@ mod tests {
         let fail = parsed.get("Fail").unwrap();
         assert!(fail.get("effect").is_some());
         let effect = fail.get("effect").unwrap();
-        assert_eq!(effect.get("w1_distance_ns").unwrap().as_f64().unwrap(), 150.0);
+        assert_eq!(
+            effect.get("w1_distance_ns").unwrap().as_f64().unwrap(),
+            150.0
+        );
 
         // Verify tail diagnostics
         assert!(effect.get("tail_diagnostics").is_some());
@@ -242,14 +245,29 @@ mod tests {
         assert_eq!(tail.get("shift_ns").unwrap().as_f64().unwrap(), 120.0);
         assert_eq!(tail.get("tail_ns").unwrap().as_f64().unwrap(), 30.0);
         assert_eq!(tail.get("tail_share").unwrap().as_f64().unwrap(), 0.2);
-        assert_eq!(tail.get("pattern_label").unwrap().as_str().unwrap(), "UniformShift");
+        assert_eq!(
+            tail.get("pattern_label").unwrap().as_str().unwrap(),
+            "UniformShift"
+        );
 
         // Verify quantile shifts
         let quantile_shifts = tail.get("quantile_shifts").unwrap();
-        assert_eq!(quantile_shifts.get("p50_ns").unwrap().as_f64().unwrap(), 115.0);
-        assert_eq!(quantile_shifts.get("p90_ns").unwrap().as_f64().unwrap(), 145.0);
-        assert_eq!(quantile_shifts.get("p95_ns").unwrap().as_f64().unwrap(), 160.0);
-        assert_eq!(quantile_shifts.get("p99_ns").unwrap().as_f64().unwrap(), 180.0);
+        assert_eq!(
+            quantile_shifts.get("p50_ns").unwrap().as_f64().unwrap(),
+            115.0
+        );
+        assert_eq!(
+            quantile_shifts.get("p90_ns").unwrap().as_f64().unwrap(),
+            145.0
+        );
+        assert_eq!(
+            quantile_shifts.get("p95_ns").unwrap().as_f64().unwrap(),
+            160.0
+        );
+        assert_eq!(
+            quantile_shifts.get("p99_ns").unwrap().as_f64().unwrap(),
+            180.0
+        );
 
         // Verify top_quantiles is NOT serialized (deprecated)
         assert!(effect.get("top_quantiles").is_none());

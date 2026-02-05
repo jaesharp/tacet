@@ -553,7 +553,11 @@ impl RtlfAdapter {
     }
 
     /// Analyze using the process pool.
-    fn analyze_via_pool(&self, pool: &ProcessPool, data: &BlockedData) -> Result<ToolResult, String> {
+    fn analyze_via_pool(
+        &self,
+        pool: &ProcessPool,
+        data: &BlockedData,
+    ) -> Result<ToolResult, String> {
         let start = Instant::now();
 
         // Build request
@@ -851,7 +855,12 @@ impl SilentAdapter {
     }
 
     /// Analyze using the process pool.
-    fn analyze_via_pool(&self, pool: &ProcessPool, data: &BlockedData, delta: f64) -> Result<ToolResult, String> {
+    fn analyze_via_pool(
+        &self,
+        pool: &ProcessPool,
+        data: &BlockedData,
+        delta: f64,
+    ) -> Result<ToolResult, String> {
         let start = Instant::now();
 
         // Build request
@@ -882,7 +891,10 @@ impl SilentAdapter {
             samples_used,
             decision_time_ms: start.elapsed().as_millis() as u64,
             leak_probability: None,
-            status: format!("stat={:.3}, alpha={:.2}, delta={:.1} (pool)", statistic, self.alpha, delta),
+            status: format!(
+                "stat={:.3}, alpha={:.2}, delta={:.1} (pool)",
+                statistic, self.alpha, delta
+            ),
             outcome: if detected {
                 OutcomeCategory::Fail
             } else {
@@ -975,7 +987,10 @@ impl ToolAdapter for SilentAdapter {
                     samples_used,
                     decision_time_ms: start.elapsed().as_millis() as u64,
                     leak_probability: None,
-                    status: format!("stat={:.3}, alpha={:.2}, delta={:.1}", stat, self.alpha, delta),
+                    status: format!(
+                        "stat={:.3}, alpha={:.2}, delta={:.1}",
+                        stat, self.alpha, delta
+                    ),
                     outcome: if detected {
                         OutcomeCategory::Fail
                     } else {
@@ -2146,10 +2161,10 @@ fn rtlf_bootstrap_test(
     alpha: f64,
     bootstrap_iters: usize,
 ) -> (bool, Vec<usize>, f64) {
-    use rayon::prelude::*;
     use rand::prelude::*;
     use rand::rngs::SmallRng;
     use rand::SeedableRng;
+    use rayon::prelude::*;
 
     let n = baseline.len().min(test.len());
 
@@ -2704,7 +2719,11 @@ impl TlsfuzzerAdapter {
     }
 
     /// Analyze using the process pool.
-    fn analyze_via_pool(&self, pool: &ProcessPool, data: &BlockedData) -> Result<ToolResult, String> {
+    fn analyze_via_pool(
+        &self,
+        pool: &ProcessPool,
+        data: &BlockedData,
+    ) -> Result<ToolResult, String> {
         let start = Instant::now();
 
         // Build request
@@ -2733,7 +2752,10 @@ impl TlsfuzzerAdapter {
             samples_used,
             decision_time_ms: start.elapsed().as_millis() as u64,
             leak_probability: Some(1.0 - p_value),
-            status: format!("{}(p={:.4}), alpha={:.2} (pool)", test_name, p_value, self.alpha),
+            status: format!(
+                "{}(p={:.4}), alpha={:.2} (pool)",
+                test_name, p_value, self.alpha
+            ),
             outcome: if detected {
                 OutcomeCategory::Fail
             } else {

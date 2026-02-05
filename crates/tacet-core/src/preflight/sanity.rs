@@ -199,7 +199,8 @@ pub fn sanity_check(
     let q4_second = compute_quantile(&mut second_half, 0.90);
 
     // Max absolute quantile difference across the four quantiles
-    let max_diff = (q1_first - q1_second).abs()
+    let max_diff = (q1_first - q1_second)
+        .abs()
         .max((q2_first - q2_second).abs())
         .max((q3_first - q3_second).abs())
         .max((q4_first - q4_second).abs());

@@ -275,7 +275,6 @@ fn check_outlier_asymmetry(rate_fixed: f64, rate_random: f64) -> bool {
     true
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

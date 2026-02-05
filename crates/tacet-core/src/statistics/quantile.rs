@@ -25,7 +25,6 @@
 
 extern crate alloc;
 
-
 use crate::math;
 
 /// Debug assertion that all values in the slice are finite.
@@ -102,7 +101,6 @@ pub fn compute_quantile(data: &mut [f64], p: f64) -> f64 {
     (floor_val + ceil_val) / 2.0
 }
 
-
 /// Compute mid-distribution quantiles for discrete data (spec §3.6).
 ///
 /// Mid-distribution quantiles handle ties correctly by using:
@@ -170,7 +168,6 @@ pub fn compute_midquantile(data: &mut [f64], p: f64) -> f64 {
     // If we get here, p is very close to 1, return the last value
     data[n - 1]
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -261,4 +258,3 @@ mod tests {
         assert!((result - 42.0).abs() < 1e-10);
     }
 }
-

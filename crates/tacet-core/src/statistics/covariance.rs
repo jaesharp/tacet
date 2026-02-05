@@ -312,8 +312,6 @@ pub fn bootstrap_w1_variance(
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;

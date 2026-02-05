@@ -10,6 +10,8 @@ import { AttackerModel } from "./types.js";
 import {
   collectSamples,
   collectBatches,
+  collectSamplesAsync,
+  collectBatchesAsync,
   type BatchingInfo,
   type TimerInfo,
 } from "./collector.js";
@@ -527,6 +529,146 @@ export class TimingOracle {
   }
 
   /**
+   * Run the timing test with async operations.
+   *
+   * This is the async version of test(). Use this when your operation
+   * or input generators are async.
+   *
+   * It:
+   * 1. Runs pilot phase to detect batch size K
+   * 2. Collects calibration samples
+   * 3. Runs adaptive sampling until decision or budget exceeded
+   *
+   * @param inputs Input generators for baseline and sample classes (can be async)
+   * @param operation The operation to test (can be async)
+   * @returns Test result with outcome, effect size, and diagnostics
+   */
+  async testAsync<T>(
+    inputs: InputPair<T> | { baseline: () => T | Promise<T>; sample: () => T | Promise<T> },
+    operation: (input: T) => void | Promise<void>
+  ): Promise<TimingTestResult> {
+    const startTime = performance.now();
+    const timeBudgetMs = this.config.timeBudgetMs;
+    const maxSamples = this.config.maxSamples;
+
+    // Calibration phase: collect initial samples
+    const calibrationSamples = 5000;
+    const calibrationResult = await collectSamplesAsync(
+      calibrationSamples,
+      inputs.baseline,
+      inputs.sample,
+      operation
+    );
+
+    const timerInfo = calibrationResult.timerInfo;
+    const batchingInfo = calibrationResult.batchingInfo;
+
+    // Accumulate all samples for final analysis if needed
+    const allBaseline: bigint[] = Array.from(calibrationResult.baseline);
+    const allSample: bigint[] = Array.from(calibrationResult.sample);
+
+    // Run calibration
+    const calibration = calibrateSamples(
+      calibrationResult.baseline,
+      calibrationResult.sample,
+      this.config,
+      timerInfo.frequencyHz
+    );
+
+    // Create adaptive state
+    const state = new AdaptiveState();
+
+    // Add calibration samples to state
+    const elapsedSecs = (performance.now() - startTime) / 1000;
+    let stepResult = adaptiveStepBatch(
+      calibration,
+      state,
+      calibrationResult.baseline,
+      calibrationResult.sample,
+      this.config,
+      elapsedSecs
+    );
+
+    // Check if we got a decision from calibration samples alone
+    if (stepResult.isDecision && stepResult.result) {
+      if (this._showProgress) {
+        process.stderr.write("\n");
+      }
+      return new TimingTestResult(stepResult.result, batchingInfo, timerInfo);
+    }
+
+    // Adaptive loop
+    const batchSize = 1000;
+    const batchGenerator = collectBatchesAsync(
+      batchSize,
+      inputs.baseline,
+      inputs.sample,
+      operation
+    );
+
+    let totalSamples = calibrationSamples;
+
+    for await (const batch of batchGenerator) {
+      totalSamples += batchSize;
+      const currentElapsed = (performance.now() - startTime) / 1000;
+
+      // Check budgets
+      if (currentElapsed * 1000 >= timeBudgetMs) {
+        break;
+      }
+      if (totalSamples >= maxSamples) {
+        break;
+      }
+
+      // Accumulate samples for final analysis
+      for (const v of batch.baseline) allBaseline.push(v);
+      for (const v of batch.sample) allSample.push(v);
+
+      // Run adaptive step
+      stepResult = adaptiveStepBatch(
+        calibration,
+        state,
+        batch.baseline,
+        batch.sample,
+        this.config,
+        currentElapsed
+      );
+
+      // Show progress if enabled
+      if (this._showProgress) {
+        const pct = (stepResult.currentProbability * 100).toFixed(1);
+        const n = state.totalBaseline;
+        const elapsed = currentElapsed.toFixed(1);
+        process.stderr.write(`\r[${elapsed}s] P(leak)=${pct}%, samples=${n}`);
+      }
+
+      if (stepResult.isDecision && stepResult.result) {
+        if (this._showProgress) {
+          process.stderr.write("\n");
+        }
+        return new TimingTestResult(stepResult.result, batchingInfo, timerInfo);
+      }
+    }
+
+    // Budget exceeded - run final analysis on ALL collected samples
+    if (this._showProgress) {
+      process.stderr.write("\n");
+    }
+
+    const finalBaseline = new BigInt64Array(allBaseline);
+    const finalSample = new BigInt64Array(allSample);
+
+    const finalResult = analyze(
+      finalBaseline,
+      finalSample,
+      this.config,
+      timerInfo.frequencyHz
+    );
+
+    return new TimingTestResult(finalResult, batchingInfo, timerInfo);
+  }
+
+  /**
    * Analyze pre-collected timing data.
    *
    * Use this if you've already collected timing samples externally.
@@ -571,6 +713,8 @@ export {
 export {
   collectSamples,
   collectBatches,
+  collectSamplesAsync,
+  collectBatchesAsync,
   calibrateTimer,
   type BatchingInfo,
   type CollectedSamples,

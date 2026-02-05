@@ -163,9 +163,9 @@ type TopQuantile struct {
 // be used for debugging or understanding measurement reliability.
 type Diagnostics struct {
 	// DependenceLength is the block length used for bootstrap resampling.
-	DependenceLength int
+	DependenceLength uint64
 	// EffectiveSampleSize accounts for autocorrelation in timing data.
-	EffectiveSampleSize int
+	EffectiveSampleSize uint64
 	// StationarityRatio is the ratio of post-test variance to calibration variance.
 	StationarityRatio float64
 	// StationarityOK indicates whether the stationarity check passed.
@@ -212,7 +212,7 @@ type Result struct {
 	Quality Quality
 
 	// SamplesUsed is the number of samples collected per class.
-	SamplesUsed int
+	SamplesUsed uint64
 
 	// ElapsedTime is how long the test took.
 	ElapsedTime time.Duration
