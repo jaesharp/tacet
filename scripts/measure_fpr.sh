@@ -89,9 +89,9 @@ parse_outcome() {
         outcome="PASS"
     elif echo "$output" | grep -q "test result:.*FAILED\|FAILED\|panicked"; then
         outcome="FAIL"
-    elif echo "$output" | grep -q "Inconclusive:"; then
+    elif echo "$output" | grep -q "Inconclusive:\|\[SKIPPED\].*inconclusive"; then
         outcome="INCONCLUSIVE"
-    elif echo "$output" | grep -q "Skipping:\|Unmeasurable:"; then
+    elif echo "$output" | grep -q "Skipping:\|Unmeasurable:\|\[SKIPPED\]"; then
         outcome="SKIP"
     elif [[ "$exit_code" -ne 0 ]]; then
         outcome="FAIL"

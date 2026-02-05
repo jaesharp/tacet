@@ -145,13 +145,16 @@ $\prob{\text{leak} > \theta \given \text{data}}$ to distinguish ``no leak detect
 from ``insufficient evidence.'' The system handles autocorrelated measurements via
 stream-based block bootstrap and detects degraded conditions through quality gates.
 %
+% TODO: Verify total test count (168) matches Table 2 (current rows sum to 158).
 In our evaluation, \tacet independently detected CVE-2023-49092 (MARVIN attack) in
 RustCrypto's RSA implementation (\Cref{sec:evaluation:marvin}), demonstrating practical
-utility on real-world vulnerabilities. Calibration validation across 800 null-hypothesis
-trials yielded 0.5\% false positive rate (4/800 failures, per-model Wilson 95\% CIs:
-[0\%, 1.8\%] to [0.6\%, 4.8\%]), confirming the $\leq$5\% target. On 168 cryptographic
-test cases spanning Rust, C/C++, Go, and JavaScript ecosystems, \tacet maintained
-zero false positives (Wilson 95\% CI: [0\%, 2.2\%]). Designed
+utility on real-world vulnerabilities. Calibration validation across 1{,}600
+null-hypothesis trials on a heavily loaded server (64-vCPU, load average ${\sim}54$)
+yielded 0.25\% false positive rate (4/1{,}600 failures, per-model Wilson 95\% CIs:
+[0\%, 0.9\%] to [0.3\%, 2.5\%]), confirming the $\leq$5\% target.
+% TODO: Update crypto FPR numbers once final benchmark runs complete.
+On 168 cryptographic test cases spanning Rust, C/C++, Go, and JavaScript ecosystems,
+\tacet maintained zero false positives (Wilson 95\% CI: [0\%, 2.2\%]). Designed
 for CI integration, \tacet eliminates flaky tests by returning Inconclusive under poor
 conditions rather than unreliable verdicts. The library is implemented in Rust with
 C/C++, Go, and JavaScript bindings.
@@ -409,6 +412,7 @@ Timing leaks manifest in different patterns:
     \item \textbf{Tail effects} (cache-based): Upper quantiles shift more $\Rightarrow$ $W_1$ emphasizes tail transport
 \end{itemize}
 
+% TODO: Verify SILENT tail-effect claim against final benchmark data.
 For rare tail effects (cache misses affecting a small fraction of measurements),
 W$_1$ shows higher detection power than quantile-based approaches in our evaluation:
 when effects were concentrated in 5\% of samples, \silent's detection power dropped
@@ -721,11 +725,6 @@ category, all verdicts are either Pass or Fail.
 \subsection{Synthetic Benchmarks}
 \label{sec:evaluation:synthetic}
 
-% TODO: Include actual figures once finalized
-% Figure 1: heatmap_fpr.png - FPR by autocorrelation
-% Figure 2: heatmap_power.png - Power by effect size
-% Figure 3: power_curves_iid.png or power_curves_ar1.png
-
 \paragraph{False positive rate under autocorrelation.}
 \Cref{fig:fpr_heatmap} shows verdict distributions under the null hypothesis
 (no injected effect) across varying autocorrelation structures.
@@ -746,9 +745,11 @@ the prior and refuse to commit to a verdict.
 consistently low false positive rates. The key difference: \silent must still output
 Pass or Fail, while \tacet can report uncertainty explicitly.
 
-% CHECK: Verify these numbers match the actual benchmark data
+% TODO: Update all data claims in this subsection once final benchmark data is in
+% and figures are regenerated. Verify prose matches the figures.
 \begin{figure*}[ht]
     \centering
+    % TODO: Update figure path once final figures are selected.
     \includegraphics[width=0.85\textwidth]{analysis/outputs/figures/heatmap_fpr.png}
     \caption{False positive rate by autocorrelation structure (null effect,
              shift pattern, W$_1$ distance statistic). Teal indicates ``effect found''
@@ -774,6 +775,7 @@ binary cutoff.
 
 \begin{figure*}[ht]
     \centering
+    % TODO: Update figure path once final figures are selected.
     \includegraphics[width=0.85\textwidth]{analysis/outputs/figures/heatmap_power.png}
     \caption{Detection power by effect size (AR(1) noise with $\rho = 0.6$,
              shift pattern, W$_1$ distance statistic). At large effects, all tools
@@ -786,14 +788,42 @@ binary cutoff.
 \subsection{Results}
 \label{sec:evaluation:results}
 
+% Data source: results/paper-calibration-noisy/ CSVs
 \paragraph{Calibration validation.}
-We validated \tacet's probabilistic guarantees using the calibration test suite.
-Testing each attacker model separately with 200 null-hypothesis trials (random-vs-random,
-no injected effect), we observed 4 total false positives across 800 trials (0.5\% overall FPR).
-Per-model results: SharedHardware (0/200, Wilson 95\% CI: [0\%, 1.8\%]),
-PostQuantumSentinel (4/200, CI: [0.6\%, 4.8\%]),
-AdjacentNetwork (0/200, CI: [0\%, 1.8\%]),
-RemoteNetwork (0/200, CI: [0\%, 1.8\%])---all consistent with our $\leq$5\% target.
+We validated \tacet's probabilistic guarantees using the calibration test suite
+on a heavily loaded 64-vCPU server (AMD EPYC 9R45, load average ${\sim}54$,
+89\% CPU utilization from concurrent workloads).
+Testing each attacker model separately with 400 null-hypothesis trials
+(SHA3-256 on random-vs-random inputs, no injected effect), we observed 4 total
+false positives across 1{,}600 trials (0.25\% overall FPR).
+Per-model results are shown in \Cref{tab:calibration_fpr}.
+%
+\begin{table}[h]
+\centering
+\small
+\caption{Calibration FPR per attacker model (400 trials each, noisy server).
+         Tight-threshold models return Inconclusive when the measurement floor
+         exceeds their threshold---a conservative design choice (\Cref{sec:approach:decisions}).}
+\label{tab:calibration_fpr}
+\begin{tabular}{@{}lrrrl@{}}
+\toprule
+\textbf{Model} & \textbf{Pass} & \textbf{Fail} & \textbf{Incon.} & \textbf{Wilson 95\% CI} \\
+\midrule
+SharedHardware      &   0 & 0 & 400 & [0\%, 0.9\%] \\
+PostQuantumSentinel &   0 & 4 & 396 & [0.3\%, 2.5\%] \\
+AdjacentNetwork     & 390 & 0 &  10 & [0\%, 0.9\%] \\
+RemoteNetwork       & 400 & 0 &   0 & [0\%, 0.9\%] \\
+\midrule
+\textbf{Total}      & 790 & 4 & 806 & [0.1\%, 0.6\%] \\
+\bottomrule
+\end{tabular}
+\end{table}
+%
+All per-model FPRs are consistent with the $\leq$5\% target.
+SharedHardware and PostQuantumSentinel returned Inconclusive on all or nearly all
+trials because the measurement floor (${\sim}50$\,ns under load) exceeded their
+sub-nanosecond thresholds---the oracle correctly declined to issue verdicts it
+could not support, rather than guessing.
 %
 For detection power, at 1$\times$ threshold (\ns{100} for \textsc{AdjacentNetwork}),
 \tacet achieved 100\% detection across 200 trials (95\% CI: [98.1\%, 100\%]).
@@ -803,6 +833,7 @@ threshold should not trigger Fail verdicts.
 Effect size estimates showed low bias: $<$4\% at the threshold and $<$2\% for
 effects $\geq$2$\times$ threshold, confirming accurate quantification.
 
+% TODO: Update tail power numbers once final benchmark data is in and figures regenerated.
 \paragraph{Tail effect detection.}
 The W$_1$ distance shows higher detection power for rare tail effects than quantile-based
 methods in our evaluation.
@@ -816,6 +847,7 @@ moderate effect sizes: 100\% at 2$\sigma$ and 4$\sigma$, and 93.3\% at 1$\sigma$
 
 \begin{figure}[ht]
     \centering
+    % TODO: Update figure path once final figures are selected.
     \includegraphics[width=0.48\textwidth]{analysis/outputs/figures/tail_power_curve.png}
     \caption{Detection power for tail effects (upper 5\% of distribution shifted by
              X$\sigma$). \tacet achieves 100\% detection at 20$\sigma$ tail shifts,
@@ -827,6 +859,9 @@ moderate effect sizes: 100\% at 2$\sigma$ and 4$\sigma$, and 93.3\% at 1$\sigma$
 \subsection{Crypto Library Validation}
 \label{sec:evaluation:crypto}
 
+% TODO: Verify total test count matches table rows (currently rows sum to 158, not 168).
+% TODO: CVE-2025-12816 is NOT a timing CVE — it's an ASN.1 validation bypass.
+%       Either remove the CVE reference from the node-forge row or replace it.
 \Cref{tab:crypto_tests} summarizes validation across 165+ cryptographic
 test cases spanning four ecosystems, including two CVE detections.
 
@@ -860,7 +895,7 @@ test cases spanning four ecosystems, including two CVE detections.
 \quad crypto/* & ECDSA (CVE-2025-22866), RSA & 18 \\
 \midrule
 \multicolumn{3}{@{}l@{}}{\textbf{JavaScript/WASM}} \\
-\quad node-forge & RSA (CVE-2025-12816), AES & 13 \\
+\quad node-forge & RSA, AES & 13 \\
 \quad crypto-js & AES, DES, 3DES, Rabbit & 21 \\
 \quad noble-* & secp256k1, P-256, ChaCha & 20 \\
 \midrule
@@ -869,15 +904,19 @@ test cases spanning four ecosystems, including two CVE detections.
 \end{tabular}
 \end{table}
 
+% TODO: Update zero-FP claim, iteration count, and Wilson CI once crypto FPR runs complete.
+% Pending: run measure_fpr.sh ×10 iterations on ARM64 (burst-61iul1), then update
+% the numbers below (0/N failures, Wilson CI, iteration count).
 \paragraph{Zero false positives on tested implementations.}
 Across all 168 tests on implementations without known timing vulnerabilities,
 \tacet returned zero false positives (Pass or Inconclusive, never Fail) in
 tested configurations (Wilson 95\% CI: [0\%, 2.2\%]).
-This validates the calibration property defined in \Cref{sec:approach:decisions}.
-
-\paragraph{Post-quantum cryptography.}
-ML-KEM (Kyber-768) and ML-DSA (Dilithium3) passed at the \textsc{PostQuantumSentinel}
-threshold (\ns{2}, $\sim$10 cycles)~\cite{kyberslash}.
+% TODO: Replace above line with multi-iteration results, e.g.:
+% "Across N iterations of 168 tests (M total trials), \tacet returned zero false
+%  positives (Wilson 95\% CI: [0\%, X\%])."
+This validates the calibration property defined in \Cref{sec:approach:decisions},
+including ML-KEM (Kyber-768) and ML-DSA (Dilithium3), which passed at the stricter
+\textsc{PostQuantumSentinel} threshold (\ns{2}, $\sim$10 cycles)~\cite{kyberslash}.
 
 %-------------------------------------------------------------------------------
 \subsection{Case Study: Blind Re-Detection of MARVIN}
@@ -887,6 +926,10 @@ When testing RustCrypto's \texttt{rsa} crate v0.9.9—documented as constant-tim
 in the library changelog—\tacet detected a timing difference in RSA-1024 decryption
 that exceeded the \textsc{AdjacentNetwork} threshold (\ns{100}).
 
+% TODO: Update MARVIN detection numbers. The RSA timing report
+% (website/.../rsa-timing-anomaly.mdx) says 6,000 per class and effect 259.7ns
+% CI [186.1, 333.4]. The "50,000 samples over 30 seconds" doesn't match any
+% recorded run. Re-run the test and pull fresh numbers.
 \paragraph{Detection details.}
 The oracle collected 50,000 samples over 30 seconds, achieving
 $\prob{\text{leak} > \ns{100} \given \text{data}} > 0.95$ (Fail verdict).
@@ -993,10 +1036,12 @@ benchmarks in future work.
 \section{Conclusion}
 \label{sec:conclusion}
 
+% TODO: Update crypto FP numbers (168 tests, Wilson CI) once crypto FPR runs complete.
 \tacet independently detected CVE-2023-49092 in production RSA code
 (\Cref{sec:evaluation:marvin}), demonstrating practical utility on real-world
-vulnerabilities. Calibration validation across 800 null-hypothesis trials confirmed
-0.5\% false positive rate (4/800 failures), consistent with the $\leq$5\% target.
+vulnerabilities. Calibration validation across 1{,}600 null-hypothesis trials on a
+heavily loaded server confirmed 0.25\% false positive rate (4/1{,}600 failures),
+consistent with the $\leq$5\% target.
 Across 168 cryptographic test cases spanning four ecosystems, \tacet maintained
 zero false positives (Wilson 95\% CI: [0\%, 2.2\%]) under varying measurement conditions,
 while existing tools showed elevated false positive rates under autocorrelation or missed
