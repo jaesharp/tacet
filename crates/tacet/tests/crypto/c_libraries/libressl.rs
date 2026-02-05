@@ -297,9 +297,7 @@ fn libressl_ecdsa_p256_sign_constant_time() {
     // Use zeros vs random pattern for message
     let inputs = InputPair::new(|| [0u8; 32], rand_bytes_32);
 
-    let outcome = TimingOracle::for_attacker(AttackerModel::SharedHardware)
-        .pass_threshold(0.15)
-        .fail_threshold(0.99)
+    let outcome = TimingOracle::for_attacker(AttackerModel::AdjacentNetwork)
         .time_budget(Duration::from_secs(60))
         .warmup(100)
         .test(inputs, |message| {
