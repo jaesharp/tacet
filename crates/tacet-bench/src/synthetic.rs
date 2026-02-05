@@ -500,10 +500,8 @@ pub fn generate_benchmark_dataset(config: &BenchmarkConfig) -> GeneratedDataset 
             )
         }
         EffectPattern::Tail => {
-            // Tail effect: 6% of samples have 5× the effect (outliers that shift mean)
-            // Adjusted from 5% to avoid knife-edge at q95 boundary (Type-2 quantile
-            // with n=5000 puts q95 at indices 4750-4751, exactly where 5% tail starts).
-            let tail_prob = 0.06;
+            // Tail effect: 5% of samples have 5× the effect (outliers that shift mean)
+            let tail_prob = 0.05;
             let tail_mult = 5.0;
 
             // Outlier shift = 5× the base effect shift

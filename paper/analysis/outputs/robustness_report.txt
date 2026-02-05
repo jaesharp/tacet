@@ -1,28 +1,20 @@
 ROBUSTNESS CHECK RESULTS
-Generated: 2026-02-05T09:53:15.281132
+Generated: 2026-02-05T16:25:01.807856
 ============================================================
 
-completeness: FAIL
-  - Effect patterns mismatch: expected {'tail', 'shift'}, got {'tail', 'shift', 'bimodal'}
-  - Noise models mismatch: expected {'ar1-n0.3', 'ar1-0.6', 'ar1-0.3', 'ar1-0.8', 'ar1-n0.6', 'iid'}, got {'ar1-n0.2', 'ar1-0.6', 'ar1-0.4', 'ar1-n0.4', 'ar1-0.8', 'ar1-0.2', 'ar1-n0.6', 'iid'}
+completeness: PASS
 
-duplicates: PASS
+duplicates: FAIL
 
 ci_sanity: PASS
 
 suspicious_patterns: FAIL
-  - ad-test: FPR=40.9% (>10%) on null effect across all conditions
-  - dudect: FPR=34.3% (>10%) on null effect across all conditions
-  - ks-test: FPR=38.9% (>10%) on null effect across all conditions
-  - mona: FPR=21.8% (>10%) on null effect across all conditions
-  - rtlf: FPR=36.6% (>10%) on null effect across all conditions
-  - silent: FPR=17.7% (>10%) on null effect across all conditions
-  - tacet: FPR=33.6% (>10%) on null effect across all conditions
-  - timing-tvla: FPR=33.9% (>10%) on null effect across all conditions
-  - tlsfuzzer: FPR=41.2% (>10%) on null effect across all conditions
+  - ad-test: FPR=17.1% (>10%) on null effect across all conditions
+  - ks-test: FPR=12.9% (>10%) on null effect across all conditions
+  - tlsfuzzer: FPR=19.2% (>10%) on null effect across all conditions
 
 dataset_counts: FAIL
-  - 864 conditions have != 30 datasets
+  - 8 conditions have != 30 datasets
 
 
 SUMMARY: 2/4 checks passed

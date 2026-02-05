@@ -1,0 +1,31 @@
+Local Medium Benchmark Run
+==========================
+
+Started: Thu Feb  5 11:33:23 -03 2026
+PID: 3652
+Preset: medium (5,000 samples/class)
+Tools: all
+Expected duration: ~45 minutes
+Expected completion: ~12:18 PM
+
+Monitoring Commands:
+--------------------
+Check if running:
+  ps -p 3652
+
+View progress:
+  wc -l results/medium-w1-v7.1-round2-local/benchmark_results.csv
+
+View recent log:
+  tail -20 results/medium-w1-v7.1-round2-local/benchmark.log
+
+Check completion:
+  ls -lh results/medium-w1-v7.1-round2-local/
+
+Files Created:
+--------------
+- benchmark_results.csv (raw test results)
+- benchmark_summary.csv (aggregated statistics)
+- benchmark_report.md (human-readable report)
+- benchmark.log (debug output)
+- benchmark.pid (process ID)
