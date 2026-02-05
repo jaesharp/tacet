@@ -1687,12 +1687,12 @@ pub struct TailDiagnostics {
     /// Range: [0.0, 1.0]
     pub tail_share: f64,
 
-    /// Fraction of tail mass that's positive in nanoseconds (baseline slower).
+    /// Directionality of tail deviations: among the top 5% (p95+), what fraction are slowdowns?
     ///
-    /// Measures asymmetry direction in the tail deviations:
-    /// - > 0.5: baseline has more slow outliers
-    /// - < 0.5: sample has more slow outliers
-    /// - ≈ 0.5: symmetric outliers
+    /// Measures asymmetry direction conditional on being in the tail (top 5% of sorted differences):
+    /// - > 0.5: baseline has more slow outliers in the tail
+    /// - < 0.5: sample has more slow outliers in the tail
+    /// - ≈ 0.5: symmetric tail outliers
     ///
     /// Range: [0.0, 1.0]
     pub tail_slow_share: f64,

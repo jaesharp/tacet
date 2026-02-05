@@ -248,42 +248,20 @@ fn format_pass_body(out: &mut String, leak_probability: f64, effect: &EffectEsti
         leak_probability * 100.0
     )
     .unwrap();
+    writeln!(out).unwrap();
+
     writeln!(
         out,
-        "    W₁ distance: {:.1} ns [CI: {:.1}\u{2013}{:.1}]",
-        effect.max_effect_ns, effect.credible_interval_ns.0, effect.credible_interval_ns.1
+        "    Leak magnitude (W₁ distance): {:.1} ns",
+        effect.max_effect_ns
     )
     .unwrap();
-
-    // Show tail diagnostics if available
-    if let Some(ref tail_diag) = effect.tail_diagnostics {
-        writeln!(
-            out,
-            "      Decomposition: {:.1}ns shift + {:.1}ns tail",
-            tail_diag.shift_ns, tail_diag.tail_ns
-        )
-        .unwrap();
-        writeln!(
-            out,
-            "      Pattern: {} ({:.0}% from tail)",
-            format_pattern_label(tail_diag.pattern_label),
-            tail_diag.tail_share * 100.0
-        )
-        .unwrap();
-
-        // Show quantile shifts when tail is significant
-        if tail_diag.tail_share > 0.3 {
-            writeln!(
-                out,
-                "      Quantile shifts: p50={:.0}ns, p90={:.0}ns, p95={:.0}ns, p99={:.0}ns",
-                tail_diag.quantile_shifts.p50_ns,
-                tail_diag.quantile_shifts.p90_ns,
-                tail_diag.quantile_shifts.p95_ns,
-                tail_diag.quantile_shifts.p99_ns
-            )
-            .unwrap();
-        }
-    }
+    writeln!(
+        out,
+        "    95% CI (W₁): {:.1}\u{2013}{:.1} ns",
+        effect.credible_interval_ns.0, effect.credible_interval_ns.1
+    )
+    .unwrap();
 }
 
 fn format_fail_body(
@@ -298,42 +276,61 @@ fn format_fail_body(
         leak_probability * 100.0
     )
     .unwrap();
+    writeln!(out).unwrap();
 
     writeln!(
         out,
-        "    W₁ distance: {:.1} ns [CI: {:.1}\u{2013}{:.1}]",
-        effect.max_effect_ns, effect.credible_interval_ns.0, effect.credible_interval_ns.1
+        "    Leak magnitude (W₁ distance): {:.1} ns",
+        effect.max_effect_ns
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "    95% CI (W₁): {:.1}\u{2013}{:.1} ns",
+        effect.credible_interval_ns.0, effect.credible_interval_ns.1
     )
     .unwrap();
 
     // Show tail diagnostics if available
     if let Some(ref tail_diag) = effect.tail_diagnostics {
+        writeln!(out).unwrap();
+        writeln!(out, "    Diagnostics (paired differences Δ = Sample − Baseline):").unwrap();
         writeln!(
             out,
-            "      Decomposition: {:.1}ns shift + {:.1}ns tail",
-            tail_diag.shift_ns, tail_diag.tail_ns
+            "      Δ median:   {:+.1} ns",
+            tail_diag.quantile_shifts.p50_ns
         )
         .unwrap();
         writeln!(
             out,
-            "      Pattern: {} ({:.0}% from tail)",
-            format_pattern_label(tail_diag.pattern_label),
-            tail_diag.tail_share * 100.0
+            "      Δ p90:      {:+.1} ns",
+            tail_diag.quantile_shifts.p90_ns
         )
         .unwrap();
-
-        // Show quantile shifts when tail is significant
-        if tail_diag.tail_share > 0.3 {
-            writeln!(
-                out,
-                "      Quantile shifts: p50={:.0}ns, p90={:.0}ns, p95={:.0}ns, p99={:.0}ns",
-                tail_diag.quantile_shifts.p50_ns,
-                tail_diag.quantile_shifts.p90_ns,
-                tail_diag.quantile_shifts.p95_ns,
-                tail_diag.quantile_shifts.p99_ns
-            )
-            .unwrap();
-        }
+        writeln!(
+            out,
+            "      Δ p95:      {:+.1} ns",
+            tail_diag.quantile_shifts.p95_ns
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "      Δ p99:      {:+.1} ns",
+            tail_diag.quantile_shifts.p99_ns
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "      Tail index: p99 − median = {:+.1} ns",
+            tail_diag.quantile_shifts.p99_ns - tail_diag.quantile_shifts.p50_ns
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "      Pattern:    {}",
+            format_pattern_description(tail_diag.pattern_label)
+        )
+        .unwrap();
     }
 
     writeln!(out).unwrap();
@@ -350,11 +347,18 @@ fn format_inconclusive_body(out: &mut String, leak_probability: f64, effect: &Ef
         leak_probability * 100.0
     )
     .unwrap();
+    writeln!(out).unwrap();
 
     writeln!(
         out,
-        "    W₁ distance estimate: {:.1} ns [CI: {:.1}\u{2013}{:.1}]",
-        effect.max_effect_ns, effect.credible_interval_ns.0, effect.credible_interval_ns.1
+        "    Leak magnitude (W₁ distance): {:.1} ns",
+        effect.max_effect_ns
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "    95% CI (W₁): {:.1}\u{2013}{:.1} ns",
+        effect.credible_interval_ns.0, effect.credible_interval_ns.1
     )
     .unwrap();
 
@@ -1144,6 +1148,16 @@ fn format_pattern_label(pattern: EffectPattern) -> &'static str {
         EffectPattern::UniformShift => "Uniform shift",
         EffectPattern::TailEffect => "Tail effect",
         EffectPattern::Mixed => "Mixed pattern",
+        EffectPattern::Negligible => "Negligible",
+    }
+}
+
+/// Format EffectPattern with description for diagnostics output.
+fn format_pattern_description(pattern: EffectPattern) -> &'static str {
+    match pattern {
+        EffectPattern::UniformShift => "Uniform shift (constant-time violation)",
+        EffectPattern::TailEffect => "Tail effect (rare slowdowns)",
+        EffectPattern::Mixed => "Mixed pattern (shift + tail)",
         EffectPattern::Negligible => "Negligible",
     }
 }

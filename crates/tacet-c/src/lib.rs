@@ -371,8 +371,8 @@ pub unsafe extern "C" fn to_calibrate(
     let c_floor = compute_c_floor_1d(var_rate, seed);
 
     // Compute initial theta_floor
-    let n_eff = (count / block_length).max(1);
-    let theta_floor_stat = c_floor / (n_eff as f64).sqrt();
+    let n_blocks = (count / block_length).max(1);
+    let theta_floor_stat = c_floor / (n_blocks as f64).sqrt();
     let theta_tick = ns_per_tick; // 1 tick resolution
     let theta_floor_initial = theta_floor_stat.max(theta_tick);
     let theta_eff = theta_ns.max(theta_floor_initial);
@@ -948,18 +948,18 @@ pub unsafe extern "C" fn to_analyze(
 
     // Compute theta_eff
     let c_floor = compute_c_floor_1d(var_rate, seed);
-    let n_eff = (count / block_length).max(1);
-    let theta_floor = (c_floor / (n_eff as f64).sqrt()).max(ns_per_tick);
+    let n_blocks = (count / block_length).max(1);
+    let theta_floor = (c_floor / (n_blocks as f64).sqrt()).max(ns_per_tick);
     let theta_eff = theta_ns.max(theta_floor);
 
     // Calibrate prior
     let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_eff, count, seed);
 
     // Scale variance
-    let var_n = var_rate / n_eff as f64;
+    let var_n = var_rate / n_blocks as f64;
 
     // Run Bayesian inference
-    let bayes_result = compute_bayes_1d(w1_obs, var_n, sigma_t, theta_eff, seed);
+    let bayes_result = compute_bayes_1d(w1_obs, var_n, sigma_t, theta_eff, seed, 4.0);
 
     // Extract max effect from posterior mean (for 1D, this is just the absolute value)
     let max_effect_ns = bayes_result.w1_post.abs();
@@ -987,7 +987,7 @@ pub unsafe extern "C" fn to_analyze(
     // Build diagnostics from bayes_result (1D version has no lambda/kappa fields)
     let diagnostics = ToDiagnostics {
         dependence_length: block_length as u64,
-        effective_sample_size: n_eff as u64,
+        effective_sample_size: n_blocks as u64,
         stationarity_ratio: 1.0,
         stationarity_ok: true,
         discrete_mode,

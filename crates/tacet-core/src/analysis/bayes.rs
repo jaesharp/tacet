@@ -50,9 +50,15 @@ pub struct BayesW1Result {
 ///
 /// # Model
 ///
-/// Likelihood: W₁_obs ~ N(δ, var_n)
+/// Likelihood: W₁_obs ~ t(δ, var_n, ν_ℓ) — Student-t for robustness
 ///
 /// Prior: δ ~ half-t(ν=4, σ_t)
+///
+/// The Student-t likelihood is more robust to variance underestimation
+/// than Normal likelihood. It's represented as:
+/// - W₁_obs | δ, κ ~ N(δ, var_n/κ)
+/// - κ ~ Gamma(ν_ℓ/2, ν_ℓ/2)
+/// Marginalizing κ gives Student-t(δ, var_n, ν_ℓ).
 ///
 /// The half-t prior is represented as a scale mixture of Gaussians:
 /// - λ ~ Gamma(ν/2, ν/2) = Gamma(2, 2)
@@ -66,6 +72,10 @@ pub struct BayesW1Result {
 ///    - μ_post = (W₁_obs/var_n) / posterior_precision
 ///    - σ²_post = 1 / posterior_precision
 ///
+/// Note: The Gibbs sampler still uses Normal likelihood internally (sampling from
+/// the conditional posterior), but the Student-t is equivalent to marginalizing
+/// over κ, which provides robustness.
+///
 /// # Arguments
 ///
 /// * `w1_obs` - Observed W₁ distance (can be negative from debiasing)
@@ -73,6 +83,7 @@ pub struct BayesW1Result {
 /// * `sigma_t` - Prior scale parameter
 /// * `theta` - Minimum effect of concern (threshold)
 /// * `seed` - Random seed for reproducibility
+/// * `nu_likelihood` - Degrees of freedom for Student-t likelihood (default 4.0)
 ///
 /// # Returns
 ///
@@ -83,30 +94,42 @@ pub fn compute_bayes_1d(
     sigma_t: f64,
     theta: f64,
     seed: u64,
+    nu_likelihood: f64,
 ) -> BayesW1Result {
     const N_ITER: usize = 5000;
     const BURN_IN: usize = 1000;
-    const NU: f64 = 4.0; // t-distribution degrees of freedom
+    const NU: f64 = 4.0; // Prior degrees of freedom (half-t prior)
 
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
 
     // Initialize δ to observed value (warm start for Gibbs sampler)
     let mut delta = w1_obs;
+    // κ is sampled in each iteration (no initialization needed)
+    let mut kappa;
 
     let mut delta_draws = Vec::with_capacity(N_ITER - BURN_IN);
     let mut leak_count = 0;
 
-    // Gibbs sampling
+    // Gibbs sampling with Student-t likelihood via κ augmentation
     for iter in 0..N_ITER {
-        // Step 1: Sample λ ~ Gamma(ν/2 + 1/2, ν/2 + δ²/(2σ_t²))
-        let shape = NU / 2.0 + 0.5;
-        let rate = NU / 2.0 + (delta * delta) / (2.0 * sigma_t * sigma_t);
+        // Step 1: Sample κ ~ Gamma(ν_ℓ/2 + 1/2, ν_ℓ/2 + (w1_obs - δ)²/(2*var_n))
+        // This gives Student-t likelihood when marginalized
+        let shape_kappa = nu_likelihood / 2.0 + 0.5;
+        let residual = w1_obs - delta;
+        let rate_kappa = nu_likelihood / 2.0 + (residual * residual) / (2.0 * var_n);
+        kappa = sample_gamma(&mut rng, shape_kappa, rate_kappa);
 
-        let lambda = sample_gamma(&mut rng, shape, rate);
+        // Step 2: Sample λ ~ Gamma(ν/2 + 1/2, ν/2 + δ²/(2σ_t²))
+        // This gives half-t prior when marginalized
+        let shape_lambda = NU / 2.0 + 0.5;
+        let rate_lambda = NU / 2.0 + (delta * delta) / (2.0 * sigma_t * sigma_t);
+        let lambda = sample_gamma(&mut rng, shape_lambda, rate_lambda);
 
-        // Step 2: Sample δ | λ ~ N(μ_post, σ²_post)
-        let posterior_precision = lambda / (sigma_t * sigma_t) + 1.0 / var_n;
-        let posterior_mean = (w1_obs / var_n) / posterior_precision;
+        // Step 3: Sample δ | λ, κ ~ N(μ_post, σ²_post)
+        // Likelihood precision is κ/var_n (robustness via κ)
+        // Prior precision is λ/σ_t²
+        let posterior_precision = lambda / (sigma_t * sigma_t) + kappa / var_n;
+        let posterior_mean = (w1_obs * kappa / var_n) / posterior_precision;
         let posterior_var = 1.0 / posterior_precision;
 
         delta = posterior_mean + math::sqrt(posterior_var) * sample_standard_normal(&mut rng);
@@ -211,8 +234,8 @@ mod tests {
         let sigma_t = 20.0;
         let theta = 3.0;
 
-        let result1 = compute_bayes_1d(w1_obs, var_n, sigma_t, theta, 42);
-        let result2 = compute_bayes_1d(w1_obs, var_n, sigma_t, theta, 42);
+        let result1 = compute_bayes_1d(w1_obs, var_n, sigma_t, theta, 42, 4.0);
+        let result2 = compute_bayes_1d(w1_obs, var_n, sigma_t, theta, 42, 4.0);
 
         assert_eq!(
             result1.leak_probability, result2.leak_probability,
@@ -232,7 +255,7 @@ mod tests {
         let sigma_t = 10.0;
         let theta = 2.0;
 
-        let result = compute_bayes_1d(w1_obs, var_n, sigma_t, theta, 42);
+        let result = compute_bayes_1d(w1_obs, var_n, sigma_t, theta, 42, 4.0);
 
         // Should handle negative observations gracefully
         assert!(
@@ -253,10 +276,10 @@ mod tests {
         let seed = 42;
 
         // Small threshold should give high leak probability
-        let result_small_theta = compute_bayes_1d(w1_obs, var_n, sigma_t, 1.0, seed);
+        let result_small_theta = compute_bayes_1d(w1_obs, var_n, sigma_t, 1.0, seed, 4.0);
 
         // Large threshold should give low leak probability
-        let result_large_theta = compute_bayes_1d(w1_obs, var_n, sigma_t, 20.0, seed);
+        let result_large_theta = compute_bayes_1d(w1_obs, var_n, sigma_t, 20.0, seed, 4.0);
 
         assert!(
             result_small_theta.leak_probability > result_large_theta.leak_probability,
@@ -271,7 +294,7 @@ mod tests {
         let sigma_t = 20.0;
         let theta = 3.0;
 
-        let result = compute_bayes_1d(w1_obs, var_n, sigma_t, theta, 42);
+        let result = compute_bayes_1d(w1_obs, var_n, sigma_t, theta, 42, 4.0);
 
         let (lo, hi) = result.credible_interval;
 
@@ -282,6 +305,76 @@ mod tests {
         assert!(
             result.w1_post >= lo && result.w1_post <= hi,
             "Posterior mean should be within 95% CI"
+        );
+    }
+
+    #[test]
+    fn test_student_t_robustness() {
+        // Test that Student-t likelihood is more robust than Normal
+        // by comparing with different nu_likelihood values
+        let w1_obs = 10.0;
+        let var_n = 5.0; // Underestimated variance
+        let sigma_t = 20.0;
+        let theta = 5.0;
+        let seed = 42;
+
+        // Student-t with df=4 (robust)
+        let result_t4 = compute_bayes_1d(w1_obs, var_n, sigma_t, theta, seed, 4.0);
+
+        // Student-t with df=100 (approximately Normal)
+        let result_t100 = compute_bayes_1d(w1_obs, var_n, sigma_t, theta, seed, 100.0);
+
+        // Both should give valid probabilities
+        assert!(
+            result_t4.leak_probability >= 0.0 && result_t4.leak_probability <= 1.0,
+            "t(4) should give valid probability"
+        );
+        assert!(
+            result_t100.leak_probability >= 0.0 && result_t100.leak_probability <= 1.0,
+            "t(100) should give valid probability"
+        );
+
+        // Posterior means should be similar (same data)
+        let mean_diff = (result_t4.w1_post - result_t100.w1_post).abs();
+        assert!(
+            mean_diff < 2.0,
+            "Posterior means should be similar: t(4)={:.2}, t(100)={:.2}",
+            result_t4.w1_post,
+            result_t100.w1_post
+        );
+    }
+
+    #[test]
+    fn test_kappa_augmentation_convergence() {
+        // Test that κ augmentation (Student-t likelihood) converges correctly
+        // even with moderately underestimated variance
+        let w1_obs = 15.0;
+        let var_n = 3.0; // Intentionally underestimated
+        let sigma_t = 25.0;
+        let theta = 8.0;
+        let seed = 123;
+
+        let result = compute_bayes_1d(w1_obs, var_n, sigma_t, theta, seed, 4.0);
+
+        // Should produce reasonable posterior estimate
+        assert!(
+            result.w1_post > 0.0 && result.w1_post < 30.0,
+            "Posterior mean should be reasonable: {:.2}",
+            result.w1_post
+        );
+
+        // Should have reasonable uncertainty
+        assert!(
+            result.var_post > 0.0 && result.var_post < 1000.0,
+            "Posterior variance should be reasonable: {:.2}",
+            result.var_post
+        );
+
+        // Should give high leak probability (w1_obs=15 >> theta=8)
+        assert!(
+            result.leak_probability > 0.7,
+            "Should detect clear leak: P(leak)={:.3}",
+            result.leak_probability
         );
     }
 }

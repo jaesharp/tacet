@@ -27,6 +27,12 @@ pub fn cos(x: f64) -> f64 {
     libm::cos(x)
 }
 
+/// Sine.
+#[inline]
+pub fn sin(x: f64) -> f64 {
+    libm::sin(x)
+}
+
 /// Exponential (e^x).
 #[inline]
 pub fn exp(x: f64) -> f64 {

@@ -97,7 +97,7 @@ pub fn compute_effect_estimate_analytical(
 /// 3. shift = median(diffs)
 /// 4. tail = mean(|dᵢ - shift|)
 /// 5. tail_share = tail / (|shift| + tail)
-/// 6. tail_slow_share = % of positive tail mass (baseline slower)
+/// 6. tail_slow_share = among top 5% (p95+), fraction of deviations that are slowdowns
 /// 7. Compute quantile shifts (p50/p90/p95/p99)
 /// 8. Pattern labeling based on tail_share
 pub fn compute_tail_diagnostics(
@@ -158,9 +158,17 @@ pub fn compute_tail_diagnostics(
         0.0
     };
 
-    // 6. Tail slow share (fraction of tail that's positive = baseline slower)
-    let pos_tail_sum: f64 = diffs.iter().map(|&d| (d - shift_ns).max(0.0)).sum();
-    let total_tail_sum: f64 = diffs.iter().map(|&d| (d - shift_ns).abs()).sum();
+    // 6. Tail slow share: among tail deviations (top 5%), what fraction are slowdowns?
+    // Define tail as top 5% of indices (p95 and above)
+    let tail_start_idx = (0.95 * n as f64) as usize;
+    let pos_tail_sum: f64 = diffs[tail_start_idx..]
+        .iter()
+        .map(|&d| (d - shift_ns).max(0.0))
+        .sum();
+    let total_tail_sum: f64 = diffs[tail_start_idx..]
+        .iter()
+        .map(|&d| (d - shift_ns).abs())
+        .sum();
     let tail_slow_share = if total_tail_sum > 1e-12 {
         pos_tail_sum / total_tail_sum
     } else {
@@ -452,17 +460,22 @@ mod tests {
 
     #[test]
     fn test_tail_diagnostics_symmetric_tail() {
-        // Create distributions with symmetric tail deviations
+        // Create distributions with symmetric QUANTILE deviations in tail
+        // Key: W₁ operates on quantile-aligned differences, not sample identities
+        // We need quantile crossings: sometimes baseline_q > sample_q, sometimes opposite
         let n = 1000;
+
+        // Build distributions with alternating quantile dominance in tail
         let mut baseline: Vec<f64> = (0..n).map(|i| 100.0 + i as f64 * 0.01).collect();
         let mut sample: Vec<f64> = (0..n).map(|i| 100.0 + i as f64 * 0.01).collect();
 
-        // Add symmetric tail effects
-        for i in (n * 9 / 10)..n {
+        // Create quantile crossing in tail (p95+):
+        // Baseline has higher odd quantiles, sample has higher even quantiles
+        for i in (n * 95 / 100)..n {
             if i % 2 == 0 {
-                baseline[i] += 20.0;
+                sample[i] += 2.0;  // Sample's even quantiles higher
             } else {
-                sample[i] += 20.0;
+                baseline[i] += 2.0;  // Baseline's odd quantiles higher
             }
         }
 
@@ -470,10 +483,11 @@ mod tests {
 
         let diagnostics = compute_tail_diagnostics(&baseline, &sample, w1_deb);
 
-        // tail_slow_share should be close to 0.5 for symmetric tail
+        // With quantile crossing, tail_slow_share should be ~0.5
+        // (roughly balanced positive and negative quantile differences)
         assert!(
-            (diagnostics.tail_slow_share - 0.5).abs() < 0.1,
-            "tail_slow_share should be ~0.5 for symmetric tail, got {}",
+            (diagnostics.tail_slow_share - 0.5).abs() < 0.15,
+            "tail_slow_share should be ~0.5 for symmetric quantile deviations, got {}",
             diagnostics.tail_slow_share
         );
     }

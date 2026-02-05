@@ -6,6 +6,16 @@ Nadhem~J. Al~Fardan and Kenneth~G. Paterson.
 \newblock In {\em 2013 IEEE Symposium on Security and Privacy}, pages 526--540.
   IEEE, 2013.
 
+\bibitem{kyberslash}
+Daniel~J. Bernstein, Karthikeyan Bhargavan, Shivam Bhasin, Anupam
+  Chattopadhyay, Tee~Kiah Chia, Matthias~J. Kannwischer, Franziskus Kiefer,
+  Thales Paiva, Prasanna Ravi, and Goutam Tamvada.
+\newblock {KyberSlash: Exploiting secret-dependent division timings in Kyber
+  implementations}.
+\newblock {\em IACR Transactions on Cryptographic Hardware and Embedded
+  Systems}, 2025(2):209--234, 2025.
+\newblock CHES 2025 Best Paper Award.
+
 \bibitem{sgxtiming}
 Ferdinand Brasser, Urs M{\"u}ller, Alexandra Dmitrienko, Kari Kostiainen,
   Srdjan Capkun, and Ahmad-Reza Sadeghi.
@@ -13,25 +23,32 @@ Ferdinand Brasser, Urs M{\"u}ller, Alexandra Dmitrienko, Kari Kostiainen,
 \newblock In {\em 11th USENIX Workshop on Offensive Technologies (WOOT 17)}.
   USENIX Association, 2017.
 
+\bibitem{crosby2009}
+Scott~A. Crosby, Dan~S. Wallach, and Rudolf~H. Riedi.
+\newblock {Opportunities and Limits of Remote Timing Attacks}.
+\newblock {\em ACM Transactions on Information and System Security}, 12(3),
+  January 2009.
+
+\bibitem{silent}
+Martin Dunsche, Patrick Bastian, Marcel Maehren, Nurullah Erinola, Robert
+  Merget, Nicolai Bissantz, Holger Dette, and J{\"o}rg Schwenk.
+\newblock {SILENT: Scalable and Independent LEakage detection with iNfinite
+  Type-1 error control}.
+\newblock {\em arXiv preprint arXiv:2504.19821}, 2025.
+
 \bibitem{rtlf}
-Marcel Dunsche, Niklas Sieck, Jonas Timmermann, Eric Young, and Juraj
-  Somorovsky.
+Martin Dunsche, Marcel Maehren, Nurullah Erinola, Robert Merget, Nicolai
+  Bissantz, Juraj Somorovsky, and J{\"o}rg Schwenk.
 \newblock {RTLF: Statistical Timing Leakage Detection with Empirical
   Bootstrap}.
 \newblock In {\em 33rd USENIX Security Symposium (USENIX Security 24)}. USENIX
   Association, 2024.
 
-\bibitem{kyberslash}
-Qian Guo, Thomas Johansson, and Alexander Nilsson.
-\newblock {A Key-Recovery Side-Channel Attack on Kyber}.
-\newblock In {\em CHES 2024}, 2024.
-\newblock CVE-2023-49092.
-
 \bibitem{marvin}
 Hubert Kario.
-\newblock {MARVIN Attack: Return of the Bleichenbacher's Oracle Threat}.
-\newblock In {\em 33rd USENIX Security Symposium (USENIX Security 24)}. USENIX
-  Association, 2024.
+\newblock {Everlasting ROBOT: The Marvin Attack}.
+\newblock In {\em Computer Security -- ESORICS 2023}, volume 14346 of {\em
+  Lecture Notes in Computer Science}. Springer, 2023.
 
 \bibitem{tlsfuzzer}
 Hubert Kario.
@@ -56,19 +73,13 @@ Oscar Reparaz, Josep Balasch, and Ingrid Verbauwhede.
 \newblock In {\em Design, Automation \& Test in Europe Conference \& Exhibition
   (DATE)}, pages 1697--1702. IEEE, 2017.
 
-\bibitem{silent}
-Niklas Sieck, Marcel Dunsche, Jonas Timmermann, and Juraj Somorovsky.
-\newblock {SILENT: Scalable and Independent LEakage detection with iNfinite
-  Type-1 error control}.
-\newblock {\em arXiv preprint arXiv:2504.19821}, 2025.
-
 \bibitem{trailofbits-dudect}
 {Trail of Bits}.
 \newblock {Constant-Time Toolkit: dudect}, 2024.
 \newblock Application Security Knowledge Base.
 
 \bibitem{timeless}
-Tom Van~Goethem, Frank Piessens, Wouter Joosen, and Juraj Somorovsky.
+Tom Van~Goethem, Christina P{\"o}pper, Wouter Joosen, and Mathy Vanhoef.
 \newblock {Timeless Timing Attacks: Exploiting Concurrency to Leak Secrets over
   Remote Connections}.
 \newblock In {\em 29th USENIX Security Symposium (USENIX Security 20)}, pages

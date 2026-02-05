@@ -305,9 +305,9 @@ pub fn compute_achievable_at_max(
     }
 
     // v6.0: Use raw n for achievability check (spec §3.3.3)
-    // Block bootstrap already accounts for autocorrelation, so no n_eff scaling needed
+    // Block bootstrap already accounts for autocorrelation, so no n_blocks scaling needed
 
-    // Compute theta_floor at max_samples using √n (not √n_eff)
+    // Compute theta_floor at max_samples using √n (not √n_blocks)
     let theta_floor_at_max = libm::fmax(c_floor / libm::sqrt(max_samples as f64), theta_tick);
 
     // Compute epsilon: max(theta_tick, 1e-6 * theta_user)

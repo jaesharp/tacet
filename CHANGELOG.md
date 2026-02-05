@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Spec v7.1: Statistical correctness refinements**
+  - **Inference uses raw W₁ (§3.1):** Bayesian inference now uses raw W₁ distance without debiasing or clamping. Debiased W₁ is computed only for display purposes to help users interpret effect magnitude above measurement noise. This prevents bias in the likelihood function.
+  - **Floor from null distribution (§3.3.3):** Measurement floor constant $c_{\text{floor}}$ is now calibrated from the 95th percentile of null W₁ replicates (via within-class splits) rather than heuristic formulas based on Normal quantiles. Runtime floor: $\theta_{\text{floor}}(n) = \max(\theta_{\text{tick}}, c_{\text{floor}} / \sqrt{n_{\text{blocks}}})$ where $n_{\text{blocks}} = \max(1, \lfloor n / L \rfloor)$.
+  - **Prior targets user threshold (§3.3.4):** Half-t prior scale $\sigma$ is calibrated so that $P(\delta > \theta_{\text{user}}) = 0.62$, not $P(\delta > \theta_{\text{eff}})$. The prior encodes security requirements, not measurement limitations.
+  - **Robust likelihood (§3.4.2):** Student-t likelihood degrees of freedom changed from $\nu_{\ell} = 8$ to $\nu_{\ell} = 4$ (matching prior ν = 4) for consistency between prior and likelihood tail behavior.
+  - **Tail directionality metric (§2.3):** `tail_slow_share` now correctly measures fraction of tail deviation magnitude (p95+) from slowdowns: $\sum_{i \in \text{tail}} \max(d_i - \text{shift}, 0) / \sum_{i \in \text{tail}} |d_i - \text{shift}|$. Operates on quantile-aligned differences.
+  - **Block count terminology (Appendix A):** Variable $n_{\text{blocks}}$ replaces ambiguous $n_{\text{eff}}$ in floor calculations. Effective sample size $n_{\text{eff}} = n / \hat{\tau}$ remains for IACT-based diagnostics.
+  - **Migration:** Results may differ slightly from v7.0 due to corrected floor calibration and prior targeting. Test outcomes may be more conservative (fewer false positives). No API changes required.
+
+
 - **Spec v5.5: Threshold elevation decision rule (§2.1, §2.6, §3.3.4, §3.5.2)**
   - Pass now requires θ_eff ≤ θ_user + ε_θ (cannot Pass when threshold is elevated)
   - When θ_floor > θ_user and P < pass_threshold, outcome is `Inconclusive(ThresholdElevated)`, not `Pass`

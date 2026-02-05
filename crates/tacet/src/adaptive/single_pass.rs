@@ -298,6 +298,7 @@ pub fn analyze_single_pass(
         sigma_t,
         theta_eff,
         config.seed,
+        4.0, // nu_likelihood: Student-t df for robustness
     );
     let leak_probability = bayes_result.leak_probability;
 
@@ -429,7 +430,7 @@ pub fn analyze_single_pass(
                 theta_tick,
                 config.theta_ns,
                 n,            // Single-pass has fixed samples
-                block_length, // v5.6: block_length for n_eff computation
+                block_length, // v5.6: block_length for n_blocks computation
             );
 
             Outcome::Inconclusive {

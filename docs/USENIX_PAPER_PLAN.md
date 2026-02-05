@@ -32,7 +32,7 @@
 
 5. **Handles non-stationarity** — condition drift detection, quality gates catch drift. SILENT acknowledges stationarity as a limitation; Tacet actively monitors for drift.
 
-6. **Measurement floor as first-class concept** — explicit θ_floor(n_eff) that shrinks with √n_eff. Pass requires θ_eff ≤ θ_user.
+6. **Measurement floor as first-class concept** — explicit θ_floor(n_blocks) that shrinks with √n_blocks. Pass requires θ_eff ≤ θ_user.
 
 7. **Quality gates** — KL divergence checks, κ < 0.3 triggers likelihood inflation, stationarity monitoring. Forces Inconclusive when model can't confidently distinguish signal from noise.
 
@@ -223,7 +223,7 @@ Mention test suite against crypto libraries. Incidentally rediscovered timing be
 - Brief justification for each
 
 **A.5 Measurement Floor Derivation**
-- How θ_floor(n_eff) is computed
+- How θ_floor(n_blocks) is computed
 - Relationship to posterior uncertainty
 
 > For complete details, see the specification document in the artifact repository.

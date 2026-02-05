@@ -152,12 +152,12 @@ be compared via quantiles rather than means, capturing both uniform shifts (from
 and tail effects (from cache behavior). However, their 9-quantile approach has a fundamental
 limitation for rare tail effects: when only a small fraction of samples exhibit the leak,
 the signal dilutes across 9 dimensions, making detection unreliable. We build on \silent's
-insight but use the Wasserstein-1 (W$_1$) distance—a single metric that captures the same
+insight but use the Wasserstein-1 (W₁) distance—a single metric that captures the same
 distributional information with superior power for rare tail effects. Transporting outlier
 probability mass across the distribution makes rare leaks visible in a single metric
 without multiple-comparison corrections.
 
-Our contributions beyond the W$_1$ statistic include: a robust Bayesian framework with
+Our contributions beyond the W₁ statistic include: a robust Bayesian framework with
 calibrated three-way verdicts (Pass/Fail/Inconclusive), quality gates that detect
 degraded measurement conditions, and an explicit measurement floor that prevents
 claiming ``no leak'' when the system can't resolve effects at the requested threshold.
@@ -386,11 +386,11 @@ and the measurement floor is 15\,ns (below $\theta$). \tacet returns
 \subsection{Test Statistic: Wasserstein-1 Distance}
 \label{sec:approach:wasserstein}
 
-Rather than comparing means or individual quantiles, we measure the \textbf{Wasserstein-1 (W$_1$)
+Rather than comparing means or individual quantiles, we measure the \textbf{Wasserstein-1 (W₁)
 distance}---also known as the \textbf{earth-mover distance}---between timing distributions.
 
 \paragraph{Intuition.}
-Imagine timing measurements as piles of earth arranged along a number line. W$_1$ measures
+Imagine timing measurements as piles of earth arranged along a number line. W₁ measures
 the minimum total work (amount $\times$ distance) needed to rearrange one pile to match
 the other. For timing analysis, this captures ``how much timing mass must be moved, and how far.''
 
@@ -404,7 +404,7 @@ This is the \textbf{average absolute rank-wise mismatch} between distributions, 
 in nanoseconds. We use $\widehat{W}_1$ directly as the observed statistic for Bayesian
 inference—no debiasing or clamping is applied.
 
-\paragraph{Why W$_1$ for timing leaks?}
+\paragraph{Why W₁ for timing leaks?}
 Timing leaks manifest in different patterns:
 \begin{itemize}
     \item \textbf{Uniform shifts} (branch-based): All quantiles shift by $c$ $\Rightarrow$ $W_1 \approx |c|$
@@ -412,13 +412,13 @@ Timing leaks manifest in different patterns:
 \end{itemize}
 
 For rare tail effects (e.g., cache misses affecting a small fraction of measurements),
-W$_1$ provides superior detection power compared to quantile-based approaches. Transporting
+W₁ provides superior detection power compared to quantile-based approaches. Transporting
 outlier probability mass across the full distance makes rare leaks visible in a single
 metric without multiple-comparison corrections.
 
 \paragraph{Advantages over quantile methods.}
 \silent~\cite{silent} and \rtlf~\cite{rtlf} compare 9 quantiles or deciles, which dilutes
-signal when only upper quantiles are affected. W$_1$ uses all rank information, captures
+signal when only upper quantiles are affected. W₁ uses all rank information, captures
 the transport cost directly, and avoids the 9-dimensional correlation structure.
 
 %-------------------------------------------------------------------------------
@@ -450,9 +450,9 @@ This prevents the prior from dominating when data is limited while allowing
 confident conclusions when evidence is strong.
 
 The full model specification is in Appendix~\ref{app:methodology}. At a high
-level: we model the observed W$_1$ distance with a robust Student-$t$ likelihood
+level: we model the observed W₁ distance with a robust Student-$t$ likelihood
 that automatically inflates uncertainty when the variance estimate is too small,
-and place a Half-Student-$t$ prior on the true W$_1$ distance with scale calibrated
+and place a Half-Student-$t$ prior on the true W₁ distance with scale calibrated
 to the user-requested threshold. The posterior is approximated via Gibbs sampling
 (256 iterations) with $<$1\,ms computational overhead—much faster than the
 9-dimensional inference required for quantile methods.
@@ -568,10 +568,10 @@ If it drops to $\theta_{\text{user}}$ or below, Pass becomes possible.
 \section{Implementation}
 \label{sec:implementation}
 
-\tacet is implemented in Rust. The statistical core (adaptive sampling, Bayesian
-inference, bootstrap resampling) is approximately 6,000 lines of code. The
-bootstrap resampling is parallelized across CPU cores, providing 4--8$\times$
-speedup on multi-core systems. Foreign function interfaces expose the same API
+\tacet is implemented in Rust. The statistical core is approximately
+% TODO: count actual KLOC
+5,000 lines of code. The block bootstrap is parallelized using Rayon (4--8$\times$
+speedup on multi-core systems). Foreign function interfaces expose the same API
 to C, C++, Go, and JavaScript (via WebAssembly with native timer bindings for
 Node.js, Deno, and Bun).
 
@@ -706,7 +706,7 @@ Pass or Fail, while \tacet can report uncertainty explicitly.
     \centering
     \includegraphics[width=0.85\textwidth]{analysis/outputs/figures/heatmap_fpr.png}
     \caption{False positive rate by autocorrelation structure (null effect,
-             shift pattern, W$_1$ distance statistic). Teal indicates ``effect found''
+             shift pattern, W₁ distance statistic). Teal indicates ``effect found''
              (false positive), taupe indicates ``effect not found'' (correct), orange
              indicates ``couldn't determine'' (\tacet only). Under strong autocorrelation,
              tools assuming independence show elevated FPR while \tacet returns
@@ -731,7 +731,7 @@ binary cutoff.
     \centering
     \includegraphics[width=0.85\textwidth]{analysis/outputs/figures/heatmap_power.png}
     \caption{Detection power by effect size (AR(1) noise with $\rho = 0.6$,
-             shift pattern, W$_1$ distance statistic). At large effects, all tools
+             shift pattern, W₁ distance statistic). At large effects, all tools
              detect the leak. Near the threshold, \tacet returns Inconclusive
              while other tools must commit to Pass or Fail.}
     \label{fig:power_heatmap}
@@ -756,17 +756,17 @@ Effect size estimates showed low bias: $<$4\% at the threshold and $<$2\% for
 effects $\geq$2$\times$ threshold, confirming accurate quantification.
 
 \paragraph{Tail effect detection.}
-A key advantage of W$_1$ distance over quantile-based methods is superior power for
+A key advantage of W₁ distance over quantile-based methods is superior power for
 rare tail effects. We evaluated detection power for tail patterns where timing leaks
 affect only a small fraction of measurements---representative of cache-timing attacks
 where only cache misses reveal secrets.
 
-% TODO: Update with actual W$_1$ distance benchmark results once available
+% TODO: Update with actual W₁ distance benchmark results once available
 % Figure showing power curves for tail effects (tacet vs SILENT vs dudect)
 
 For tail effects affecting only the upper percentiles of the timing distribution:
 \begin{itemize}
-    \item \textbf{\tacet (W$_1$ distance)}: Maintains high detection power even for
+    \item \textbf{\tacet (W₁ distance)}: Maintains high detection power even for
           rare tail effects. % TODO: Insert actual detection rate from benchmarks
     \item \textbf{\silent (9-quantile)}: Limited power---when only 1-2 of the 9
           quantiles are affected, the signal dilutes across dimensions, making
@@ -777,7 +777,7 @@ For tail effects affecting only the upper percentiles of the timing distribution
 
 \textbf{Why quantile methods struggle.} For a leak affecting only upper percentiles,
 at most 1-2 of SILENT's 9 quantiles shift detectably. The maximum over 9 standardized
-differences dilutes the signal. In contrast, W$_1$ distance naturally emphasizes tail
+differences dilutes the signal. In contrast, W₁ distance naturally emphasizes tail
 mass: transporting outlier probability across the distribution makes rare leaks
 visible in a single metric without multiple-comparison burden.
 
@@ -1014,16 +1014,15 @@ lowers the barrier for maintainers to adopt rigorous timing analysis.
 \section*{Open Science}
 \label{app:open-science}
 
-\noindent All artifacts necessary to evaluate our contributions are publicly available
-at \url{https://anonymous.4open.science/r/tacet-75EB/} (MPL v2 license):
+\noindent All artifacts necessary to evaluate our contributions are publicly available:
 \begin{itemize}[nosep,leftmargin=*]
-    \item \textbf{Source code}: Complete implementation in \texttt{crates/} directory
-    \item \textbf{Specification}: \texttt{website/.../reference/specification.md} (v7.0)
+    \item \textbf{Source code}: \url{https://anonymous.4open.science/r/tacet-75EB/} (MPL v2)
+    \item \textbf{Specification}: \texttt{specification.md} in repository
     \item \textbf{Benchmark scripts}: \texttt{crates/tacet-bench/} directory
-    \item \textbf{Benchmark results}: \texttt{results/} directory with raw CSV data
+    \item \textbf{Benchmark results}: Raw data available in artifact
 \end{itemize}
-The repository includes build instructions and commands for reproducing all
-experiments in Section~\ref{sec:evaluation}.
+The repository includes instructions for reproducing all experiments in
+Section~\ref{sec:evaluation}.
 
 %===============================================================================
 % REFERENCES

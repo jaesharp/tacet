@@ -35,140 +35,147 @@
 \@writefile{toc}{\contentsline {paragraph}{\textsc  {tlsfuzzer}\xspace  ~\cite  {tlsfuzzer}.}{2}{section*.5}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{\textsc  {RTLF}\xspace  ~\cite  {rtlf}.}{2}{section*.6}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{\textsc  {SILENT}\xspace  ~\cite  {silent}.}{2}{section*.7}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Feature Comparison}{2}{subsection.2.3}\protected@file@percent }
-\newlabel{sec:background:comparison}{{2.3}{2}{Feature Comparison}{subsection.2.3}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {3}Tacet's Approach}{2}{section.3}\protected@file@percent }
-\newlabel{sec:approach}{{3}{2}{Tacet's Approach}{section.3}{}}
 \citation{sgxtiming}
 \citation{kyberslash}
 \citation{timeless}
-\citation{silent}
-\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Feature comparison of timing side-channel detection tools. $\text  {$\mathsurround \z@ \mathchar "658$}$ = supported, $\circ $ = partial support, $\times $ = not supported. \textsc  {Tacet}\xspace  is the only tool providing calibrated three-way verdicts with interpretable posterior probabilities.}}{3}{table.caption.8}\protected@file@percent }
-\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
-\newlabel{tab:comparison}{{1}{3}{Feature comparison of timing side-channel detection tools. $\checkmark $ = supported, $\circ $ = partial support, $\times $ = not supported. \tacet is the only tool providing calibrated three-way verdicts with interpretable posterior probabilities}{table.caption.8}{}}
+\citation{crosby2009}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Feature Comparison}{3}{subsection.2.3}\protected@file@percent }
+\newlabel{sec:background:comparison}{{2.3}{3}{Feature Comparison}{subsection.2.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Tacet's Approach}{3}{section.3}\protected@file@percent }
+\newlabel{sec:approach}{{3}{3}{Tacet's Approach}{section.3}{}}
 \@writefile{toc}{\contentsline {paragraph}{Threshold selection.}{3}{section*.9}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Calibrated Verdicts}{3}{subsection.3.1}\protected@file@percent }
 \newlabel{sec:approach:decisions}{{3.1}{3}{Calibrated Verdicts}{subsection.3.1}{}}
 \@writefile{toc}{\contentsline {paragraph}{Example.}{3}{section*.10}\protected@file@percent }
-\citation{politiswhite}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Quantile-Based Test Statistic}{4}{subsection.3.2}\protected@file@percent }
-\newlabel{sec:approach:quantile}{{3.2}{4}{Quantile-Based Test Statistic}{subsection.3.2}{}}
-\@writefile{toc}{\contentsline {paragraph}{Why quantiles?}{4}{section*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Test Statistic: Wasserstein-1 Distance}{3}{subsection.3.2}\protected@file@percent }
+\newlabel{sec:approach:wasserstein}{{3.2}{3}{Test Statistic: Wasserstein-1 Distance}{subsection.3.2}{}}
+\@writefile{toc}{\contentsline {paragraph}{Intuition.}{3}{section*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Formal definition.}{3}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Why W$_1$ for timing leaks?}{3}{section*.13}\protected@file@percent }
+\citation{silent}
+\citation{rtlf}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Feature comparison of timing side-channel detection tools. $\text  {$\mathsurround \z@ \mathchar "658$}$ = supported, $\circ $ = partial support, $\times $ = not supported. \textsc  {Tacet}\xspace  is the only tool providing calibrated three-way verdicts with interpretable posterior probabilities.}}{4}{table.caption.8}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{tab:comparison}{{1}{4}{Feature comparison of timing side-channel detection tools. $\checkmark $ = supported, $\circ $ = partial support, $\times $ = not supported. \tacet is the only tool providing calibrated three-way verdicts with interpretable posterior probabilities}{table.caption.8}{}}
+\@writefile{toc}{\contentsline {paragraph}{Advantages over quantile methods.}{4}{section*.14}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Bayesian Inference}{4}{subsection.3.3}\protected@file@percent }
 \newlabel{sec:approach:inference}{{3.3}{4}{Bayesian Inference}{subsection.3.3}{}}
-\@writefile{toc}{\contentsline {paragraph}{Interpretable output.}{4}{section*.12}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Valid adaptive sampling.}{4}{section*.13}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Principled use of prior information.}{4}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Interpretable output.}{4}{section*.15}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Valid adaptive sampling.}{4}{section*.16}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Principled use of prior information.}{4}{section*.17}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Handling Autocorrelation}{4}{subsection.3.4}\protected@file@percent }
 \newlabel{sec:approach:autocorrelation}{{3.4}{4}{Handling Autocorrelation}{subsection.3.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Quality Gates}{4}{subsection.3.5}\protected@file@percent }
-\newlabel{sec:approach:gates}{{3.5}{4}{Quality Gates}{subsection.3.5}{}}
-\@writefile{toc}{\contentsline {paragraph}{Gate 1: Insufficient information gain.}{4}{section*.15}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Gate 2: Would take too long.}{5}{section*.16}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Gate 3: Resource budget exceeded.}{5}{section*.17}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Gate 4: Condition drift detected.}{5}{section*.18}\protected@file@percent }
+\citation{politiswhite}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Quality Gates}{5}{subsection.3.5}\protected@file@percent }
+\newlabel{sec:approach:gates}{{3.5}{5}{Quality Gates}{subsection.3.5}{}}
+\@writefile{toc}{\contentsline {paragraph}{Gate 1: Insufficient information gain.}{5}{section*.18}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Gate 2: Would take too long.}{5}{section*.19}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Gate 3: Resource budget exceeded.}{5}{section*.20}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Gate 4: Condition drift detected.}{5}{section*.21}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Measurement Floor}{5}{subsection.3.6}\protected@file@percent }
 \newlabel{sec:approach:floor}{{3.6}{5}{Measurement Floor}{subsection.3.6}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {4}Implementation}{5}{section.4}\protected@file@percent }
 \newlabel{sec:implementation}{{4}{5}{Implementation}{section.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Measurement Infrastructure}{5}{subsection.4.1}\protected@file@percent }
-\newlabel{sec:implementation:measurement}{{4.1}{5}{Measurement Infrastructure}{subsection.4.1}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Adaptive Batching}{5}{subsection.4.2}\protected@file@percent }
-\newlabel{sec:implementation:batching}{{4.2}{5}{Adaptive Batching}{subsection.4.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}CI Integration}{5}{subsection.4.3}\protected@file@percent }
-\newlabel{sec:implementation:bindings}{{4.3}{5}{CI Integration}{subsection.4.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Measurement Infrastructure}{6}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:implementation:measurement}{{4.1}{6}{Measurement Infrastructure}{subsection.4.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Adaptive Batching}{6}{subsection.4.2}\protected@file@percent }
+\newlabel{sec:implementation:batching}{{4.2}{6}{Adaptive Batching}{subsection.4.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}CI Integration}{6}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:implementation:bindings}{{4.3}{6}{CI Integration}{subsection.4.3}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {5}Evaluation}{6}{section.5}\protected@file@percent }
 \newlabel{sec:evaluation}{{5}{6}{Evaluation}{section.5}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Methodology}{6}{subsection.5.1}\protected@file@percent }
 \newlabel{sec:evaluation:methodology}{{5.1}{6}{Methodology}{subsection.5.1}{}}
-\@writefile{toc}{\contentsline {paragraph}{Synthetic benchmarks.}{6}{section*.19}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Cryptographic library tests.}{6}{section*.20}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Tools compared.}{6}{section*.21}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Metrics.}{6}{section*.22}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Synthetic benchmarks.}{6}{section*.22}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Cryptographic library tests.}{6}{section*.23}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Tools compared.}{6}{section*.24}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Metrics.}{6}{section*.25}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Synthetic Benchmarks}{6}{subsection.5.2}\protected@file@percent }
 \newlabel{sec:evaluation:synthetic}{{5.2}{6}{Synthetic Benchmarks}{subsection.5.2}{}}
-\@writefile{toc}{\contentsline {paragraph}{False positive rate under autocorrelation.}{6}{section*.23}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Detection power across effect sizes.}{6}{section*.25}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Results}{6}{subsection.5.3}\protected@file@percent }
-\newlabel{sec:evaluation:results}{{5.3}{6}{Results}{subsection.5.3}{}}
-\@writefile{toc}{\contentsline {paragraph}{Calibration validation.}{6}{section*.27}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{False positive rate under autocorrelation.}{6}{section*.26}\protected@file@percent }
 \citation{marvin}
 \citation{kyberslash}
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces False positive rate by autocorrelation structure (null effect, shift pattern). Teal indicates ``effect found'' (false positive), taupe indicates ``effect not found'' (correct), orange indicates ``couldn't determine'' (\textsc  {Tacet}\xspace  only). Under strong autocorrelation, tools assuming independence show elevated FPR while \textsc  {Tacet}\xspace  returns Inconclusive.}}{7}{figure.caption.24}\protected@file@percent }
-\newlabel{fig:fpr_heatmap}{{1}{7}{False positive rate by autocorrelation structure (null effect, shift pattern). Teal indicates ``effect found'' (false positive), taupe indicates ``effect not found'' (correct), orange indicates ``couldn't determine'' (\tacet only). Under strong autocorrelation, tools assuming independence show elevated FPR while \tacet returns Inconclusive}{figure.caption.24}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Cryptographic library test coverage. All tests use the DudeCT two-class pattern (fixed vs.\ random inputs) with Hamming weight and byte pattern independence checks.}}{7}{table.caption.28}\protected@file@percent }
-\newlabel{tab:crypto_tests}{{2}{7}{Cryptographic library test coverage. All tests use the DudeCT two-class pattern (fixed vs.\ random inputs) with Hamming weight and byte pattern independence checks}{table.caption.28}{}}
+\@writefile{toc}{\contentsline {paragraph}{Detection power across effect sizes.}{7}{section*.28}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Results}{7}{subsection.5.3}\protected@file@percent }
+\newlabel{sec:evaluation:results}{{5.3}{7}{Results}{subsection.5.3}{}}
+\@writefile{toc}{\contentsline {paragraph}{Calibration validation.}{7}{section*.30}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Tail effect detection.}{7}{section*.31}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Cryptographic library test coverage. All tests use the DudeCT two-class pattern (fixed vs.\ random inputs) with Hamming weight and byte pattern independence checks.}}{7}{table.caption.32}\protected@file@percent }
+\newlabel{tab:crypto_tests}{{2}{7}{Cryptographic library test coverage. All tests use the DudeCT two-class pattern (fixed vs.\ random inputs) with Hamming weight and byte pattern independence checks}{table.caption.32}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Crypto Library Validation}{7}{subsection.5.4}\protected@file@percent }
 \newlabel{sec:evaluation:crypto}{{5.4}{7}{Crypto Library Validation}{subsection.5.4}{}}
-\@writefile{toc}{\contentsline {paragraph}{Zero false positives on constant-time implementations.}{7}{section*.29}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Accidental MARVIN discovery.}{7}{section*.30}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Post-quantum considerations.}{7}{section*.31}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Performance}{7}{subsection.5.5}\protected@file@percent }
-\newlabel{sec:evaluation:performance}{{5.5}{7}{Performance}{subsection.5.5}{}}
-\@writefile{toc}{\contentsline {paragraph}{Inference overhead.}{7}{section*.32}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Detection power by effect size (AR(1) noise with $\rho = 0.6$, shift pattern). At large effects, all tools detect the leak. Near the threshold, \textsc  {Tacet}\xspace  returns Inconclusive while other tools must commit to Pass or Fail.}}{8}{figure.caption.26}\protected@file@percent }
-\newlabel{fig:power_heatmap}{{2}{8}{Detection power by effect size (AR(1) noise with $\rho = 0.6$, shift pattern). At large effects, all tools detect the leak. Near the threshold, \tacet returns Inconclusive while other tools must commit to Pass or Fail}{figure.caption.26}{}}
-\@writefile{toc}{\contentsline {paragraph}{Practical impact.}{8}{section*.33}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Zero false positives on constant-time implementations.}{7}{section*.33}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Accidental MARVIN discovery.}{7}{section*.34}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces False positive rate by autocorrelation structure (null effect, shift pattern, W$_1$ distance statistic). Teal indicates ``effect found'' (false positive), taupe indicates ``effect not found'' (correct), orange indicates ``couldn't determine'' (\textsc  {Tacet}\xspace  only). Under strong autocorrelation, tools assuming independence show elevated FPR while \textsc  {Tacet}\xspace  returns Inconclusive.}}{8}{figure.caption.27}\protected@file@percent }
+\newlabel{fig:fpr_heatmap}{{1}{8}{False positive rate by autocorrelation structure (null effect, shift pattern, W$_1$ distance statistic). Teal indicates ``effect found'' (false positive), taupe indicates ``effect not found'' (correct), orange indicates ``couldn't determine'' (\tacet only). Under strong autocorrelation, tools assuming independence show elevated FPR while \tacet returns Inconclusive}{figure.caption.27}{}}
+\@writefile{toc}{\contentsline {paragraph}{Post-quantum considerations.}{8}{section*.35}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Performance}{8}{subsection.5.5}\protected@file@percent }
+\newlabel{sec:evaluation:performance}{{5.5}{8}{Performance}{subsection.5.5}{}}
+\@writefile{toc}{\contentsline {paragraph}{Inference overhead.}{8}{section*.36}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Practical impact.}{8}{section*.37}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {6}Discussion and Limitations}{8}{section.6}\protected@file@percent }
 \newlabel{sec:discussion}{{6}{8}{Discussion and Limitations}{section.6}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Tradeoffs}{8}{subsection.6.1}\protected@file@percent }
 \newlabel{sec:discussion:tradeoffs}{{6.1}{8}{Tradeoffs}{subsection.6.1}{}}
-\@writefile{toc}{\contentsline {paragraph}{Methodological complexity.}{8}{section*.34}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Lower power under noise.}{8}{section*.35}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Overhead.}{8}{section*.36}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Limitations}{8}{subsection.6.2}\protected@file@percent }
-\newlabel{sec:discussion:limitations}{{6.2}{8}{Limitations}{subsection.6.2}{}}
-\@writefile{toc}{\contentsline {paragraph}{Stationarity assumption.}{8}{section*.37}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Model specification.}{8}{section*.38}\protected@file@percent }
-\bibstyle{plain}
-\bibdata{paper}
-\bibcite{lucky13}{1}
-\bibcite{sgxtiming}{2}
-\bibcite{rtlf}{3}
-\bibcite{kyberslash}{4}
-\bibcite{marvin}{5}
+\@writefile{toc}{\contentsline {paragraph}{Methodological complexity.}{8}{section*.38}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Lower power under noise.}{8}{section*.39}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Detection power by effect size (AR(1) noise with $\rho = 0.6$, shift pattern, W$_1$ distance statistic). At large effects, all tools detect the leak. Near the threshold, \textsc  {Tacet}\xspace  returns Inconclusive while other tools must commit to Pass or Fail.}}{9}{figure.caption.29}\protected@file@percent }
+\newlabel{fig:power_heatmap}{{2}{9}{Detection power by effect size (AR(1) noise with $\rho = 0.6$, shift pattern, W$_1$ distance statistic). At large effects, all tools detect the leak. Near the threshold, \tacet returns Inconclusive while other tools must commit to Pass or Fail}{figure.caption.29}{}}
+\@writefile{toc}{\contentsline {paragraph}{Overhead.}{9}{section*.40}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Limitations}{9}{subsection.6.2}\protected@file@percent }
+\newlabel{sec:discussion:limitations}{{6.2}{9}{Limitations}{subsection.6.2}{}}
+\@writefile{toc}{\contentsline {paragraph}{Stationarity assumption.}{9}{section*.41}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Model specification.}{9}{section*.42}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Future Work}{9}{subsection.6.3}\protected@file@percent }
 \newlabel{sec:discussion:future}{{6.3}{9}{Future Work}{subsection.6.3}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {7}Conclusion}{9}{section.7}\protected@file@percent }
 \newlabel{sec:conclusion}{{7}{9}{Conclusion}{section.7}{}}
-\newlabel{app:ethics}{{7}{9}{Ethical Considerations}{section*.39}{}}
-\newlabel{app:open-science}{{7}{9}{Open Science}{section*.40}{}}
-\bibcite{tlsfuzzer}{6}
-\bibcite{raccoon}{7}
-\bibcite{politiswhite}{8}
-\bibcite{dudect}{9}
-\bibcite{silent}{10}
-\bibcite{trailofbits-dudect}{11}
-\bibcite{timeless}{12}
-\@writefile{toc}{\contentsline {section}{\numberline {A}Statistical Methodology Details}{10}{appendix.A}\protected@file@percent }
-\newlabel{app:methodology}{{A}{10}{Statistical Methodology Details}{appendix.A}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {A.1}Probabilistic Model}{10}{subsection.A.1}\protected@file@percent }
-\newlabel{app:model}{{A.1}{10}{Probabilistic Model}{subsection.A.1}{}}
-\@writefile{toc}{\contentsline {paragraph}{Test Statistic.}{10}{section*.42}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Likelihood.}{10}{section*.43}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Prior.}{10}{section*.44}\protected@file@percent }
+\bibstyle{plain}
+\bibdata{paper}
+\bibcite{lucky13}{1}
+\bibcite{kyberslash}{2}
+\bibcite{sgxtiming}{3}
+\bibcite{crosby2009}{4}
+\bibcite{silent}{5}
+\bibcite{rtlf}{6}
+\bibcite{marvin}{7}
+\bibcite{tlsfuzzer}{8}
+\bibcite{raccoon}{9}
+\bibcite{politiswhite}{10}
+\bibcite{dudect}{11}
+\bibcite{trailofbits-dudect}{12}
+\bibcite{timeless}{13}
+\newlabel{app:ethics}{{7}{10}{Ethical Considerations}{section*.43}{}}
+\newlabel{app:open-science}{{7}{10}{Open Science}{section*.44}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {A}Statistical Methodology Details}{11}{appendix.A}\protected@file@percent }
+\newlabel{app:methodology}{{A}{11}{Statistical Methodology Details}{appendix.A}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.1}Probabilistic Model}{11}{subsection.A.1}\protected@file@percent }
+\newlabel{app:model}{{A.1}{11}{Probabilistic Model}{subsection.A.1}{}}
+\@writefile{toc}{\contentsline {paragraph}{Test Statistic.}{11}{section*.46}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Interpretation.}{11}{section*.47}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Likelihood.}{11}{section*.48}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Prior.}{11}{section*.49}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {A.2}Inference Procedure}{11}{subsection.A.2}\protected@file@percent }
 \newlabel{app:inference}{{A.2}{11}{Inference Procedure}{subsection.A.2}{}}
-\@writefile{toc}{\contentsline {paragraph}{Gibbs Sampler.}{11}{section*.45}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Convergence and Cost.}{11}{section*.46}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Leak Probability.}{11}{section*.47}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {A.3}Block Bootstrap for Autocorrelation}{11}{subsection.A.3}\protected@file@percent }
-\newlabel{app:bootstrap}{{A.3}{11}{Block Bootstrap for Autocorrelation}{subsection.A.3}{}}
-\@writefile{toc}{\contentsline {paragraph}{Why Standard Bootstrap Fails.}{11}{section*.48}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Stream-Based Block Bootstrap.}{11}{section*.49}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Block Length Selection.}{11}{section*.50}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Effective Sample Size via IACT.}{11}{section*.51}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Covariance Scaling.}{12}{section*.52}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Gibbs Sampler.}{11}{section*.50}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Convergence and Cost.}{11}{section*.51}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Leak Probability.}{12}{section*.52}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.3}Block Bootstrap for Autocorrelation}{12}{subsection.A.3}\protected@file@percent }
+\newlabel{app:bootstrap}{{A.3}{12}{Block Bootstrap for Autocorrelation}{subsection.A.3}{}}
+\@writefile{toc}{\contentsline {paragraph}{Why Standard Bootstrap Fails.}{12}{section*.53}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Stream-Based Block Bootstrap.}{12}{section*.54}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Block Length Selection.}{12}{section*.55}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Variance Scaling.}{12}{section*.56}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {A.4}Quality Gates}{12}{subsection.A.4}\protected@file@percent }
 \newlabel{app:gates}{{A.4}{12}{Quality Gates}{subsection.A.4}{}}
-\@writefile{toc}{\contentsline {paragraph}{Gate 1: Insufficient Information Gain.}{12}{section*.53}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Gate 2: Would Take Too Long.}{12}{section*.54}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Gate 3: Resource Budget Exceeded.}{12}{section*.55}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Gate 4: Condition Drift Detected.}{12}{section*.56}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Likelihood Inflation Warning.}{12}{section*.57}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {A.5}Measurement Floor Derivation}{12}{subsection.A.5}\protected@file@percent }
-\newlabel{app:floor}{{A.5}{12}{Measurement Floor Derivation}{subsection.A.5}{}}
-\@writefile{toc}{\contentsline {paragraph}{Floor-Rate Constant.}{12}{section*.58}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Dynamic Measurement Floor.}{12}{section*.59}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Effective Threshold.}{13}{section*.60}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Gate 1: Insufficient Information Gain.}{12}{section*.57}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Gate 2: Would Take Too Long.}{12}{section*.58}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Gate 3: Resource Budget Exceeded.}{13}{section*.59}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Gate 4: Condition Drift Detected.}{13}{section*.60}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Likelihood Inflation Warning.}{13}{section*.61}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.5}Measurement Floor Derivation}{13}{subsection.A.5}\protected@file@percent }
+\newlabel{app:floor}{{A.5}{13}{Measurement Floor Derivation}{subsection.A.5}{}}
+\@writefile{toc}{\contentsline {paragraph}{Floor-Rate Constant.}{13}{section*.62}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Dynamic Measurement Floor.}{13}{section*.63}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Effective Threshold.}{13}{section*.64}\protected@file@percent }
 \gdef \@abspage@last{13}

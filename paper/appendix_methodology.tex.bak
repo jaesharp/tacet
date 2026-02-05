@@ -10,10 +10,10 @@ This appendix provides additional detail on tacet's statistical methodology for 
 \label{app:model}
 
 \paragraph{Test Statistic.}
-Rather than comparing means or individual quantiles, we measure the \textbf{Wasserstein-1 (W$_1$)
+Rather than comparing means or individual quantiles, we measure the \textbf{Wasserstein-1 (W₁)
 distance}---also known as the \textbf{earth-mover distance}---between timing distributions.
 
-The W$_1$ distance is the minimum total cost to transform one distribution into another, where
+The W₁ distance is the minimum total cost to transform one distribution into another, where
 cost is the amount of probability mass times the distance it must be moved. For discrete
 empirical distributions with $n$ samples each, this reduces to:
 \begin{equation}
@@ -33,7 +33,7 @@ emphasizing the distance those outliers must move. A timing leak is declared whe
 $W_1 > \theta$ with high posterior probability.
 
 \paragraph{Likelihood.}
-We model the observed W$_1$ distance with a robust Student-$t$ likelihood to handle potential
+We model the observed W₁ distance with a robust Student-$t$ likelihood to handle potential
 variance underestimation. Using the scale-mixture representation:
 \begin{align}
 \widehat{W}_1 \mid W, \kappa &\sim \mathcal{N}\!\left(W, \frac{v_n}{\kappa}\right) \\
@@ -54,7 +54,7 @@ $n_{\text{blocks}}(n) = \max(1, \lfloor n/L \rfloor)$ is the number of approxima
 blocks given block length $L$.
 
 \paragraph{Prior.}
-We place a Half-Student-$t$ prior on the true W$_1$ distance $W$:
+We place a Half-Student-$t$ prior on the true W₁ distance $W$:
 \begin{equation}
 W \sim \text{Half-}t_\nu(0, \sigma_t^2), \quad \nu = 4
 \end{equation}
@@ -138,7 +138,7 @@ We use the Politis-White automatic block length selection algorithm with a class
 The optimal block length scales as $\hat{b} \propto T^{1/3}$ where $T$ is the stream length. We clamp $\hat{b} \in [10, \min(3\sqrt{T}, T/3)]$ to prevent degenerate blocks. In high-autocorrelation regimes (detected when $\rho_{\text{max}}(10) > 0.3$), we inflate the block length by 50\% for additional conservatism.
 
 \paragraph{Variance Scaling.}
-The key insight enabling adaptive sampling is that W$_1$ estimator variance scales as $1/n_{\text{blocks}}$.
+The key insight enabling adaptive sampling is that W₁ estimator variance scales as $1/n_{\text{blocks}}$.
 We estimate a \textbf{variance-rate} constant during calibration:
 \begin{equation}
 v_{\text{rate}} = v_{\text{cal}} \cdot n_{\text{blocks,cal}}
@@ -210,9 +210,9 @@ For each null replicate $\widehat{W}_1^{(b)}$ at calibration sample size $n_{\te
 c_{\text{floor}} = q_{0.95}\!\left(\widehat{W}_1^{(b)} \cdot \sqrt{n_{\text{blocks,cal}}}\right)
 \end{equation}
 
-This floor-rate constant captures the 95th percentile of the null distribution of raw W$_1$, scaled to
+This floor-rate constant captures the 95th percentile of the null distribution of raw W₁, scaled to
 be sample-size-independent. Critically, we use \emph{raw} $\widehat{W}_1$ values (not debiased or
-clamped), ensuring the floor accounts for the natural positive bias of W$_1$ under the null hypothesis.
+clamped), ensuring the floor accounts for the natural positive bias of W₁ under the null hypothesis.
 
 \paragraph{Dynamic Measurement Floor.}
 During the adaptive loop with $n$ samples, the statistical floor shrinks as more data is collected:

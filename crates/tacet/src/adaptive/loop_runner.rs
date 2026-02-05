@@ -24,11 +24,8 @@ use crate::constants::{
     DEFAULT_SEED,
 };
 use crate::measurement::winsorize_f64;
-use crate::statistics::compute_w1_debiased;
+use crate::statistics::compute_w1_distance;
 use tacet_core::adaptive::{check_quality_gates, compute_achievable_at_max, is_threshold_elevated};
-
-use rand::SeedableRng;
-use rand_xoshiro::Xoshiro256PlusPlus;
 
 /// Configuration for the adaptive sampling loop.
 #[derive(Debug, Clone)]
@@ -345,7 +342,7 @@ pub fn run_adaptive(
                 theta_tick,
                 theta_user,
                 config.max_samples,
-                calibration.block_length, // v5.6: block_length for n_eff computation
+                calibration.block_length, // v5.6: block_length for n_blocks computation
             );
 
             return AdaptiveOutcome::ThresholdElevated {
@@ -397,11 +394,11 @@ fn compute_posterior_from_state(
     // This MUST happen before W₁ computation
     let _ = winsorize_f64(&mut baseline_ns, &mut sample_ns, config.outlier_percentile);
 
-    // Compute debiased W₁ distance (v6.0)
-    // Positive values mean sample distribution is shifted right (timing leak detected)
-    // Negative values can occur from debiasing but are handled by Bayesian inference
-    let mut rng = Xoshiro256PlusPlus::seed_from_u64(config.seed);
-    let w1_obs = compute_w1_debiased(&baseline_ns, &sample_ns, &mut rng);
+    // Compute raw W₁ distance for inference (v7.1)
+    // CRITICAL: Use raw W₁, NOT debiased. The debiased version subtracts floor and clamps
+    // to zero, which biases the likelihood and breaks the statistical model.
+    // Debiased W₁ is for display/diagnostics only.
+    let w1_obs = compute_w1_distance(&baseline_ns, &sample_ns);
 
     // Scale variance: var_n = var_rate / n (v6.0)
     let var_n = calibration.var_rate / (n as f64);
@@ -415,6 +412,7 @@ fn compute_posterior_from_state(
         calibration.sigma_t,
         calibration.theta_eff,
         config.seed,
+        4.0, // nu_likelihood: Student-t df for robustness
     );
 
     // Note: v6.0 uses simplified 1D posterior without kappa/lambda diagnostics
@@ -531,7 +529,7 @@ pub fn adaptive_step(
                 theta_tick,
                 theta_user,
                 config.max_samples,
-                calibration.block_length, // v5.6: block_length for n_eff computation
+                calibration.block_length, // v5.6: block_length for n_blocks computation
             );
 
             return Ok(Some(AdaptiveOutcome::ThresholdElevated {

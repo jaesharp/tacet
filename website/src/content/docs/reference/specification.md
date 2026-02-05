@@ -1,5 +1,5 @@
 ---
-title: Specification (v7.0)
+title: Specification (v7.1)
 description: Authoritative specification for tacet's statistical methodology and requirements
 sidebar:
   order: 1
@@ -178,7 +178,7 @@ TailDiagnostics = {
   shift_ns: Float,             // Uniform shift component (median difference)
   tail_ns: Float,              // Tail-specific component (beyond shift)
   tail_share: Float,           // Fraction of effect from tail [0-1]
-  tail_slow_share: Float,      // Share of tail from slow outliers [0-1]
+  tail_slow_share: Float,      // Directionality of tail (p95+): fraction that are slowdowns [0-1]
   quantile_shifts: QuantileShifts,  // Per-quantile differences for interpretation
   pattern_label: EffectPattern // Classification of effect pattern
 }
@@ -207,6 +207,8 @@ The W₁ (Wasserstein-1) distance measures the minimum cost to transform one dis
 The decomposition works by comparing the W₁ distance to the median difference:
 - If W₁ ≈ median difference, the effect is uniform (constant shift)
 - If W₁ >> median difference, the effect is concentrated in the tail (e.g., cache misses)
+
+The `tail_slow_share` field indicates the directionality of tail deviations (p95+): values near 1.0 indicate tail deviations are predominantly slowdowns, values near 0.0 indicate speedups, and values near 0.5 indicate balanced directionality. This metric operates on quantile-aligned differences and measures what fraction of tail deviation magnitude comes from positive (slowdown) differences.
 
 The `quantile_shifts` provide per-quantile differences for understanding the effect distribution, helping identify at which percentiles the leak manifests.
 
@@ -337,13 +339,13 @@ where $\hat{F}$ denotes the empirical cumulative distribution function.
 
 **Debiased W₁ distance:**
 
-To account for within-class measurement noise, implementations MUST use a debiased estimator:
+For human-readable output, implementations MAY compute a debiased estimator:
 
 $$
 W_1^{\text{deb}} = \max\left(0, W_1(\text{Fixed}, \text{Random}) - \theta_{\text{floor}}\right)
 $$
 
-where $\theta_{\text{floor}}$ is the measurement noise floor (§3.3.3).
+where $\theta_{\text{floor}}$ is the measurement noise floor (§3.3.3). This estimator is used only for display purposes to help users interpret the effect magnitude above measurement noise. Inference (§3.4) uses the raw W₁ distance without debiasing or clamping.
 
 **Why W₁ distance?**
 
@@ -501,23 +503,25 @@ $$
 
 A critical design element is distinguishing between what the user *wants* to detect ($\theta_{\text{user}}$) and what the measurement *can* detect ($\theta_{\text{floor}}$).
 
-**Floor-rate constant:**
+**Floor-rate constant (from null distribution):**
 
-Implementations MUST compute a floor-rate constant once at calibration:
+Implementations MUST compute a floor-rate constant once at calibration by bootstrapping the null distribution of raw W₁:
 
-$$
-c_{\text{floor}} := q_{0.95}\left( \max_k |Z_{0,k}| \right), \quad Z_0 \sim \mathcal{N}(0, \Sigma_{\text{rate}})
-$$
+1. Generate null W₁ replicates via within-class splits: split baseline into two halves and compute W₁ between them; similarly for sample class
+2. Scale each null replicate by $\sqrt{n_{\text{blocks}}}$ where $n_{\text{blocks}} = \max(1, \lfloor n_{\text{cal}} / L \rfloor)$ is the number of independent blocks at calibration
+3. Compute $c_{\text{floor}}$ as the 95th percentile of these scaled null replicates
 
-via Monte Carlo (SHOULD use 50,000 samples).
+This SHOULD use at least 2,000 null bootstrap replicates for stable percentile estimation.
 
 **Measurement floor (dynamic):**
 
-During the adaptive loop:
+During the adaptive loop, the statistical floor decreases as sample size grows:
 
 $$
-\theta_{\text{floor,stat}}(n) = \frac{c_{\text{floor}}}{\sqrt{n}}
+\theta_{\text{floor,stat}}(n) = \max\left(\theta_{\text{tick}}, \frac{c_{\text{floor}}}{\sqrt{n_{\text{blocks}}(n)}}\right)
 $$
+
+where $n_{\text{blocks}}(n) = \max(1, \lfloor n / L \rfloor)$ is the number of independent blocks for sample size $n$, and $L$ is the block length.
 
 The tick floor is fixed once batching is determined:
 
@@ -528,8 +532,10 @@ $$
 where $K$ is the batch size. The combined floor:
 
 $$
-\theta_{\text{floor}}(n) = \max\bigl(\theta_{\text{floor,stat}}(n), \, \theta_{\text{tick}}\bigr)
+\theta_{\text{floor}}(n) = \theta_{\text{floor,stat}}(n)
 $$
+
+(The tick floor is already incorporated in the $\max$ within $\theta_{\text{floor,stat}}$.)
 
 **Effective threshold ($\theta_{\text{eff}}$):**
 
@@ -574,12 +580,14 @@ Implementations MUST use $\nu := 4$.
 The scale $\sigma$ MUST be chosen so that the prior exceedance probability equals a fixed target $\pi_0$ (default 0.62):
 
 $$
-P\left(\delta > \theta_{\text{eff}} \;\middle|\; \delta \sim \text{half-}t_\nu(0, \sigma^2)\right) = \pi_0
+P\left(\delta > \theta_{\text{user}} \;\middle|\; \delta \sim \text{half-}t_\nu(0, \sigma^2)\right) = \pi_0
 $$
 
 This MUST be solved by deterministic 1D root-finding using Monte Carlo integration. See the [Implementation Guide](/reference/implementation-guide#7-prior-scale-calibration) for the algorithm.
 
-**Rationale:** The half-t prior with ν = 4 provides heavy tails (allowing for large effects when data supports them) while maintaining finite variance. The calibrated scale σ ensures genuine uncertainty: the prior is neither too informative (overly skeptical of leaks) nor too diffuse (vacuous).
+The prior is calibrated against $\theta_{\text{user}}$ (the user's threat-model threshold). The measurement floor $\theta_{\text{floor}}$ reflects measurement limitations and is handled separately in the decision logic (§3.3.3).
+
+**Rationale:** The half-t prior with ν = 4 provides heavy tails (allowing for large effects when data supports them) while maintaining finite variance. Calibrating against the user threshold ensures the prior encodes security requirements rather than measurement constraints. The calibrated scale σ ensures genuine uncertainty: the prior is neither too informative (overly skeptical of leaks) nor too diffuse (vacuous).
 
 #### 3.3.5 Deterministic Seeding Policy
 
@@ -634,9 +642,9 @@ $$
 
 **Degrees of freedom for likelihood ($\nu_{\ell}$):**
 
-Implementations MUST use $\nu_{\ell}$ := 8.
+Implementations MUST use $\nu_{\ell}$ := 4.
 
-**Rationale:** When $\text{var}_n$ is underestimated (common when dependence is worse than calibration captured), $\kappa$ is pulled downward and inflates uncertainty automatically, preventing pathological certainty.
+**Rationale:** When $\text{var}_n$ is underestimated (common when dependence is worse than calibration captured), $\kappa$ is pulled downward and inflates uncertainty automatically, preventing pathological certainty. Using ν_ℓ = 4 (matching the prior degrees of freedom) provides robust inference while maintaining consistency between prior and likelihood tail behavior.
 
 **Likelihood inflation warning:**
 
@@ -996,11 +1004,12 @@ For `Inconclusive` outcomes, implementations MUST provide the reason and SHOULD 
 | $V_{\text{cal}}$ | Calibration long-run variance proxy: $\text{var}_{\text{cal}} \cdot n_{\text{cal}}$ |
 | $\hat{\tau}$ | Integrated autocorrelation time (via Geyer IMS) |
 | n_eff | Effective sample size: $n_{\text{eff}} = n / \hat{\tau}$ |
+| n_blocks | Number of independent blocks: $\max(1, \lfloor n / L \rfloor)$ where $L$ is block length |
 | $\nu$ | Half-t degrees of freedom (fixed at 4) |
 | $\sigma$ | Half-t prior scale (calibrated via exceedance target) |
 | $\lambda$ | Latent prior precision multiplier in scale-mixture representation |
 | $\kappa$ | Latent likelihood precision multiplier (robust t-likelihood) |
-| $\nu_{\ell}$ | Likelihood degrees of freedom (fixed at 8) |
+| $\nu_{\ell}$ | Likelihood degrees of freedom (fixed at 4) |
 | $t_{\nu}(0, \sigma^2)$ | Univariate Student's *t* with $\nu$ df, location 0, scale $\sigma^2$ |
 | $\text{half-}t_{\nu}(0, \sigma^2)$ | Half-t distribution (t restricted to positive values) |
 | $V_0^{\text{marginal}}$ | Marginal prior variance: $2\sigma^2$ for $\nu = 4$ |
@@ -1097,6 +1106,32 @@ These constants define conformant implementations. Implementations MAY use diffe
 ***
 
 ## Appendix D: Changelog
+
+### v7.1 (from v7.0)
+
+**Statistical correctness refinements:**
+
+This release fixes inference semantics in the v7.0 W₁ implementation based on statistician review.
+
+**Core changes:**
+
+- **Inference uses raw W₁ (§3.1):** Bayesian inference uses raw W₁ distance without debiasing or clamping. Debiased W₁ is computed only for display purposes to help users interpret effect magnitude above measurement noise.
+
+- **Floor from null distribution (§3.3.3):** Measurement floor $c_{\text{floor}}$ is calibrated from the 95th percentile of null W₁ replicates (via within-class splits) rather than heuristic formulas. This ensures correct Type I error control under the null hypothesis.
+
+- **Block count terminology (Appendix A):** Variable $n_{\text{blocks}} = \max(1, \lfloor n / L \rfloor)$ replaces ambiguous $n_{\text{eff}}$ in floor calculations. Effective sample size $n_{\text{eff}} = n / \hat{\tau}$ remains for IACT-based diagnostics.
+
+- **Prior targets user threshold (§3.3.4):** Half-t prior scale $\sigma$ is calibrated so that $P(\delta > \theta_{\text{user}}) = \pi_0$, not $P(\delta > \theta_{\text{eff}})$. The prior encodes security requirements, not measurement limitations.
+
+- **Robust likelihood (§3.4.2):** Student-t likelihood degrees of freedom changed from $\nu_{\ell} = 8$ to $\nu_{\ell} = 4$ (matching prior ν = 4) for consistency. Robustness parameter $\kappa \sim \text{Gamma}(\nu_{\ell}/2, \nu_{\ell}/2)$ guards against variance underestimation.
+
+- **Tail directionality metric (§2.3):** `tail_slow_share` measures fraction of tail deviation magnitude (p95+) from slowdowns, computed as $\sum \max(d_i - \text{shift}, 0) / \sum |d_i - \text{shift}|$ over tail indices. Operates on quantile-aligned differences, not sample identities.
+
+**Migration notes:**
+
+- These changes affect statistical inference but not API surface
+- Results may differ slightly from v7.0 due to corrected floor calibration and prior targeting
+- No code changes required for users; test outcomes may be more conservative (fewer false positives)
 
 ### v7.0 (from v6.0)
 

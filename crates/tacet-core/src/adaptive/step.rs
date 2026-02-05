@@ -627,7 +627,7 @@ pub fn adaptive_step(
                 theta_tick,
                 theta_user,
                 config.max_samples,
-                calibration.block_length, // v5.6: block_length for n_eff computation
+                calibration.block_length, // v5.6: block_length for n_blocks computation
             );
 
             return StepResult::Decision(AdaptiveOutcome::ThresholdElevated {
@@ -719,6 +719,7 @@ fn compute_posterior(
         calibration.sigma_t,
         config.theta_ns,
         config.seed,
+        4.0, // nu_likelihood: Student-t df for robustness
     );
 
     Some(Posterior::new(

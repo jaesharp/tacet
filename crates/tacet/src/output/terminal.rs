@@ -196,7 +196,7 @@ mod tests {
         let output = format_outcome(&outcome);
         assert!(output.contains("Timing leak detected"));
         assert!(output.contains("98.0%")); // 0.98 * 100
-        assert!(output.contains("W₁ distance:"));
+        assert!(output.contains("Leak magnitude (W₁ distance):"));
         assert!(output.contains("Exploitability"));
     }
 

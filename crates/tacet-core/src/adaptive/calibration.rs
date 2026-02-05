@@ -26,9 +26,10 @@ use crate::analysis::bayes::{sample_gamma, sample_standard_normal};
 use crate::constants::DEFAULT_SEED;
 use crate::preflight::{run_core_checks, PreflightResult};
 use crate::statistics::{
-    bootstrap_w1_variance, timing_iact_combined, timing_iact_direct, timing_iact_per_quantile,
-    AcquisitionStream, OnlineStats,
+    bootstrap_w1_variance, compute_w1_distance, timing_iact_combined, timing_iact_direct,
+    timing_iact_per_quantile, AcquisitionStream, OnlineStats,
 };
+use crate::types::{Class, TimingSample};
 
 use super::CalibrationSnapshot;
 
@@ -227,12 +228,12 @@ impl Calibration {
     /// Compute effective sample size accounting for dependence (spec §3.3.2 v5.6).
     ///
     /// Under strong temporal dependence, n samples do not provide n independent observations.
-    /// The effective sample size approximates the number of effectively independent blocks.
+    /// The number of effectively independent blocks.
     ///
-    /// n_eff = max(1, floor(n / block_length))
+    /// n_blocks = max(1, floor(n / block_length))
     ///
     /// where block_length (PolitisWhite) or IACT (GeyersIMS) is the estimated dependence length.
-    pub fn n_eff(&self, n: usize) -> usize {
+    pub fn n_blocks(&self, n: usize) -> usize {
         use crate::types::IactMethod;
         match self.iact_method {
             IactMethod::PolitisWhite => {
@@ -557,14 +558,25 @@ pub fn calibrate(
     // Compute calibration statistics snapshot for drift detection
     let calibration_snapshot = compute_calibration_snapshot(&baseline_ns, &sample_ns);
 
-    // Compute floor-rate constant: c_floor = q_95(|Z|) where Z ~ N(0, var_rate)
-    let c_floor = compute_c_floor_1d(var_rate, config.seed);
+    // Compute floor-rate constant from null distribution (v7.1 Fix 2)
+    // c_floor = q95 of null W₁ distribution, scaled by sqrt(n_blocks)
+    let c_floor = calibrate_floor_from_null(
+        &interleaved,
+        block_length,
+        config.bootstrap_iterations,
+        config.seed,
+    );
 
     // Timer tick floor
     let theta_tick = config.timer_resolution_ns;
 
     // Initial measurement floor at calibration sample count
-    let theta_floor_initial = (c_floor / (n as f64).sqrt()).max(theta_tick);
+    let n_blocks_cal = if block_length > 0 {
+        (n / block_length).max(1)
+    } else {
+        n.max(1)
+    };
+    let theta_floor_initial = (c_floor / (n_blocks_cal as f64).sqrt()).max(theta_tick);
 
     // Effective threshold: max(user threshold, measurement floor)
     let theta_eff = if config.theta_ns > 0.0 {
@@ -573,8 +585,9 @@ pub fn calibrate(
         theta_floor_initial
     };
 
-    // Half-t prior (ν=4) calibration for W₁ distance
-    let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_eff, n, config.seed);
+    // Half-t prior (ν=4) calibration for W₁ distance (v7.1 Fix 4)
+    // Prior targets theta_user (threat model), not theta_eff (noise-elevated)
+    let sigma_t = calibrate_halft_prior_scale_1d(var_rate, config.theta_ns, n, config.seed);
 
     // Projection mismatch is not applicable to W₁ distance (no projection model)
     // Use placeholder value for compatibility with diagnostics
@@ -646,7 +659,11 @@ fn compute_calibration_snapshot(baseline_ns: &[f64], sample_ns: &[f64]) -> Calib
 
 /// Calibrate half-t prior scale to achieve target exceedance probability (W₁ distance).
 ///
-/// Finds σ_t such that P(|δ| > theta_eff | δ ~ half-t(ν=4, σ_t)) ≈ 0.62
+/// Finds σ_t such that P(|δ| > theta_user | δ ~ half-t(ν=4, σ_t)) ≈ 0.62
+///
+/// **IMPORTANT (v7.1 Fix 4)**: Prior targets theta_user (threat-model threshold),
+/// NOT theta_eff (noise-elevated threshold). The prior encodes the threat model,
+/// while theta_eff = theta_user + theta_floor is for certifiability.
 ///
 /// Uses binary search with Monte Carlo exceedance estimation. The half-t distribution
 /// is sampled via scale mixture:
@@ -655,9 +672,9 @@ fn compute_calibration_snapshot(baseline_ns: &[f64], sample_ns: &[f64]) -> Calib
 /// - δ = |σ_t/√λ · z|
 ///
 /// # Arguments
-/// * `var_rate` - Variance rate (scalar) from bootstrap
-/// * `theta_eff` - Effective threshold in nanoseconds
-/// * `n_cal` - Number of calibration samples
+/// * `var_rate` - Variance rate (scalar) from bootstrap (unused, kept for API compatibility)
+/// * `theta_user` - User-specified threat-model threshold in nanoseconds
+/// * `n_cal` - Number of calibration samples (unused, kept for API compatibility)
 /// * `seed` - Deterministic RNG seed
 ///
 /// # Returns
@@ -668,16 +685,16 @@ fn compute_calibration_snapshot(baseline_ns: &[f64], sample_ns: &[f64]) -> Calib
 /// use tacet_core::adaptive::calibration::calibrate_halft_prior_scale_1d;
 ///
 /// let var_rate = 1000.0;
-/// let theta_eff = 100.0;
+/// let theta_user = 100.0;
 /// let n_cal = 5000;
 /// let seed = 42;
 ///
-/// let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_eff, n_cal, seed);
+/// let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_user, n_cal, seed);
 /// assert!(sigma_t > 0.0);
 /// ```
 pub fn calibrate_halft_prior_scale_1d(
     _var_rate: f64,
-    theta_eff: f64,
+    theta_user: f64,
     _n_cal: usize,
     seed: u64,
 ) -> f64 {
@@ -688,8 +705,8 @@ pub fn calibrate_halft_prior_scale_1d(
     const NU: f64 = 4.0;
 
     // Binary search bounds
-    let mut sigma_low = theta_eff / 10.0;
-    let mut sigma_high = theta_eff * 10.0;
+    let mut sigma_low = theta_user / 10.0;
+    let mut sigma_high = theta_user * 10.0;
 
     // Use RNG for Monte Carlo
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
@@ -698,7 +715,7 @@ pub fn calibrate_halft_prior_scale_1d(
     for _ in 0..30 {
         let sigma_mid = (sigma_low + sigma_high) / 2.0;
 
-        // Estimate P(|δ| > theta) via Monte Carlo
+        // Estimate P(|δ| > theta_user) via Monte Carlo
         // Sample δ ~ half-t(ν, σ_mid) via scale mixture:
         //   λ ~ Gamma(ν/2, ν/2), z ~ N(0,1), δ = |σ/√λ · z|
         let mut exceed_count = 0;
@@ -707,7 +724,7 @@ pub fn calibrate_halft_prior_scale_1d(
             let z = sample_standard_normal(&mut rng);
             let delta = (sigma_mid / lambda.sqrt() * z).abs();
 
-            if delta > theta_eff {
+            if delta > theta_user {
                 exceed_count += 1;
             }
         }
@@ -731,9 +748,119 @@ pub fn calibrate_halft_prior_scale_1d(
     (sigma_low + sigma_high) / 2.0
 }
 
+/// Calibrate floor constant c_floor from null distribution of raw W₁.
+///
+/// Uses within-class splits to generate null W₁ replicates under "no leak"
+/// assumption, then takes 95th percentile scaled by sqrt(n_blocks).
+///
+/// At runtime: theta_floor(n) = max(theta_tick, c_floor / sqrt(n_blocks(n)))
+///
+/// # Arguments
+/// * `interleaved` - Calibration samples (both classes interleaved)
+/// * `block_length` - Block size for computing n_blocks
+/// * `n_bootstrap` - Number of bootstrap replicates (typically 200-500)
+/// * `seed` - Deterministic RNG seed
+///
+/// # Returns
+/// The 95th percentile constant c_floor calibrated from null distribution.
+///
+/// # Algorithm
+/// 1. For each bootstrap replicate:
+///    a. Randomly split baseline into B1, B2
+///    b. Randomly split sample into S1, S2
+///    c. Compute W₁(B1, B2) and W₁(S1, S2)
+///    d. Average them (both are null replicates)
+///    e. Scale by sqrt(n_blocks_cal) to get calibration-size constant
+/// 2. Return 95th percentile of these scaled null statistics
+pub fn calibrate_floor_from_null(
+    interleaved: &[TimingSample],
+    block_length: usize,
+    n_bootstrap: usize,
+    seed: u64,
+) -> f64 {
+    use rand::seq::SliceRandom;
+
+    let n = interleaved.len();
+    let n_per_class = n / 2;
+
+    // Compute n_blocks at calibration size for scaling
+    let n_blocks_cal = if block_length > 0 {
+        (n_per_class / block_length).max(1)
+    } else {
+        n_per_class.max(1)
+    };
+    let sqrt_n_blocks_cal = (n_blocks_cal as f64).sqrt();
+
+    // Split interleaved samples by class
+    let mut baseline_samples: Vec<f64> = Vec::with_capacity(n_per_class);
+    let mut sample_samples: Vec<f64> = Vec::with_capacity(n_per_class);
+
+    for ts in interleaved {
+        match ts.class {
+            Class::Baseline => baseline_samples.push(ts.time_ns),
+            Class::Sample => sample_samples.push(ts.time_ns),
+        }
+    }
+
+    let n_baseline = baseline_samples.len();
+    let n_sample = sample_samples.len();
+
+    // Generate null W₁ replicates via within-class splits
+    let mut null_replicates: Vec<f64> = Vec::with_capacity(n_bootstrap);
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
+
+    for _ in 0..n_bootstrap {
+        // Randomly shuffle baseline indices for split
+        let mut baseline_indices: Vec<usize> = (0..n_baseline).collect();
+        baseline_indices.shuffle(&mut rng);
+        let split_baseline = n_baseline / 2;
+
+        let mut b1: Vec<f64> = baseline_indices[..split_baseline]
+            .iter()
+            .map(|&i| baseline_samples[i])
+            .collect();
+        let mut b2: Vec<f64> = baseline_indices[split_baseline..]
+            .iter()
+            .map(|&i| baseline_samples[i])
+            .collect();
+
+        // Randomly shuffle sample indices for split
+        let mut sample_indices: Vec<usize> = (0..n_sample).collect();
+        sample_indices.shuffle(&mut rng);
+        let split_sample = n_sample / 2;
+
+        let mut s1: Vec<f64> = sample_indices[..split_sample]
+            .iter()
+            .map(|&i| sample_samples[i])
+            .collect();
+        let mut s2: Vec<f64> = sample_indices[split_sample..]
+            .iter()
+            .map(|&i| sample_samples[i])
+            .collect();
+
+        // Compute W₁ for both within-class splits
+        let w1_baseline = compute_w1_distance(&mut b1, &mut b2);
+        let w1_sample = compute_w1_distance(&mut s1, &mut s2);
+
+        // Average the two null replicates and scale by sqrt(n_blocks_cal)
+        let avg_w1 = (w1_baseline + w1_sample) / 2.0;
+        let scaled_w1 = avg_w1 * sqrt_n_blocks_cal;
+
+        null_replicates.push(scaled_w1);
+    }
+
+    // Return 95th percentile
+    let percentile_idx = ((n_bootstrap as f64 * 0.95) as usize).min(n_bootstrap - 1);
+    null_replicates.select_nth_unstable_by(percentile_idx, |a, b| a.total_cmp(b));
+    null_replicates[percentile_idx]
+}
+
 /// Compute measurement floor constant from null noise distribution (W₁ distance).
 ///
+/// **DEPRECATED**: Use `calibrate_floor_from_null()` instead for correct null-based calibration.
+///
 /// Returns the 95th percentile of |Z| where Z ~ N(0, var_rate).
+/// This is a heuristic approximation that doesn't account for actual null distribution.
 ///
 /// Used for theta_floor computation: theta_floor(n) = c_floor / sqrt(n)
 ///
@@ -756,6 +883,10 @@ pub fn calibrate_halft_prior_scale_1d(
 /// // For N(0, 100), q95(|Z|) ≈ 1.645 * sqrt(100) ≈ 16.45
 /// assert!((c_floor - 16.45).abs() < 3.0);
 /// ```
+#[deprecated(
+    since = "0.8.0",
+    note = "Use calibrate_floor_from_null() for correct null-based calibration"
+)]
 pub fn compute_c_floor_1d(var_rate: f64, seed: u64) -> f64 {
     const N_SAMPLES: usize = 50_000;
     const PERCENTILE: usize = (N_SAMPLES as f64 * 0.95) as usize;
@@ -847,16 +978,16 @@ mod tests {
     }
 
     #[test]
-    fn test_n_eff() {
+    fn test_n_blocks() {
         let cal = make_test_calibration();
         // make_test_calibration uses block_length = 10
 
-        // n_eff = max(1, floor(n / block_length))
-        assert_eq!(cal.n_eff(100), 10);
-        assert_eq!(cal.n_eff(1000), 100);
-        assert_eq!(cal.n_eff(10), 1);
-        assert_eq!(cal.n_eff(5), 1); // Clamped to 1 when n < block_length
-        assert_eq!(cal.n_eff(0), 1); // Edge case: n=0 returns 1
+        // n_blocks = max(1, floor(n / block_length))
+        assert_eq!(cal.n_blocks(100), 10);
+        assert_eq!(cal.n_blocks(1000), 100);
+        assert_eq!(cal.n_blocks(10), 1);
+        assert_eq!(cal.n_blocks(5), 1); // Clamped to 1 when n < block_length
+        assert_eq!(cal.n_blocks(0), 1); // Edge case: n=0 returns 1
     }
 
     #[test]
@@ -1153,4 +1284,227 @@ mod tests {
     }
 
     // DELETED: test_halft_vs_9d_scale_relationship() - test comparing 1D vs 9D
+
+    // =========================================================================
+    // calibrate_floor_from_null() tests
+    // =========================================================================
+
+    #[test]
+    fn test_calibrate_floor_from_null_basic() {
+        // Test basic calibration produces positive value
+        let n = 500;
+        let mut samples = Vec::with_capacity(2 * n);
+
+        for i in 0..n {
+            samples.push(TimingSample {
+                time_ns: 100.0 + (i as f64) * 0.1,
+                class: Class::Baseline,
+            });
+            samples.push(TimingSample {
+                time_ns: 100.0 + (i as f64) * 0.1, // Identical (null)
+                class: Class::Sample,
+            });
+        }
+
+        let block_length = 10;
+        let n_bootstrap = 200;
+        let seed = 42;
+
+        let c_floor = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
+
+        // Should be positive and finite
+        assert!(c_floor > 0.0, "c_floor should be positive");
+        assert!(c_floor.is_finite(), "c_floor should be finite");
+    }
+
+    #[test]
+    fn test_calibrate_floor_from_null_determinism() {
+        // Same seed should give same result
+        let n = 300;
+        let mut samples = Vec::with_capacity(2 * n);
+
+        for i in 0..n {
+            samples.push(TimingSample {
+                time_ns: 100.0 + (i as f64),
+                class: Class::Baseline,
+            });
+            samples.push(TimingSample {
+                time_ns: 105.0 + (i as f64),
+                class: Class::Sample,
+            });
+        }
+
+        let block_length = 8;
+        let n_bootstrap = 150;
+        let seed = 12345;
+
+        let c_floor_1 = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
+        let c_floor_2 = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
+
+        assert!(
+            (c_floor_1 - c_floor_2).abs() < 1e-10,
+            "Same seed should give same c_floor: {} vs {}",
+            c_floor_1,
+            c_floor_2
+        );
+    }
+
+    #[test]
+    fn test_calibrate_floor_from_null_null_hypothesis() {
+        // Under null hypothesis (identical distributions), c_floor should reflect noise
+        let n = 400;
+        let mut samples = Vec::with_capacity(2 * n);
+
+        for i in 0..n {
+            let val = 100.0 + (i as f64) * 0.05;
+            samples.push(TimingSample {
+                time_ns: val,
+                class: Class::Baseline,
+            });
+            samples.push(TimingSample {
+                time_ns: val, // Identical
+                class: Class::Sample,
+            });
+        }
+
+        let block_length = 12;
+        let n_bootstrap = 200;
+        let seed = 999;
+
+        let c_floor = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
+
+        // Under null, should be relatively small (reflects sampling noise only)
+        assert!(
+            c_floor < 10.0,
+            "c_floor under null should be small, got {}",
+            c_floor
+        );
+    }
+
+    #[test]
+    fn test_calibrate_floor_from_null_scaling() {
+        // Test that block length affects scaling correctly
+        let n = 500;
+        let mut samples = Vec::with_capacity(2 * n);
+
+        for i in 0..n {
+            samples.push(TimingSample {
+                time_ns: 100.0 + (i as f64) * 0.1,
+                class: Class::Baseline,
+            });
+            samples.push(TimingSample {
+                time_ns: 102.0 + (i as f64) * 0.1,
+                class: Class::Sample,
+            });
+        }
+
+        let n_bootstrap = 200;
+        let seed = 42;
+
+        let c_floor_small_block = calibrate_floor_from_null(&samples, 5, n_bootstrap, seed);
+        let c_floor_large_block = calibrate_floor_from_null(&samples, 25, n_bootstrap, seed);
+
+        // Both should be positive
+        assert!(c_floor_small_block > 0.0);
+        assert!(c_floor_large_block > 0.0);
+
+        // Larger block length means fewer blocks (n_blocks = n / block_length)
+        // c_floor is scaled by sqrt(n_blocks), so fewer blocks -> smaller sqrt(n_blocks) -> smaller c_floor
+        // For block_length=5: n_blocks = 250/5 = 50, sqrt = 7.07
+        // For block_length=25: n_blocks = 250/25 = 10, sqrt = 3.16
+        // So small_block should have larger c_floor
+        assert!(
+            c_floor_small_block > c_floor_large_block,
+            "Smaller block length (more blocks) should yield larger c_floor due to sqrt(n_blocks) scaling: small={}, large={}",
+            c_floor_small_block,
+            c_floor_large_block
+        );
+    }
+
+    #[test]
+    fn test_calibrate_floor_from_null_percentile_property() {
+        // Verify that c_floor represents a high percentile of the null distribution
+        let n = 400;
+        let mut samples = Vec::with_capacity(2 * n);
+
+        for i in 0..n {
+            samples.push(TimingSample {
+                time_ns: 100.0 + (i as f64) * 0.1,
+                class: Class::Baseline,
+            });
+            samples.push(TimingSample {
+                time_ns: 100.0 + (i as f64) * 0.1, // Null
+                class: Class::Sample,
+            });
+        }
+
+        let block_length = 10;
+        let n_bootstrap = 1000; // More samples for better percentile estimate
+        let seed = 777;
+
+        let c_floor = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
+
+        // Generate fresh null replicates and check that c_floor is indeed high percentile
+        use rand::seq::SliceRandom;
+        let n_per_class = n;
+        let n_blocks_cal = (n_per_class / block_length).max(1);
+        let sqrt_n_blocks_cal = (n_blocks_cal as f64).sqrt();
+
+        let mut baseline_samples: Vec<f64> = Vec::new();
+        let mut sample_samples: Vec<f64> = Vec::new();
+        for ts in &samples {
+            match ts.class {
+                Class::Baseline => baseline_samples.push(ts.time_ns),
+                Class::Sample => sample_samples.push(ts.time_ns),
+            }
+        }
+
+        let n_baseline = baseline_samples.len();
+        let n_sample = sample_samples.len();
+
+        let mut null_replicates: Vec<f64> = Vec::new();
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed + 1);
+
+        for _ in 0..500 {
+            let mut baseline_indices: Vec<usize> = (0..n_baseline).collect();
+            baseline_indices.shuffle(&mut rng);
+            let split = n_baseline / 2;
+            let mut b1: Vec<f64> = baseline_indices[..split]
+                .iter()
+                .map(|&i| baseline_samples[i])
+                .collect();
+            let mut b2: Vec<f64> = baseline_indices[split..]
+                .iter()
+                .map(|&i| baseline_samples[i])
+                .collect();
+
+            let mut sample_indices: Vec<usize> = (0..n_sample).collect();
+            sample_indices.shuffle(&mut rng);
+            let split = n_sample / 2;
+            let mut s1: Vec<f64> = sample_indices[..split]
+                .iter()
+                .map(|&i| sample_samples[i])
+                .collect();
+            let mut s2: Vec<f64> = sample_indices[split..]
+                .iter()
+                .map(|&i| sample_samples[i])
+                .collect();
+
+            let w1_b = compute_w1_distance(&mut b1, &mut b2);
+            let w1_s = compute_w1_distance(&mut s1, &mut s2);
+            let avg_w1 = (w1_b + w1_s) / 2.0;
+            null_replicates.push(avg_w1 * sqrt_n_blocks_cal);
+        }
+
+        null_replicates.sort_by(|a, b| a.total_cmp(b));
+        let median = null_replicates[null_replicates.len() / 2];
+
+        // c_floor should be well above median (since it's 95th percentile)
+        assert!(
+            c_floor > median,
+            "c_floor {} should be above median {} of null distribution",
+            c_floor,
+            median
+        );
+    }
 }

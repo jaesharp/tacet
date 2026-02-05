@@ -1,21 +1,18 @@
 ROBUSTNESS CHECK RESULTS
-Generated: 2026-02-03T22:52:11.218123
+Generated: 2026-02-04T23:45:27.499701
 ============================================================
 
-completeness: PASS
+completeness: FAIL
+  - Missing tools: {'ks-test', 'tlsfuzzer', 'ad-test', 'dudect', 'mona', 'rtlf', 'silent', 'timing-tvla'}
 
 duplicates: FAIL
 
 ci_sanity: PASS
 
-suspicious_patterns: FAIL
-  - silent: 0% detection on ALL tail patterns with effect > 0 (900 measurements)
-  - ad-test: FPR=17.9% (>10%) on null effect across all conditions
-  - ks-test: FPR=13.2% (>10%) on null effect across all conditions
-  - tlsfuzzer: FPR=11.6% (>10%) on null effect across all conditions
+suspicious_patterns: PASS
 
 dataset_counts: FAIL
-  - 2 conditions have != 30 datasets
+  - 4 conditions have != 30 datasets
 
 
 SUMMARY: 2/4 checks passed
