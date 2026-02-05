@@ -13,8 +13,8 @@ use core::fmt::Write;
 
 use crate::colors::{bold, bold_cyan, bold_green, bold_red, bold_yellow, dim, green, red, yellow};
 use crate::result::{
-    Diagnostics, EffectEstimate, Exploitability, MeasurementQuality, Outcome, PreflightCategory,
-    PreflightSeverity, ResearchOutcome, ResearchStatus,
+    Diagnostics, EffectEstimate, EffectPattern, Exploitability, MeasurementQuality, Outcome,
+    PreflightCategory, PreflightSeverity, ResearchOutcome, ResearchStatus,
 };
 
 /// Separator line used in output.
@@ -250,10 +250,40 @@ fn format_pass_body(out: &mut String, leak_probability: f64, effect: &EffectEsti
     .unwrap();
     writeln!(
         out,
-        "    95% CI: {:.1}\u{2013}{:.1} ns",
-        effect.credible_interval_ns.0, effect.credible_interval_ns.1
+        "    W₁ distance: {:.1} ns [CI: {:.1}\u{2013}{:.1}]",
+        effect.max_effect_ns, effect.credible_interval_ns.0, effect.credible_interval_ns.1
     )
     .unwrap();
+
+    // Show tail diagnostics if available
+    if let Some(ref tail_diag) = effect.tail_diagnostics {
+        writeln!(
+            out,
+            "      Decomposition: {:.1}ns shift + {:.1}ns tail",
+            tail_diag.shift_ns, tail_diag.tail_ns
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "      Pattern: {} ({:.0}% from tail)",
+            format_pattern_label(tail_diag.pattern_label),
+            tail_diag.tail_share * 100.0
+        )
+        .unwrap();
+
+        // Show quantile shifts when tail is significant
+        if tail_diag.tail_share > 0.3 {
+            writeln!(
+                out,
+                "      Quantile shifts: p50={:.0}ns, p90={:.0}ns, p95={:.0}ns, p99={:.0}ns",
+                tail_diag.quantile_shifts.p50_ns,
+                tail_diag.quantile_shifts.p90_ns,
+                tail_diag.quantile_shifts.p95_ns,
+                tail_diag.quantile_shifts.p99_ns
+            )
+            .unwrap();
+        }
+    }
 }
 
 fn format_fail_body(
@@ -271,21 +301,36 @@ fn format_fail_body(
 
     writeln!(
         out,
-        "    Max effect: {:.1} ns [CI: {:.1}\u{2013}{:.1}]",
+        "    W₁ distance: {:.1} ns [CI: {:.1}\u{2013}{:.1}]",
         effect.max_effect_ns, effect.credible_interval_ns.0, effect.credible_interval_ns.1
     )
     .unwrap();
 
-    // Show top quantiles if available
-    if !effect.top_quantiles.is_empty() {
-        writeln!(out, "      Hotspots:").unwrap();
-        for tq in &effect.top_quantiles {
+    // Show tail diagnostics if available
+    if let Some(ref tail_diag) = effect.tail_diagnostics {
+        writeln!(
+            out,
+            "      Decomposition: {:.1}ns shift + {:.1}ns tail",
+            tail_diag.shift_ns, tail_diag.tail_ns
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "      Pattern: {} ({:.0}% from tail)",
+            format_pattern_label(tail_diag.pattern_label),
+            tail_diag.tail_share * 100.0
+        )
+        .unwrap();
+
+        // Show quantile shifts when tail is significant
+        if tail_diag.tail_share > 0.3 {
             writeln!(
                 out,
-                "        \u{2192} p{:.0} ({:.1}ns, {:.0}% confident)",
-                tq.quantile_p * 100.0,
-                tq.mean_ns,
-                tq.exceed_prob * 100.0
+                "      Quantile shifts: p50={:.0}ns, p90={:.0}ns, p95={:.0}ns, p99={:.0}ns",
+                tail_diag.quantile_shifts.p50_ns,
+                tail_diag.quantile_shifts.p90_ns,
+                tail_diag.quantile_shifts.p95_ns,
+                tail_diag.quantile_shifts.p99_ns
             )
             .unwrap();
         }
@@ -308,10 +353,40 @@ fn format_inconclusive_body(out: &mut String, leak_probability: f64, effect: &Ef
 
     writeln!(
         out,
-        "    Max effect estimate: {:.1} ns [CI: {:.1}\u{2013}{:.1}]",
+        "    W₁ distance estimate: {:.1} ns [CI: {:.1}\u{2013}{:.1}]",
         effect.max_effect_ns, effect.credible_interval_ns.0, effect.credible_interval_ns.1
     )
     .unwrap();
+
+    // Show tail diagnostics if available
+    if let Some(ref tail_diag) = effect.tail_diagnostics {
+        writeln!(
+            out,
+            "      Decomposition: {:.1}ns shift + {:.1}ns tail",
+            tail_diag.shift_ns, tail_diag.tail_ns
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "      Pattern: {} ({:.0}% from tail)",
+            format_pattern_label(tail_diag.pattern_label),
+            tail_diag.tail_share * 100.0
+        )
+        .unwrap();
+
+        // Show quantile shifts when tail is significant
+        if tail_diag.tail_share > 0.3 {
+            writeln!(
+                out,
+                "      Quantile shifts: p50={:.0}ns, p90={:.0}ns, p95={:.0}ns, p99={:.0}ns",
+                tail_diag.quantile_shifts.p50_ns,
+                tail_diag.quantile_shifts.p90_ns,
+                tail_diag.quantile_shifts.p95_ns,
+                tail_diag.quantile_shifts.p99_ns
+            )
+            .unwrap();
+        }
+    }
 }
 
 fn format_research_outcome(out: &mut String, research: &ResearchOutcome) {
@@ -352,23 +427,38 @@ fn format_research_outcome(out: &mut String, research: &ResearchOutcome) {
     writeln!(out).unwrap();
     writeln!(
         out,
-        "    Max effect: {:.1} ns [CI: {:.1}\u{2013}{:.1}]",
+        "    W₁ distance: {:.1} ns [CI: {:.1}\u{2013}{:.1}]",
         research.effect.max_effect_ns,
         research.effect.credible_interval_ns.0,
         research.effect.credible_interval_ns.1
     )
     .unwrap();
 
-    // Show top quantiles if available
-    if !research.effect.top_quantiles.is_empty() {
-        writeln!(out, "      Hotspots:").unwrap();
-        for tq in &research.effect.top_quantiles {
+    // Show tail diagnostics if available
+    if let Some(ref tail_diag) = research.effect.tail_diagnostics {
+        writeln!(
+            out,
+            "      Pattern: {} ({:.0}% from tail)",
+            format_pattern_label(tail_diag.pattern_label),
+            tail_diag.tail_share * 100.0
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "      Decomposition: {:.1}ns shift + {:.1}ns tail",
+            tail_diag.shift_ns, tail_diag.tail_ns
+        )
+        .unwrap();
+
+        // Show quantile shifts when tail is significant
+        if tail_diag.tail_share > 0.3 {
             writeln!(
                 out,
-                "        \u{2192} p{:.0} ({:.1}ns, {:.0}% confident)",
-                tq.quantile_p * 100.0,
-                tq.mean_ns,
-                tq.exceed_prob * 100.0
+                "      Quantile shifts: p50={:.0}ns, p90={:.0}ns, p95={:.0}ns, p99={:.0}ns",
+                tail_diag.quantile_shifts.p50_ns,
+                tail_diag.quantile_shifts.p90_ns,
+                tail_diag.quantile_shifts.p95_ns,
+                tail_diag.quantile_shifts.p99_ns
             )
             .unwrap();
         }
@@ -846,12 +936,25 @@ fn format_debug_core_metrics(
     diagnostics: &Diagnostics,
 ) {
     writeln!(out, "\u{2502} P(leak) = {:.1}%", leak_probability * 100.0).unwrap();
-    writeln!(
-        out,
-        "\u{2502} Effect  = {:.1}ns (CI: [{:.1}, {:.1}])",
-        effect.max_effect_ns, effect.credible_interval_ns.0, effect.credible_interval_ns.1
-    )
-    .unwrap();
+
+    // Format effect with tail decomposition
+    if let Some(ref tail_diag) = effect.tail_diagnostics {
+        writeln!(
+            out,
+            "\u{2502} Effect  = {:.1}ns shift + {:.1}ns tail ({})",
+            tail_diag.shift_ns,
+            tail_diag.tail_ns,
+            format_pattern_label(tail_diag.pattern_label)
+        )
+        .unwrap();
+    } else {
+        writeln!(
+            out,
+            "\u{2502} Effect  = {:.1}ns (CI: [{:.1}, {:.1}])",
+            effect.max_effect_ns, effect.credible_interval_ns.0, effect.credible_interval_ns.1
+        )
+        .unwrap();
+    }
 
     let ess = diagnostics.effective_sample_size;
     let efficiency = if samples_used > 0 {
@@ -965,14 +1068,26 @@ fn format_debug_research(out: &mut String, research: &ResearchOutcome) {
         if research.detectable { "yes" } else { "no" }
     )
     .unwrap();
-    writeln!(
-        out,
-        "\u{2502} Effect = {:.1}ns (CI: [{:.1}, {:.1}])",
-        research.effect.max_effect_ns,
-        research.effect.credible_interval_ns.0,
-        research.effect.credible_interval_ns.1
-    )
-    .unwrap();
+    // Format effect with tail decomposition
+    if let Some(ref tail_diag) = research.effect.tail_diagnostics {
+        writeln!(
+            out,
+            "\u{2502} Effect = {:.1}ns shift + {:.1}ns tail ({})",
+            tail_diag.shift_ns,
+            tail_diag.tail_ns,
+            format_pattern_label(tail_diag.pattern_label)
+        )
+        .unwrap();
+    } else {
+        writeln!(
+            out,
+            "\u{2502} Effect = {:.1}ns (CI: [{:.1}, {:.1}])",
+            research.effect.max_effect_ns,
+            research.effect.credible_interval_ns.0,
+            research.effect.credible_interval_ns.1
+        )
+        .unwrap();
+    }
 
     let ess = research.diagnostics.effective_sample_size;
     let raw = research.samples_used;
@@ -1022,6 +1137,16 @@ fn format_debug_research(out: &mut String, research: &ResearchOutcome) {
 // ============================================================================
 // Utility functions
 // ============================================================================
+
+/// Format EffectPattern for display.
+fn format_pattern_label(pattern: EffectPattern) -> &'static str {
+    match pattern {
+        EffectPattern::UniformShift => "Uniform shift",
+        EffectPattern::TailEffect => "Tail effect",
+        EffectPattern::Mixed => "Mixed pattern",
+        EffectPattern::Negligible => "Negligible",
+    }
+}
 
 /// Get exploitability info as plain text.
 pub fn exploitability_info(exploit: Exploitability) -> (&'static str, &'static str) {

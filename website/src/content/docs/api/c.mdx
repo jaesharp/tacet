@@ -39,7 +39,9 @@ int main(void) {
             printf("No leak: P(leak)=%.1f%%\n", result.leak_probability * 100.0);
             break;
         case Fail:
-            printf("Leak: %.1f ns shift\n", result.effect.shift_ns);
+            printf("Leak: %.1f ns (%s)\n",
+                   result.effect.max_effect_ns,
+                   to_pattern_string(result.effect.tail_diagnostics.pattern));
             break;
         case Inconclusive:
             printf("Inconclusive\n");
@@ -309,12 +311,84 @@ typedef struct {
 
 ```c
 typedef struct {
-    double shift_ns;     // Uniform shift component
-    double tail_ns;      // Tail effect component
-    double ci_low_ns;    // 95% credible interval lower
-    double ci_high_ns;   // 95% credible interval upper
-    ToEffectPattern pattern;  // UniformShift, TailEffect, Mixed, Indeterminate
+    double max_effect_ns;  // L∞ norm of W₁ distance
+    double ci_low_ns;      // 95% credible interval lower
+    double ci_high_ns;     // 95% credible interval upper
+    ToTailDiagnostics tail_diagnostics;  // Shift-vs-tail decomposition
 } ToEffect;
+```
+
+### Tail Diagnostics Structure
+
+The `ToTailDiagnostics` structure decomposes the timing effect into uniform shift and tail components:
+
+```c
+typedef struct {
+    double shift_ns;           // Median of rank-matched differences
+    double tail_ns;            // Mean absolute deviation from shift
+    double tail_share;         // Fraction of effect from tail (0.0-1.0)
+    double tail_slow_share;    // Fraction of tail mass that's positive
+    ToQuantileShifts quantile_shifts;  // Per-quantile timing differences
+    ToEffectPattern pattern;   // Automatic classification
+} ToTailDiagnostics;
+
+typedef struct {
+    double p50_ns;  // Median shift
+    double p90_ns;  // 90th percentile shift
+    double p95_ns;  // 95th percentile shift
+    double p99_ns;  // 99th percentile shift
+} ToQuantileShifts;
+
+typedef enum {
+    TailEffect = 0,    // >50% of effect in slow outliers
+    UniformShift = 1,  // <30% of effect in tail
+    Mixed = 2,         // 30-50% in tail
+    Negligible = 3     // Total effect below measurement floor
+} ToEffectPattern;
+```
+
+**Understanding the decomposition:**
+- **shift_ns**: Median timing difference across all observations (aligned by rank). Non-zero values indicate consistent timing differences across the entire distribution.
+- **tail_ns**: Measures how much individual measurements deviate from the uniform shift. High values indicate some operations are disproportionately slow.
+- **tail_share**: Fraction of total W₁ distance from tail deviations. Values above 0.5 indicate tail-dominated effects.
+
+**Helper Function:**
+
+```c
+const char* to_pattern_string(ToEffectPattern pattern);
+// Returns: "tail effect", "uniform shift", "mixed", or "negligible"
+```
+
+**Example: Accessing effect details**
+
+```c
+if (result.outcome == Fail) {
+    printf("Max effect: %.1f ns\n", result.effect.max_effect_ns);
+    printf("Pattern: %s\n", to_pattern_string(result.effect.tail_diagnostics.pattern));
+
+    ToTailDiagnostics* tail = &result.effect.tail_diagnostics;
+    printf("Shift: %.1f ns, Tail: %.1f ns\n", tail->shift_ns, tail->tail_ns);
+
+    // Interpret the effect pattern
+    switch (tail->pattern) {
+        case TailEffect:
+            printf("Tail-heavy leak: %.0f%% from slow outliers\n", tail->tail_share * 100.0);
+            printf("p99: %.1f ns vs median: %.1f ns\n",
+                   tail->quantile_shifts.p99_ns,
+                   tail->quantile_shifts.p50_ns);
+            break;
+        case UniformShift:
+            printf("Uniform timing shift: %.1f ns across distribution\n", tail->shift_ns);
+            break;
+        case Mixed:
+            printf("Mixed effect: %.1f ns shift + %.1f ns tail\n",
+                   tail->shift_ns, tail->tail_ns);
+            break;
+        case Negligible:
+            printf("Effect below measurement floor\n");
+            break;
+    }
+}
 ```
 
 ### Exploitability
@@ -437,8 +511,9 @@ int main(void) {
            result.outcome == Fail ? "FAIL" :
            result.outcome == Inconclusive ? "INCONCLUSIVE" : "UNMEASURABLE");
     printf("Leak probability: %.1f%%\n", result.leak_probability * 100.0);
-    printf("Effect: %.2f ns (shift) + %.2f ns (tail)\n",
-           result.effect.shift_ns, result.effect.tail_ns);
+    printf("Effect: %.2f ns (%s)\n",
+           result.effect.max_effect_ns,
+           to_pattern_string(result.effect.tail_diagnostics.pattern));
     printf("Samples: %llu, Time: %.2fs\n",
            (unsigned long long)result.samples_used, result.elapsed_secs);
 

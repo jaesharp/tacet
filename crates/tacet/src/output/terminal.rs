@@ -157,11 +157,7 @@ mod tests {
     fn make_pass_outcome() -> Outcome {
         Outcome::Pass {
             leak_probability: 0.02,
-            effect: EffectEstimate {
-                max_effect_ns: 5.0,
-                credible_interval_ns: (0.0, 10.0),
-                top_quantiles: Vec::new(),
-            },
+            effect: EffectEstimate::new(5.0, (0.0, 10.0)),
             samples_used: 10000,
             quality: MeasurementQuality::Good,
             diagnostics: Diagnostics::all_ok(),
@@ -174,11 +170,7 @@ mod tests {
     fn make_fail_outcome() -> Outcome {
         Outcome::Fail {
             leak_probability: 0.98,
-            effect: EffectEstimate {
-                max_effect_ns: 150.0,
-                credible_interval_ns: (100.0, 200.0),
-                top_quantiles: Vec::new(),
-            },
+            effect: EffectEstimate::new(150.0, (100.0, 200.0)),
             exploitability: Exploitability::Http2Multiplexing,
             samples_used: 10000,
             quality: MeasurementQuality::Good,
@@ -204,7 +196,7 @@ mod tests {
         let output = format_outcome(&outcome);
         assert!(output.contains("Timing leak detected"));
         assert!(output.contains("98.0%")); // 0.98 * 100
-        assert!(output.contains("Max effect:"));
+        assert!(output.contains("W₁ distance:"));
         assert!(output.contains("Exploitability"));
     }
 

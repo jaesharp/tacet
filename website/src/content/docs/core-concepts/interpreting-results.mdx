@@ -36,10 +36,15 @@ match outcome {
         println!("No leak detected (P={:.1}%)", leak_probability * 100.0);
         println!("Measurement quality: {:?}", quality);
     }
-    Outcome::Fail { leak_probability, effect, exploitability, .. } => {
+    Outcome::Fail { leak_probability, effect, .. } => {
         println!("Timing leak detected (P={:.1}%)", leak_probability * 100.0);
-        println!("Effect: {:.1}ns shift, {:.1}ns tail", effect.shift_ns, effect.tail_ns);
-        println!("Exploitability: {:?}", exploitability);
+        println!("W₁ distance: {:.1}ns", effect.w1_distance_ns);
+        if let Some(tail_diag) = &effect.tail_diagnostics {
+            println!("Pattern: {:?}", tail_diag.pattern_label);
+            println!("Shift: {:.1}ns, Tail: {:.1}ns ({:.0}% from tail)",
+                     tail_diag.shift_ns, tail_diag.tail_ns,
+                     tail_diag.tail_share * 100.0);
+        }
     }
     Outcome::Inconclusive { reason, leak_probability, .. } => {
         println!("Inconclusive: {:?}", reason);
@@ -171,24 +176,36 @@ result, err := tacet.Test(
 
 ## Effect decomposition
 
-When a leak is detected, the `effect` field breaks down the timing difference into interpretable components:
+When a leak is detected, the `effect` field provides the W₁ distance (Wasserstein-1 metric) and decomposes it into shift and tail components to help you understand the nature of the timing leak.
 
-### Shift vs tail
+### W₁ distance
 
-- **Shift (μ)**: A uniform timing difference affecting all measurements equally. Typical cause: the code takes a different branch.
+The W₁ distance measures the "cost" of transforming one timing distribution into another. For timing analysis, it approximates the sum of two components:
 
-- **Tail (τ)**: Upper quantiles (slower measurements) are affected more than lower quantiles. Typical cause: cache misses that only occur for certain inputs.
+**W₁ ≈ |shift| + tail**
+
+- **Shift (μ)**: A uniform timing difference affecting all measurements. This is the median of rank-matched differences between baseline and sample distributions. Typical cause: the code consistently takes a different branch.
+
+- **Tail (τ)**: Additional effect concentrated in the upper quantiles (slower measurements). This is computed as the mean of residuals after removing the shift component. Typical cause: data-dependent cache misses or memory access patterns that only trigger for certain inputs.
+
+- **Tail share**: The fraction of the total effect coming from the tail: `tail_share = tail / (|shift| + tail)`. Values near 1.0 indicate a pure tail effect; values near 0.0 indicate a pure uniform shift.
 
 <Tabs syncKey="language">
 <TabItem label="Rust" icon="seti:rust">
 ```rust
 match outcome {
     Outcome::Fail { effect, .. } => {
-        println!("Shift: {:.1}ns", effect.shift_ns);
-        println!("Tail: {:.1}ns", effect.tail_ns);
+        println!("W₁ distance: {:.1}ns", effect.w1_distance_ns);
         println!("95% CI: [{:.1}, {:.1}]ns",
                  effect.credible_interval_ns.0,
                  effect.credible_interval_ns.1);
+
+        if let Some(tail_diag) = &effect.tail_diagnostics {
+            println!("Shift: {:.1}ns", tail_diag.shift_ns);
+            println!("Tail: {:.1}ns", tail_diag.tail_ns);
+            println!("Tail share: {:.1}%", tail_diag.tail_share * 100.0);
+            println!("Pattern: {:?}", tail_diag.pattern_label);
+        }
     }
     _ => {}
 }
@@ -198,41 +215,68 @@ match outcome {
 ```typescript
 if (result.isFail()) {
     const effect = result.effect;
-    console.log(`Shift: ${effect.shiftNs.toFixed(1)}ns`);
-    console.log(`Tail: ${effect.tailNs.toFixed(1)}ns`);
+    console.log(`W₁ distance: ${effect.w1DistanceNs.toFixed(1)}ns`);
     console.log(`95% CI: [${effect.credibleIntervalNs[0].toFixed(1)}, ${effect.credibleIntervalNs[1].toFixed(1)}]ns`);
+
+    if (effect.tailDiagnostics) {
+        const tail = effect.tailDiagnostics;
+        console.log(`Shift: ${tail.shiftNs.toFixed(1)}ns`);
+        console.log(`Tail: ${tail.tailNs.toFixed(1)}ns`);
+        console.log(`Tail share: ${(tail.tailShare * 100).toFixed(1)}%`);
+        console.log(`Pattern: ${tail.patternLabel}`);
+    }
 }
 ```
 </TabItem>
 <TabItem label="C" icon="seti:c">
 ```c
 if (result.outcome == Fail) {
-    printf("Shift: %.1f ns\n", result.effect.shift_ns);
-    printf("Tail: %.1f ns\n", result.effect.tail_ns);
+    printf("W₁ distance: %.1f ns\n", result.effect.w1_distance_ns);
     printf("95%% CI: [%.1f, %.1f] ns\n",
            result.effect.credible_interval_lower_ns,
            result.effect.credible_interval_upper_ns);
+
+    if (result.effect.has_tail_diagnostics) {
+        printf("Shift: %.1f ns\n", result.effect.tail_diagnostics.shift_ns);
+        printf("Tail: %.1f ns\n", result.effect.tail_diagnostics.tail_ns);
+        printf("Tail share: %.1f%%\n", result.effect.tail_diagnostics.tail_share * 100);
+        printf("Pattern: %s\n", result.effect.tail_diagnostics.pattern_label);
+    }
 }
 ```
 </TabItem>
 <TabItem label="C++" icon="seti:cpp">
 ```cpp
 if (result.outcome == ToOutcome::Fail) {
-    std::cout << "Shift: " << result.effect.shift_ns << " ns\n";
-    std::cout << "Tail: " << result.effect.tail_ns << " ns\n";
+    std::cout << "W₁ distance: " << result.effect.w1_distance_ns << " ns\n";
     std::cout << "95% CI: [" << result.effect.credible_interval_lower_ns
               << ", " << result.effect.credible_interval_upper_ns << "] ns\n";
+
+    if (result.effect.has_tail_diagnostics) {
+        auto& tail = result.effect.tail_diagnostics;
+        std::cout << "Shift: " << tail.shift_ns << " ns\n";
+        std::cout << "Tail: " << tail.tail_ns << " ns\n";
+        std::cout << "Tail share: " << (tail.tail_share * 100) << "%\n";
+        std::cout << "Pattern: " << tail.pattern_label << "\n";
+    }
 }
 ```
 </TabItem>
 <TabItem label="Go" icon="seti:go">
 ```go
 if result.Outcome == tacet.Fail {
-    fmt.Printf("Shift: %.1f ns\n", result.Effect.ShiftNs)
-    fmt.Printf("Tail: %.1f ns\n", result.Effect.TailNs)
+    fmt.Printf("W₁ distance: %.1f ns\n", result.Effect.W1DistanceNs)
     fmt.Printf("95%% CI: [%.1f, %.1f] ns\n",
         result.Effect.CredibleIntervalLowerNs,
         result.Effect.CredibleIntervalUpperNs)
+
+    if result.Effect.HasTailDiagnostics {
+        tail := result.Effect.TailDiagnostics
+        fmt.Printf("Shift: %.1f ns\n", tail.ShiftNs)
+        fmt.Printf("Tail: %.1f ns\n", tail.TailNs)
+        fmt.Printf("Tail share: %.1f%%\n", tail.TailShare*100)
+        fmt.Printf("Pattern: %s\n", tail.PatternLabel)
+    }
 }
 ```
 </TabItem>
@@ -240,33 +284,37 @@ if result.Outcome == tacet.Fail {
 
 ### Effect patterns
 
-| Pattern | What it means | Typical cause |
-|---------|---------------|---------------|
-| `UniformShift` | All quantiles shifted equally | Branch on secret bit, different code path |
-| `TailEffect` | Upper quantiles shifted more | Cache misses, memory access patterns |
-| `Mixed` | Both shift and tail are significant | Multiple leak sources interacting |
-| `Complex` | Doesn't fit standard patterns | Asymmetric or multi-modal effects |
+The `pattern_label` classifies the leak based on its shift and tail decomposition:
+
+| Pattern | Condition | Interpretation | Typical cause |
+|---------|-----------|----------------|---------------|
+| `Negligible` | W₁ < 1.0ns | Effect too small to matter | Measurement noise |
+| `TailEffect` | tail\_share ≥ 0.5 | Leak concentrated in upper quantiles | Cache misses, memory access patterns, rare branches |
+| `UniformShift` | tail\_share < 0.3 | All measurements shifted equally | Consistent branch on secret bit, different code path |
+| `Mixed` | 0.3 ≤ tail\_share < 0.5 | Both shift and tail contribute | Multiple leak sources interacting |
 
 <Aside>
-Effect decomposition helps you understand *how* the leak manifests, which can guide remediation. A `UniformShift` suggests a conditional branch, while `TailEffect` suggests data-dependent memory access.
+Effect decomposition helps you understand *how* the leak manifests, guiding remediation:
+- **UniformShift**: Look for conditional branches or different execution paths based on secret data
+- **TailEffect**: Look for data-dependent memory accesses (table lookups, cache lines)
+- **Mixed**: Multiple leak sources may be present; both branch and memory effects
 </Aside>
 
-## Exploitability assessment
+### Interpreting quantile shifts
 
-For `Fail` outcomes, the `exploitability` field estimates how difficult it would be to actually exploit the leak:
+For non-negligible effects, `tail_diagnostics` may include `quantile_shifts`, showing how individual quantiles differ between baseline and sample distributions:
 
-| Level | Effect Size | Attack scenario |
-|-------|-------------|-----------------|
-| `SharedHardwareOnly` | < 10ns | ~1k queries with shared physical core (SGX, containers) |
-| `Http2Multiplexing` | 10-100ns | ~100k concurrent HTTP/2 requests from the internet |
-| `StandardRemote` | 100ns-10μs | ~1k-10k queries with network timing |
-| `ObviousLeak` | > 10μs | < 100 queries, trivially exploitable |
+```rust
+if let Some(tail_diag) = &effect.tail_diagnostics {
+    if let Some(quantile_shifts) = &tail_diag.quantile_shifts {
+        for (q, shift) in quantile_shifts {
+            println!("q{}: {:.1}ns shift", q, shift);
+        }
+    }
+}
+```
 
-This is based on research by Crosby et al. (2009) on the relationship between timing precision and query complexity for remote timing attacks.
-
-<Aside type="caution">
-Exploitability is a heuristic based on effect size. Actual exploitability depends on your specific deployment: network conditions, caching layers, concurrent load, and attacker capabilities.
-</Aside>
+This reveals which parts of the distribution are most affected. For example, if q95-q99 show large shifts but q50-q90 do not, the leak is concentrated in the tail (slow outliers).
 
 ## Handling inconclusive results
 

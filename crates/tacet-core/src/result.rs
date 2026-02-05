@@ -263,38 +263,36 @@ pub enum InconclusiveReason {
 // EffectEstimate - Timing effect summary (spec §5.2)
 // ============================================================================
 
-/// Estimated timing effect with credible interval and top quantiles.
+/// Estimated timing effect with credible interval and tail diagnostics.
 ///
-/// This struct summarizes the timing difference between baseline and sample classes.
-/// The effect is characterized by the maximum absolute quantile difference across
-/// all 9 deciles, with a 95% credible interval and details about which quantiles
-/// contribute most to any detected leak.
+/// This struct summarizes the timing difference between baseline and sample classes
+/// using the W₁ Wasserstein distance decomposed into shift and tail components.
 ///
 /// See spec Section 5.2 (Effect Reporting).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EffectEstimate {
-    /// Posterior mean of max_k |δ_k| in nanoseconds.
+    /// W₁ Wasserstein distance in nanoseconds (posterior mean).
     ///
-    /// This is the maximum absolute timing difference across all 9 deciles,
-    /// averaged over posterior samples. Positive values indicate detectable
-    /// timing differences between the two input classes.
+    /// This is the 1D Wasserstein distance between baseline and sample distributions,
+    /// representing the optimal transport cost. It decomposes into shift and tail
+    /// components for interpretation.
+    #[serde(rename = "w1_distance_ns")]
     pub max_effect_ns: f64,
 
-    /// 95% credible interval for max|δ| in nanoseconds.
+    /// 95% credible interval for W₁ in nanoseconds.
     ///
     /// This is a Bayesian credible interval: there is a 95% posterior probability
-    /// that the true maximum effect lies within this range.
+    /// that the true W₁ distance lies within this range.
     pub credible_interval_ns: (f64, f64),
 
-    /// Top 2-3 quantiles by exceedance probability.
+    /// Tail diagnostics for shift-vs-tail decomposition.
     ///
-    /// When a timing leak is detected, these are the specific quantiles that
-    /// contribute most to the leak detection. Each entry includes the quantile
-    /// probability (e.g., 0.9 for 90th percentile), the posterior mean effect,
-    /// the 95% marginal credible interval, and the exceedance probability.
+    /// Decomposes W₁ into shift (median difference) and tail (deviation from median)
+    /// components, with pattern classification and per-quantile shifts.
     ///
-    /// Empty when no leak is detected or effect is negligible.
-    pub top_quantiles: Vec<TopQuantile>,
+    /// `None` when the effect is negligible or tail diagnostics are unavailable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tail_diagnostics: Option<TailDiagnostics>,
 }
 
 impl EffectEstimate {
@@ -302,12 +300,24 @@ impl EffectEstimate {
     pub fn new(
         max_effect_ns: f64,
         credible_interval_ns: (f64, f64),
-        top_quantiles: Vec<TopQuantile>,
     ) -> Self {
         Self {
             max_effect_ns,
             credible_interval_ns,
-            top_quantiles,
+            tail_diagnostics: None,
+        }
+    }
+
+    /// Create a new EffectEstimate with tail diagnostics.
+    pub fn with_tail_diagnostics(
+        w1_distance_ns: f64,
+        credible_interval_ns: (f64, f64),
+        tail_diagnostics: TailDiagnostics,
+    ) -> Self {
+        Self {
+            max_effect_ns: w1_distance_ns,
+            credible_interval_ns,
+            tail_diagnostics: Some(tail_diagnostics),
         }
     }
 
@@ -316,8 +326,13 @@ impl EffectEstimate {
         self.max_effect_ns.abs() < threshold_ns
     }
 
-    /// Get the total effect magnitude (same as max_effect_ns for API compatibility).
+    /// Get the total effect magnitude (W₁ distance).
     pub fn total_effect_ns(&self) -> f64 {
+        self.max_effect_ns
+    }
+
+    /// Get the W₁ distance (alias for max_effect_ns).
+    pub fn w1_distance_ns(&self) -> f64 {
         self.max_effect_ns
     }
 }
@@ -327,7 +342,7 @@ impl Default for EffectEstimate {
         Self {
             max_effect_ns: 0.0,
             credible_interval_ns: (0.0, 0.0),
-            top_quantiles: Vec::new(),
+            tail_diagnostics: None,
         }
     }
 }
@@ -1537,6 +1552,165 @@ impl fmt::Display for InconclusiveReason {
             }
         }
     }
+}
+
+// ============================================================================
+// Effect Pattern Classification - Shift vs Tail Decomposition
+// ============================================================================
+
+/// Pattern classification for effect decomposition.
+///
+/// Classifies timing effects by how the difference is distributed across the
+/// timing distribution. This helps distinguish systematic shifts (all measurements
+/// affected equally) from tail effects (only slowest operations affected).
+///
+/// The classification is based on the tail contribution share: tail / (|shift| + tail),
+/// where tail represents asymmetric deviation from the median shift.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EffectPattern {
+    /// Tail effect: >50% of W₁ from upper quantiles.
+    ///
+    /// Most timing difference is concentrated in the tail (slow outliers).
+    /// This suggests data-dependent operations that occasionally trigger
+    /// slow paths: cache misses, branch mispredictions, variable-time conditionals.
+    ///
+    /// Example: Early-exit string comparison where mismatches at different
+    /// positions cause different execution times.
+    TailEffect,
+
+    /// Uniform shift: effect distributed evenly across distribution.
+    ///
+    /// Timing difference is consistent across all quantiles, indicating a
+    /// systematic overhead that affects all operations equally.
+    ///
+    /// Example: Fixed-cost branch or memory access that always executes for
+    /// one input class but never for the other.
+    UniformShift,
+
+    /// Mixed pattern: both shift and tail components present.
+    ///
+    /// Timing difference has both systematic and tail-heavy components,
+    /// suggesting multiple interacting mechanisms.
+    ///
+    /// Example: Operation with both a fixed overhead and occasional slow paths.
+    Mixed,
+
+    /// Negligible effect: total effect below measurement floor.
+    ///
+    /// No meaningful timing difference detected; any measured difference
+    /// is within measurement noise.
+    Negligible,
+}
+
+impl fmt::Display for EffectPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            EffectPattern::TailEffect => write!(f, "tail effect"),
+            EffectPattern::UniformShift => write!(f, "uniform shift"),
+            EffectPattern::Mixed => write!(f, "mixed pattern"),
+            EffectPattern::Negligible => write!(f, "negligible"),
+        }
+    }
+}
+
+/// Per-quantile timing shifts for effect decomposition.
+///
+/// Reports timing differences at key quantiles to help users understand
+/// where in the distribution the effect is concentrated.
+///
+/// All shifts are in nanoseconds and represent baseline - sample
+/// (positive = baseline slower, negative = sample slower).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct QuantileShifts {
+    /// Median shift in nanoseconds (50th percentile).
+    ///
+    /// This is the central tendency of the timing difference.
+    /// If most of the effect is at the median, the pattern is likely a uniform shift.
+    pub p50_ns: f64,
+
+    /// 90th percentile shift in nanoseconds.
+    ///
+    /// Timing difference at the 90th percentile.
+    pub p90_ns: f64,
+
+    /// 95th percentile shift in nanoseconds.
+    ///
+    /// Timing difference at the 95th percentile.
+    pub p95_ns: f64,
+
+    /// 99th percentile shift in nanoseconds.
+    ///
+    /// Timing difference at the 99th percentile.
+    /// If this is much larger than the median, the effect is tail-heavy.
+    pub p99_ns: f64,
+}
+
+/// Tail diagnostics for shift-vs-tail decomposition.
+///
+/// Decomposes timing effects into two components:
+/// - **Shift**: Median of rank-matched differences (location shift)
+/// - **Tail**: Mean absolute deviation from shift (tail asymmetry)
+///
+/// This decomposition helps distinguish systematic timing differences (all
+/// operations affected equally) from tail effects (only occasional slow paths).
+///
+/// The decomposition uses rank-matched differences to avoid quantile estimation
+/// artifacts and provides a robust characterization of effect distribution.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TailDiagnostics {
+    /// Median of rank-matched differences in nanoseconds (location shift).
+    ///
+    /// This is the typical timing difference between baseline and sample classes.
+    /// Computed as median(baseline\[i\] - sample\[i\]) after sorting both distributions.
+    ///
+    /// - Positive: baseline typically slower
+    /// - Negative: sample typically slower
+    /// - Near zero: no systematic shift
+    pub shift_ns: f64,
+
+    /// Mean absolute deviation from shift in nanoseconds (tail asymmetry).
+    ///
+    /// This measures how much the timing differences vary around the shift.
+    /// Computed as mean(|baseline\[i\] - sample\[i\] - shift|).
+    ///
+    /// - Large tail_ns with small shift_ns: tail-heavy effect
+    /// - Small tail_ns with large shift_ns: uniform shift
+    pub tail_ns: f64,
+
+    /// Fraction of effect from tail: tail / (|shift| + tail).
+    ///
+    /// This is the key metric for pattern classification:
+    /// - > 0.5: TailEffect (most difference in slow outliers)
+    /// - < 0.3: UniformShift (consistent difference)
+    /// - 0.3-0.5: Mixed (both components present)
+    ///
+    /// Range: [0.0, 1.0]
+    pub tail_share: f64,
+
+    /// Fraction of tail mass that's positive in nanoseconds (baseline slower).
+    ///
+    /// Measures asymmetry direction in the tail deviations:
+    /// - > 0.5: baseline has more slow outliers
+    /// - < 0.5: sample has more slow outliers
+    /// - ≈ 0.5: symmetric outliers
+    ///
+    /// Range: [0.0, 1.0]
+    pub tail_slow_share: f64,
+
+    /// Per-quantile timing shifts for detailed explanation.
+    ///
+    /// Shows timing differences at median, 90th, 95th, and 99th percentiles
+    /// to help users understand effect distribution.
+    pub quantile_shifts: QuantileShifts,
+
+    /// Pattern classification based on tail_share.
+    ///
+    /// Automatically classified from the tail_share metric:
+    /// - Negligible: total effect < θ_floor
+    /// - TailEffect: tail_share > 0.5
+    /// - UniformShift: tail_share < 0.3
+    /// - Mixed: 0.3 ≤ tail_share ≤ 0.5
+    pub pattern_label: EffectPattern,
 }
 
 // ============================================================================

@@ -9,7 +9,7 @@
 //!
 //! Formula with 50% power (spec §3.3):
 //! ```text
-//! MDE = z_{1-α/2} × max_k sqrt(Σ₀[k,k])
+//! MDE = z_{1-α/2} × sqrt(variance)
 //! ```
 //! where z_{1-α/2} is the (1-α/2) percentile of the standard normal.
 
@@ -17,7 +17,6 @@ extern crate alloc;
 
 use crate::math;
 use crate::result::MinDetectableEffect;
-use crate::types::Matrix9;
 
 /// Result from MDE estimation.
 #[derive(Debug, Clone)]
@@ -36,26 +35,23 @@ impl From<MdeEstimate> for MinDetectableEffect {
 
 /// Compute MDE analytically (spec §3.3).
 ///
-/// For max|δ| detection, MDE is determined by the largest marginal variance:
+/// For W₁ detection, MDE is determined by the variance:
 /// ```text
-/// MDE = z_{1-α/2} × max_k sqrt(Σ₀[k,k])
+/// MDE = z_{1-α/2} × sqrt(variance)
 /// ```
 ///
 /// # Arguments
 ///
-/// * `covariance` - Pooled covariance matrix of quantile differences (Σ₀)
+/// * `variance` - Variance of W₁
 /// * `alpha` - Significance level (e.g., 0.05 for 95% confidence)
 ///
 /// # Returns
 ///
 /// The minimum detectable effect in nanoseconds.
-pub fn analytical_mde(covariance: &Matrix9, alpha: f64) -> f64 {
-    // Find maximum marginal variance
-    let max_var = (0..9).map(|i| covariance[(i, i)]).fold(0.0_f64, f64::max);
-
-    // MDE with 50% power: z_{1-α/2} × sqrt(max variance)
+pub fn analytical_mde(variance: f64, alpha: f64) -> f64 {
+    // MDE with 50% power: z_{1-α/2} × sqrt(variance)
     let z = probit(1.0 - alpha / 2.0);
-    z * math::sqrt(max_var)
+    z * math::sqrt(variance)
 }
 
 /// Inverse normal CDF (probit function).
@@ -91,43 +87,19 @@ fn probit(p: f64) -> f64 {
 ///
 /// # Arguments
 ///
-/// * `covariance` - Pooled covariance matrix of quantile differences (Σ₀)
+/// * `variance` - Variance of W₁
 /// * `alpha` - Significance level (e.g., 0.01 for 99% confidence)
 ///
 /// # Returns
 ///
 /// An `MdeEstimate` with MDE in nanoseconds.
-pub fn estimate_mde(covariance: &Matrix9, alpha: f64) -> MdeEstimate {
-    let mde_ns = analytical_mde(covariance, alpha);
+pub fn estimate_mde(variance: f64, alpha: f64) -> MdeEstimate {
+    let mde_ns = analytical_mde(variance, alpha);
 
     MdeEstimate {
         mde_ns,
         n_simulations: 0, // Analytical method doesn't use simulations
     }
-}
-
-/// Safe Cholesky decomposition with adaptive jitter for near-singular matrices.
-///
-/// Uses the same regularization strategy as covariance estimation.
-#[allow(dead_code)]
-fn safe_cholesky(matrix: &Matrix9) -> nalgebra::Cholesky<f64, nalgebra::Const<9>> {
-    // Try decomposition first
-    if let Some(chol) = nalgebra::Cholesky::new(*matrix) {
-        return chol;
-    }
-
-    // Add adaptive jitter for near-singular matrices
-    let trace = matrix.trace();
-    let base_jitter = 1e-10;
-    let adaptive_jitter = (trace / 9.0) * 1e-8;
-    let jitter = base_jitter + adaptive_jitter;
-
-    let mut regularized = *matrix;
-    for i in 0..9 {
-        regularized[(i, i)] += jitter;
-    }
-
-    nalgebra::Cholesky::new(regularized).expect("Cholesky failed even after regularization")
 }
 
 #[cfg(test)]
@@ -136,9 +108,9 @@ mod tests {
 
     #[test]
     fn test_mde_positive() {
-        // With identity covariance, MDE should be positive
-        let cov = Matrix9::identity();
-        let mde = estimate_mde(&cov, 0.05);
+        // With unit variance, MDE should be positive
+        let variance = 1.0;
+        let mde = estimate_mde(variance, 0.05);
 
         assert!(mde.mde_ns > 0.0, "MDE should be positive");
     }
@@ -163,13 +135,12 @@ mod tests {
 
     #[test]
     fn test_analytical_mde_sanity_check() {
-        // For i.i.d. quantiles with Σ₀ = σ² I (σ = 1) and α = 0.05:
+        // For variance = 1.0 and α = 0.05:
         // - z_{0.975} ≈ 1.96
-        // - max variance = 1.0
         // - MDE = 1.96 * sqrt(1.0) = 1.96
 
-        let cov = Matrix9::identity();
-        let mde = analytical_mde(&cov, 0.05);
+        let variance = 1.0;
+        let mde = analytical_mde(variance, 0.05);
 
         let expected = 1.96;
         assert!(
@@ -183,9 +154,9 @@ mod tests {
     #[test]
     fn test_analytical_mde_alpha_scaling() {
         // MDE should increase with stricter alpha (smaller α → larger z → larger MDE)
-        let cov = Matrix9::identity();
-        let mde_05 = analytical_mde(&cov, 0.05); // z ≈ 1.96
-        let mde_01 = analytical_mde(&cov, 0.01); // z ≈ 2.58
+        let variance = 1.0;
+        let mde_05 = analytical_mde(variance, 0.05); // z ≈ 1.96
+        let mde_01 = analytical_mde(variance, 0.01); // z ≈ 2.58
 
         assert!(
             mde_01 > mde_05,
@@ -196,22 +167,25 @@ mod tests {
     }
 
     #[test]
-    fn test_analytical_mde_diagonal_covariance() {
-        // Diagonal covariance with varying variances
-        let mut cov = Matrix9::zeros();
-        for i in 0..9 {
-            cov[(i, i)] = (i + 1) as f64;
-        }
+    fn test_analytical_mde_variance_scaling() {
+        // MDE should scale with sqrt(variance)
+        let variance_1 = 1.0;
+        let variance_9 = 9.0;
 
-        let mde = analytical_mde(&cov, 0.05);
+        let mde_1 = analytical_mde(variance_1, 0.05);
+        let mde_9 = analytical_mde(variance_9, 0.05);
 
-        // MDE should be based on max variance (9.0)
+        // MDE should be based on sqrt(variance), so mde_9 should be 3x mde_1
         let expected = 1.96 * math::sqrt(9.0);
         assert!(
-            (mde - expected).abs() < 0.1,
+            (mde_9 - expected).abs() < 0.1,
             "MDE should be ~{:.3}, got {:.3}",
             expected,
-            mde
+            mde_9
+        );
+        assert!(
+            (mde_9 / mde_1 - 3.0).abs() < 0.1,
+            "MDE should scale with sqrt(variance)"
         );
     }
 }

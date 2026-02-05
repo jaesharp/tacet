@@ -12,7 +12,7 @@ fn make_pass(leak_probability: f64, quality: MeasurementQuality) -> Outcome {
         effect: EffectEstimate {
             max_effect_ns: 7.0,
             credible_interval_ns: (0.0, 10.0),
-            top_quantiles: Vec::new(),
+            tail_diagnostics: None,
         },
         samples_used: 10000,
         quality,
@@ -30,7 +30,7 @@ fn make_fail(leak_probability: f64, quality: MeasurementQuality) -> Outcome {
         effect: EffectEstimate {
             max_effect_ns: 150.0,
             credible_interval_ns: (80.0, 120.0),
-            top_quantiles: Vec::new(),
+            tail_diagnostics: None,
         },
         exploitability: Exploitability::Http2Multiplexing,
         samples_used: 10000,

@@ -460,7 +460,7 @@ fn effect_estimate_total_effect() {
     let effect = EffectEstimate {
         max_effect_ns: 5.0,
         credible_interval_ns: (0.0, 10.0),
-        top_quantiles: Vec::new(),
+        tail_diagnostics: None,
     };
     assert!((effect.total_effect_ns() - 5.0).abs() < 0.001);
 }
@@ -470,7 +470,7 @@ fn effect_estimate_is_negligible() {
     let effect = EffectEstimate {
         max_effect_ns: 7.0,
         credible_interval_ns: (0.0, 15.0),
-        top_quantiles: Vec::new(),
+        tail_diagnostics: None,
     };
 
     assert!(!effect.is_negligible(4.0)); // max_effect > 4
@@ -481,7 +481,7 @@ fn effect_estimate_is_negligible() {
 fn effect_estimate_default() {
     let effect = EffectEstimate::default();
     assert_eq!(effect.max_effect_ns, 0.0);
-    assert!(effect.top_quantiles.is_empty());
+    assert!(effect.tail_diagnostics.is_none());
 }
 
 // ============================================================================
@@ -662,7 +662,7 @@ fn effect_estimate_json_roundtrip() {
     let effect = EffectEstimate {
         max_effect_ns: 15.5,
         credible_interval_ns: (10.0, 20.0),
-        top_quantiles: Vec::new(),
+        tail_diagnostics: None,
     };
     let json = serde_json::to_string(&effect).unwrap();
     let deserialized: EffectEstimate = serde_json::from_str(&json).unwrap();

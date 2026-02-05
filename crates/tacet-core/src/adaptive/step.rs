@@ -25,11 +25,11 @@
 
 use alloc::string::String;
 
-use crate::analysis::bayes::compute_bayes_gibbs;
+use crate::analysis::bayes::compute_bayes_1d;
 use crate::constants::{
     DEFAULT_FAIL_THRESHOLD, DEFAULT_MAX_SAMPLES, DEFAULT_PASS_THRESHOLD, DEFAULT_SEED,
 };
-use crate::statistics::{compute_deciles_inplace, compute_midquantile_deciles};
+use crate::statistics::compute_w1_debiased;
 
 use super::{
     check_quality_gates, compute_achievable_at_max, is_threshold_elevated, AdaptiveState,
@@ -653,7 +653,6 @@ pub fn adaptive_step(
     let current_stats = state.get_stats_snapshot();
     let gate_inputs = QualityGateCheckInputs {
         posterior: &posterior,
-        prior_cov_marginal: &calibration.prior_cov_marginal,
         theta_ns: config.theta_ns,
         n_total: state.n_total(),
         elapsed_secs,
@@ -688,7 +687,7 @@ pub fn adaptive_step(
 
 /// Compute posterior distribution from current state.
 ///
-/// Uses scaled covariance: Sigma_n = Sigma_rate / n
+/// Uses W₁ distance with scaled variance: var_n = var_rate / n
 fn compute_posterior(
     state: &AdaptiveState,
     calibration: &Calibration,
@@ -697,52 +696,38 @@ fn compute_posterior(
 ) -> Option<Posterior> {
     let n = state.n_total();
     if n < 20 {
-        return None; // Need minimum samples for stable quantiles
+        return None; // Need minimum samples for stable W₁
     }
 
     // Convert samples to nanoseconds
     let baseline_ns = state.baseline_ns(ns_per_tick);
     let sample_ns = state.sample_ns(ns_per_tick);
 
-    // Compute quantile differences
-    let observed_diff = if calibration.discrete_mode {
-        let q_baseline = compute_midquantile_deciles(&baseline_ns);
-        let q_sample = compute_midquantile_deciles(&sample_ns);
-        q_baseline - q_sample
-    } else {
-        let mut baseline_sorted = baseline_ns;
-        let mut sample_sorted = sample_ns;
-        let q_baseline = compute_deciles_inplace(&mut baseline_sorted);
-        let q_sample = compute_deciles_inplace(&mut sample_sorted);
-        q_baseline - q_sample
-    };
+    // Compute debiased W₁ distance
+    use rand::SeedableRng;
+    use rand_xoshiro::Xoshiro256PlusPlus;
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(config.seed);
+    let w1_obs = compute_w1_debiased(&baseline_ns, &sample_ns, &mut rng);
 
-    // Scale covariance: Sigma_n = Sigma_rate / n
-    let sigma_n = calibration.covariance_for_n(n);
+    // Scale variance: var_n = var_rate / n
+    let var_n = calibration.var_rate / n as f64;
 
-    // Run 9D Bayesian inference with v5.4 Gibbs sampler
-    let bayes_result = compute_bayes_gibbs(
-        &observed_diff,
-        &sigma_n,
+    // Run 1D Bayesian inference on W₁
+    let bayes_result = compute_bayes_1d(
+        w1_obs,
+        var_n,
         calibration.sigma_t,
-        &calibration.l_r,
         config.theta_ns,
-        Some(config.seed),
+        config.seed,
     );
 
-    Some(Posterior::new_with_gibbs(
-        bayes_result.delta_post,
-        bayes_result.lambda_post,
-        bayes_result.delta_draws,
+    Some(Posterior::new(
+        bayes_result.w1_post,
+        bayes_result.var_post,
+        bayes_result.w1_draws,
         bayes_result.leak_probability,
         config.theta_ns,
         n,
-        bayes_result.lambda_mean,
-        bayes_result.lambda_mixing_ok,
-        bayes_result.kappa_mean,
-        bayes_result.kappa_cv,
-        bayes_result.kappa_ess,
-        bayes_result.kappa_mixing_ok,
     ))
 }
 
@@ -750,7 +735,6 @@ fn compute_posterior(
 mod tests {
     use super::*;
     use crate::statistics::StatsSnapshot;
-    use crate::types::{Matrix9, Vector9};
 
     fn make_test_calibration() -> Calibration {
         use crate::adaptive::CalibrationSnapshot;
@@ -770,39 +754,38 @@ mod tests {
             },
         );
 
-        // v5.4+ t-prior
+        // v6.0+ W₁-based calibration
         Calibration::new(
-            Matrix9::identity() * 1000.0, // sigma_rate
-            10,                           // block_length
-            1.0,                          // iact
+            1000.0,                                 // var_rate (scalar for W₁)
+            10,                                     // block_length
+            1.0,                                    // iact
             crate::types::IactMethod::PolitisWhite, // iact_method
-            100.0,                        // sigma_t
-            Matrix9::identity(),          // l_r (identity for tests)
-            100.0,                        // theta_ns
-            5000,                         // calibration_samples
-            false,                        // discrete_mode
-            5.0,                          // mde_ns
-            snapshot,                     // calibration_snapshot
-            1.0,                          // timer_resolution_ns
-            100_000.0,                    // samples_per_second
-            10.0,                         // c_floor
-            18.48,                        // projection_mismatch_thresh
-            0.001,                        // theta_tick
-            100.0,                        // theta_eff
-            0.1,                          // theta_floor_initial
-            42,                           // rng_seed
-            1,                            // batch_k
+            100.0,                                  // sigma_t
+            100.0,                                  // theta_ns
+            5000,                                   // calibration_samples
+            false,                                  // discrete_mode
+            5.0,                                    // mde_ns
+            snapshot,                               // calibration_snapshot
+            1.0,                                    // timer_resolution_ns
+            100_000.0,                              // samples_per_second
+            10.0,                                   // c_floor
+            18.48,                                  // projection_mismatch_thresh
+            0.001,                                  // theta_tick
+            100.0,                                  // theta_eff
+            0.1,                                    // theta_floor_initial
+            42,                                     // rng_seed
+            1,                                      // batch_k
         )
     }
 
     fn make_test_posterior(leak_prob: f64) -> Posterior {
         Posterior::new(
-            Vector9::zeros(),
-            Matrix9::identity(),
-            Vec::new(), // delta_draws
-            leak_prob,
-            1.0, // theta
-            1000,
+            0.0,         // w1_post
+            1.0,         // var_post
+            Vec::new(),  // w1_draws
+            leak_prob,   // leak_probability
+            1.0,         // theta
+            1000,        // n
         )
     }
 

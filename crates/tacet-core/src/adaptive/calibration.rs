@@ -18,59 +18,21 @@ extern crate alloc;
 
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::f64::consts::PI;
 
-use nalgebra::Cholesky;
-use rand::prelude::*;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
-use crate::analysis::mde::estimate_mde;
+use crate::analysis::bayes::{sample_gamma, sample_standard_normal};
 use crate::constants::DEFAULT_SEED;
-use crate::math;
 use crate::preflight::{run_core_checks, PreflightResult};
 use crate::statistics::{
-    bootstrap_difference_covariance, bootstrap_difference_covariance_discrete, timing_iact_combined,
-    timing_iact_direct, timing_iact_per_quantile, AcquisitionStream, OnlineStats,
+    bootstrap_w1_variance, timing_iact_combined, timing_iact_direct, timing_iact_per_quantile,
+    AcquisitionStream, OnlineStats,
 };
-use crate::types::{Matrix9, Vector9};
 
 use super::CalibrationSnapshot;
 
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
-
-/// Counter-based RNG seed generation using SplitMix64.
-/// Provides deterministic, well-distributed seeds for parallel MC sampling.
-#[cfg(feature = "parallel")]
-#[inline]
-fn counter_rng_seed(base_seed: u64, counter: u64) -> u64 {
-    let mut z = base_seed.wrapping_add(counter.wrapping_mul(0x9e3779b97f4a7c15));
-    z = (z ^ (z >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
-    z ^ (z >> 31)
-}
-
-/// Conservative prior scale factor used as fallback.
-/// Chosen to give higher exceedance probability than the target 62%.
-const CONSERVATIVE_PRIOR_SCALE: f64 = 1.5;
-
-/// Target prior exceedance probability.
-const TARGET_EXCEEDANCE: f64 = 0.62;
-
-/// Number of Monte Carlo samples for prior calibration.
-const PRIOR_CALIBRATION_SAMPLES: usize = 50_000;
-
-/// Maximum iterations for prior calibration root-finding.
-const MAX_CALIBRATION_ITERATIONS: usize = 20;
-
-/// Condition number threshold for triggering robust shrinkage (§3.3.5).
-const CONDITION_NUMBER_THRESHOLD: f64 = 1e4;
-
-/// Minimum diagonal floor for regularization (prevents division by zero).
-const DIAGONAL_FLOOR: f64 = 1e-12;
-
-/// Degrees of freedom for Student's t prior (v5.4).
+/// Degrees of freedom for half-t prior (W₁ distance).
 pub const NU: f64 = 4.0;
 
 /// Calibration results from the initial measurement phase (no_std compatible).
@@ -80,19 +42,19 @@ pub const NU: f64 = 4.0;
 ///
 /// For full calibration with preflight checks, see `tacet::Calibration`.
 ///
-/// ## Student's t Prior (v5.4+)
+/// ## Half-t Prior (W₁ distance)
 ///
-/// The prior is a Student's t distribution with ν=4 degrees of freedom:
-/// δ ~ t_ν(0, σ_t²R)
+/// The prior is a half-t distribution with ν=4 degrees of freedom:
+/// δ ~ half-t(ν=4, σ_t)
 ///
-/// This is implemented via scale mixture: λ ~ Gamma(ν/2, ν/2), δ|λ ~ N(0, (σ_t²/λ)R).
-/// The marginal variance is (ν/(ν-2)) σ_t² R = 2σ_t² R for ν=4.
+/// This is implemented via scale mixture: λ ~ Gamma(ν/2, ν/2), δ = |σ_t/√λ · z| where z ~ N(0,1).
+/// The marginal variance is (ν/(ν-2)) σ_t² = 2σ_t² for ν=4.
 #[derive(Debug, Clone)]
 pub struct Calibration {
-    /// Covariance "rate" - multiply by 1/n to get Sigma_n for n samples.
-    /// Computed as Sigma_cal * n_cal where Sigma_cal is calibration covariance.
-    /// This allows O(1) covariance scaling as samples accumulate.
-    pub sigma_rate: Matrix9,
+    /// Variance "rate" - multiply by 1/n to get var_n for n samples (W₁ distance).
+    /// Computed as var_cal * n_cal where var_cal is calibration variance.
+    /// This allows O(1) variance scaling as samples accumulate.
+    pub var_rate: f64,
 
     /// Block length from Politis-White algorithm.
     /// Used for block bootstrap to preserve autocorrelation structure.
@@ -105,17 +67,9 @@ pub struct Calibration {
     /// Method used for IACT computation.
     pub iact_method: crate::types::IactMethod,
 
-    /// Calibrated Student's t prior scale (v5.4).
-    /// This is the σ in δ|λ ~ N(0, (σ²/λ)R).
+    /// Calibrated half-t prior scale (W₁ distance).
+    /// This is the σ_t in δ ~ half-t(ν=4, σ_t).
     pub sigma_t: f64,
-
-    /// Cholesky factor L_R of correlation matrix R.
-    /// Used for Gibbs sampling: δ = (σ/√λ) L_R z.
-    pub l_r: Matrix9,
-
-    /// Marginal prior covariance: 2σ²R (for ν=4).
-    /// This is the unconditional prior variance of δ under the t-prior.
-    pub prior_cov_marginal: Matrix9,
 
     /// The theta threshold being used (in nanoseconds).
     pub theta_ns: f64,
@@ -140,8 +94,8 @@ pub struct Calibration {
     /// The caller is responsible for measuring this during calibration.
     pub samples_per_second: f64,
 
-    /// Floor-rate constant.
-    /// Computed once at calibration: 95th percentile of max_k|Z_k| where Z ~ N(0, Σ_rate).
+    /// Floor-rate constant (W₁ distance).
+    /// Computed once at calibration: 95th percentile of |Z| where Z ~ N(0, var_rate).
     /// Used for analytical theta_floor computation: theta_floor_stat(n) = c_floor / sqrt(n).
     pub c_floor: f64,
 
@@ -175,15 +129,14 @@ pub struct Calibration {
 }
 
 impl Calibration {
-    /// Create a new Calibration with v5.4+ Student's t prior.
+    /// Create a new Calibration with half-t prior (W₁ distance).
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        sigma_rate: Matrix9,
+        var_rate: f64,
         block_length: usize,
         iact: f64,
         iact_method: crate::types::IactMethod,
         sigma_t: f64,
-        l_r: Matrix9,
         theta_ns: f64,
         calibration_samples: usize,
         discrete_mode: bool,
@@ -199,19 +152,12 @@ impl Calibration {
         rng_seed: u64,
         batch_k: u32,
     ) -> Self {
-        // Compute marginal prior covariance: 2σ²R (for ν=4)
-        // The marginal variance of t_ν(0, σ²R) is (ν/(ν-2)) σ²R = 2σ²R for ν=4
-        let r = l_r * l_r.transpose();
-        let prior_cov_marginal = r * (2.0 * sigma_t * sigma_t);
-
         Self {
-            sigma_rate,
+            var_rate,
             block_length,
             iact,
             iact_method,
             sigma_t,
-            l_r,
-            prior_cov_marginal,
             theta_ns,
             calibration_samples,
             discrete_mode,
@@ -233,12 +179,11 @@ impl Calibration {
     /// Create a new Calibration with all fields including preflight results.
     #[allow(clippy::too_many_arguments)]
     pub fn with_preflight(
-        sigma_rate: Matrix9,
+        var_rate: f64,
         block_length: usize,
         iact: f64,
         iact_method: crate::types::IactMethod,
         sigma_t: f64,
-        l_r: Matrix9,
         theta_ns: f64,
         calibration_samples: usize,
         discrete_mode: bool,
@@ -255,19 +200,12 @@ impl Calibration {
         batch_k: u32,
         preflight_result: PreflightResult,
     ) -> Self {
-        // Compute marginal prior covariance: 2σ²R (for ν=4)
-        // The marginal variance of t_ν(0, σ²R) is (ν/(ν-2)) σ²R = 2σ²R for ν=4
-        let r = l_r * l_r.transpose();
-        let prior_cov_marginal = r * (2.0 * sigma_t * sigma_t);
-
         Self {
-            sigma_rate,
+            var_rate,
             block_length,
             iact,
             iact_method,
             sigma_t,
-            l_r,
-            prior_cov_marginal,
             theta_ns,
             calibration_samples,
             discrete_mode,
@@ -303,9 +241,7 @@ impl Calibration {
                 }
                 (n / self.block_length).max(1)
             }
-            IactMethod::GeyersIMS
-            | IactMethod::DirectDifferences
-            | IactMethod::PerQuantile => {
+            IactMethod::GeyersIMS | IactMethod::DirectDifferences | IactMethod::PerQuantile => {
                 if self.iact <= 1.0 {
                     return n.max(1);
                 }
@@ -314,28 +250,18 @@ impl Calibration {
         }
     }
 
-    /// Scale sigma_rate to get covariance for n samples (v6.0).
+    /// Scale var_rate to get variance for n samples (W₁ distance).
     ///
-    /// Σ_n = Σ_rate / n
+    /// var_n = var_rate / n
     ///
-    /// Since sigma_rate is computed via block bootstrap (which preserves temporal
-    /// dependence), it already represents the long-run covariance rate. No additional
+    /// Since var_rate is computed via block bootstrap (which preserves temporal
+    /// dependence), it already represents the long-run variance rate. No additional
     /// IACT scaling is needed—the block bootstrap already accounts for autocorrelation.
-    pub fn covariance_for_n(&self, n: usize) -> Matrix9 {
+    pub fn variance_for_n(&self, n: usize) -> f64 {
         if n == 0 {
-            return self.sigma_rate; // Avoid division by zero
+            return self.var_rate; // Avoid division by zero
         }
-        self.sigma_rate / (n as f64)
-    }
-
-    /// Scale sigma_rate to get covariance using raw n samples.
-    ///
-    /// Σ_n = Σ_rate / n
-    ///
-    /// This is now identical to `covariance_for_n()` (as of v6.0). Kept for API compatibility.
-    #[deprecated(since = "6.0.0", note = "Use covariance_for_n() instead (now identical)")]
-    pub fn covariance_for_n_raw(&self, n: usize) -> Matrix9 {
-        self.covariance_for_n(n)
+        self.var_rate / (n as f64)
     }
 
     /// Estimate time to collect `n` additional samples based on calibration throughput.
@@ -534,59 +460,56 @@ pub fn calibrate(
     acquisition_stream.push_batch_interleaved(&baseline_ns, &sample_ns);
     let interleaved = acquisition_stream.to_timing_samples();
 
-    // Bootstrap covariance estimation
-    let cov_estimate = if discrete_mode {
-        bootstrap_difference_covariance_discrete(
-            &baseline_ns,
-            &sample_ns,
-            config.bootstrap_iterations,
-            config.seed,
-        )
-    } else {
-        bootstrap_difference_covariance(
-            &interleaved,
-            config.bootstrap_iterations,
-            config.seed,
-            false,
-        )
-    };
+    // Bootstrap variance estimation for W₁ distance
+    let var_estimate = bootstrap_w1_variance(
+        &interleaved,
+        config.bootstrap_iterations,
+        config.seed,
+        false, // is_fragile
+    );
 
-    // Check covariance validity
-    if !cov_estimate.is_stable() {
+    // Check variance validity (must be positive and finite)
+    if !var_estimate.variance.is_finite() || var_estimate.variance <= 0.0 {
         return Err(CalibrationError::CovarianceEstimationFailed {
-            reason: String::from("Covariance matrix is not positive definite"),
+            reason: String::from("W₁ variance estimate is not positive and finite"),
         });
     }
 
-    // Compute sigma rate: Sigma_rate = Sigma_cal * n_cal
-    let sigma_rate = cov_estimate.matrix * (n as f64);
+    // Compute variance rate: var_rate = var_cal * n_cal
+    let var_rate = var_estimate.variance * (n as f64);
 
-    // Invariant check: sigma_rate / n should equal cov_estimate.matrix
-    // This validates that our covariance scaling is consistent (v6.0)
+    // Invariant check: var_rate / n should equal var_estimate.variance
+    // This validates that our variance scaling is consistent (v6.0)
     #[cfg(debug_assertions)]
     {
-        let sigma_n_at_cal = sigma_rate / (n as f64);
-        let max_diff = (sigma_n_at_cal - cov_estimate.matrix).abs().max();
+        let var_n_at_cal = var_rate / (n as f64);
+        let diff = (var_n_at_cal - var_estimate.variance).abs();
         assert!(
-            max_diff < 1e-6,
-            "Covariance scaling invariant violated: max difference = {} (expected < 1e-6). \
-             This indicates sigma_rate scaling is incorrect.",
-            max_diff
+            diff < 1e-6,
+            "Variance scaling invariant violated: difference = {} (expected < 1e-6). \
+             This indicates var_rate scaling is incorrect.",
+            diff
         );
     }
 
     // Compute IACT based on method
     let (block_length, iact, iact_method) = match config.iact_method {
-        crate::types::IactMethod::PolitisWhite => {
-            (cov_estimate.block_size, 1.0, crate::types::IactMethod::PolitisWhite)
-        }
+        crate::types::IactMethod::PolitisWhite => (
+            var_estimate.block_size,
+            1.0,
+            crate::types::IactMethod::PolitisWhite,
+        ),
         crate::types::IactMethod::GeyersIMS => {
             let iact_result = timing_iact_combined(&interleaved);
 
             // Warnings are captured in iact_result but don't affect calibration
             // They will be logged by the caller if needed
 
-            (cov_estimate.block_size, iact_result.tau, crate::types::IactMethod::GeyersIMS)
+            (
+                var_estimate.block_size,
+                iact_result.tau,
+                crate::types::IactMethod::GeyersIMS,
+            )
         }
         crate::types::IactMethod::DirectDifferences => {
             let iact_result = timing_iact_direct(&interleaved);
@@ -594,7 +517,11 @@ pub fn calibrate(
             // Warnings are captured in iact_result but don't affect calibration
             // They will be logged by the caller if needed
 
-            (cov_estimate.block_size, iact_result.tau, crate::types::IactMethod::DirectDifferences)
+            (
+                var_estimate.block_size,
+                iact_result.tau,
+                crate::types::IactMethod::DirectDifferences,
+            )
         }
         crate::types::IactMethod::PerQuantile => {
             let iact_result = timing_iact_per_quantile(&interleaved);
@@ -602,12 +529,18 @@ pub fn calibrate(
             // Warnings are captured in iact_result but don't affect calibration
             // They will be logged by the caller if needed
 
-            (cov_estimate.block_size, iact_result.tau, crate::types::IactMethod::PerQuantile)
+            (
+                var_estimate.block_size,
+                iact_result.tau,
+                crate::types::IactMethod::PerQuantile,
+            )
         }
     };
 
-    // Compute MDE for prior setting (spec §3.3)
-    let mde = estimate_mde(&cov_estimate.matrix, config.alpha);
+    // Compute MDE from variance estimate (1D W₁ distance)
+    // MDE ≈ z_α/2 * sqrt(var) for standard normal quantile z_α/2
+    let z_alpha = 1.96; // 95% confidence for alpha=0.05
+    let mde_ns = z_alpha * var_estimate.variance.sqrt();
 
     // Run preflight checks (unless skipped)
     let preflight_result = if config.skip_preflight {
@@ -624,8 +557,8 @@ pub fn calibrate(
     // Compute calibration statistics snapshot for drift detection
     let calibration_snapshot = compute_calibration_snapshot(&baseline_ns, &sample_ns);
 
-    // Compute floor-rate constant: c_floor = q_95(max_k |Z_k|) where Z ~ N(0, Σ_rate)
-    let c_floor = compute_c_floor_9d(&sigma_rate, config.seed);
+    // Compute floor-rate constant: c_floor = q_95(|Z|) where Z ~ N(0, var_rate)
+    let c_floor = compute_c_floor_1d(var_rate, config.seed);
 
     // Timer tick floor
     let theta_tick = config.timer_resolution_ns;
@@ -640,26 +573,28 @@ pub fn calibrate(
         theta_floor_initial
     };
 
-    // Student's t prior (ν=4) calibration
-    let (sigma_t, l_r) =
-        calibrate_t_prior_scale(&sigma_rate, theta_eff, n, discrete_mode, config.seed);
+    // Half-t prior (ν=4) calibration for W₁ distance
+    let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_eff, n, config.seed);
+
+    // Projection mismatch is not applicable to W₁ distance (no projection model)
+    // Use placeholder value for compatibility with diagnostics
+    let projection_mismatch_thresh = 0.0;
 
     Ok(Calibration::with_preflight(
-        sigma_rate,
+        var_rate,
         block_length,
         iact,
         iact_method,
         sigma_t,
-        l_r,
         config.theta_ns,
         n,
         discrete_mode,
-        mde.mde_ns,
+        mde_ns,
         calibration_snapshot,
         config.timer_resolution_ns,
         samples_per_second,
         c_floor,
-        cov_estimate.q_thresh,
+        projection_mismatch_thresh,
         theta_tick,
         theta_eff,
         theta_floor_initial,
@@ -694,352 +629,151 @@ fn compute_calibration_snapshot(baseline_ns: &[f64], sample_ns: &[f64]) -> Calib
     CalibrationSnapshot::new(baseline_stats.finalize(), sample_stats.finalize())
 }
 
-/// Compute correlation-shaped 9D prior covariance (spec v5.1).
+// DELETED: compute_prior_cov_9d() - 9D version (no 1D equivalent needed, prior is scalar)
+
+// DELETED: compute_correlation_matrix() - 9D helper
+// DELETED: estimate_condition_number() - 9D helper
+// DELETED: is_fragile_regime() - 9D helper
+// DELETED: apply_correlation_regularization() - 9D helper
+// DELETED: compute_median_se() - 9D helper
+
+// DELETED: calibrate_t_prior_scale() - 9D version (replaced by calibrate_halft_prior_scale_1d)
+
+// DELETED: precompute_t_prior_effects() - 9D helper (replaced by 1D calibration)
+
+// DELETED: compute_c_floor_9d() - 9D version (replaced by compute_c_floor_1d)
+
+
+/// Calibrate half-t prior scale to achieve target exceedance probability (W₁ distance).
 ///
-/// Λ₀ = σ²_prior × R where R = Corr(Σ_rate) = D^(-1/2) Σ_rate D^(-1/2)
+/// Finds σ_t such that P(|δ| > theta_eff | δ ~ half-t(ν=4, σ_t)) ≈ 0.62
 ///
-/// Since diag(R) = 1, σ_prior equals the marginal prior SD for all coordinates.
-/// This eliminates hidden heteroskedasticity that could cause pathological
-/// shrinkage for certain effect patterns.
-///
-/// # Arguments
-/// * `sigma_rate` - Covariance rate matrix from bootstrap
-/// * `sigma_prior` - Prior scale (calibrated for 62% exceedance)
-/// * `discrete_mode` - Whether discrete timer mode is active
-///
-/// # Returns
-/// The prior covariance matrix Λ₀.
-pub fn compute_prior_cov_9d(
-    sigma_rate: &Matrix9,
-    sigma_prior: f64,
-    discrete_mode: bool,
-) -> Matrix9 {
-    // Compute correlation matrix R = D^(-1/2) Σ_rate D^(-1/2)
-    let r = compute_correlation_matrix(sigma_rate);
-
-    // Apply two-step regularization (§3.3.5):
-    // 1. Robust shrinkage (if in fragile regime)
-    // 2. Numerical jitter (always, as needed)
-    let r = apply_correlation_regularization(&r, discrete_mode);
-
-    // Λ₀ = σ²_prior × R
-    r * (sigma_prior * sigma_prior)
-}
-
-/// Compute correlation matrix R = D^(-1/2) Σ D^(-1/2) from covariance matrix.
-///
-/// The correlation matrix has unit diagonal (diag(R) = 1) and encodes
-/// the correlation structure of Σ without the variance magnitudes.
-fn compute_correlation_matrix(sigma: &Matrix9) -> Matrix9 {
-    // Extract diagonal and apply floor for numerical stability
-    let mut d_inv_sqrt = [0.0_f64; 9];
-    for i in 0..9 {
-        let var = sigma[(i, i)].max(DIAGONAL_FLOOR);
-        d_inv_sqrt[i] = 1.0 / math::sqrt(var);
-    }
-
-    // R = D^(-1/2) × Σ × D^(-1/2)
-    let mut r = *sigma;
-    for i in 0..9 {
-        for j in 0..9 {
-            r[(i, j)] *= d_inv_sqrt[i] * d_inv_sqrt[j];
-        }
-    }
-
-    r
-}
-
-/// Estimate condition number of a symmetric matrix via power iteration.
-///
-/// Returns the ratio of largest to smallest eigenvalue magnitude.
-/// Uses a simple approach: max(|diag|) / min(|diag|) as a quick estimate,
-/// plus check for Cholesky failure which indicates poor conditioning.
-fn estimate_condition_number(r: &Matrix9) -> f64 {
-    // Quick estimate from diagonal ratio (exact for diagonal matrices)
-    let diag: Vec<f64> = (0..9).map(|i| r[(i, i)].abs()).collect();
-    let max_diag = diag.iter().cloned().fold(0.0_f64, f64::max);
-    let min_diag = diag.iter().cloned().fold(f64::INFINITY, f64::min);
-
-    if min_diag < DIAGONAL_FLOOR {
-        return f64::INFINITY;
-    }
-
-    // For correlation matrices, this underestimates the true condition number,
-    // but we also check Cholesky failure separately.
-    max_diag / min_diag
-}
-
-/// Check if we're in a "fragile regime" requiring robust shrinkage (§3.3.5).
-///
-/// Fragile regime is detected when:
-/// - Discrete timer mode is active, OR
-/// - Condition number of R exceeds 10⁴, OR
-/// - Cholesky factorization fails
-fn is_fragile_regime(r: &Matrix9, discrete_mode: bool) -> bool {
-    if discrete_mode {
-        return true;
-    }
-
-    let cond = estimate_condition_number(r);
-    if cond > CONDITION_NUMBER_THRESHOLD {
-        return true;
-    }
-
-    // Check if Cholesky would fail
-    Cholesky::new(*r).is_none()
-}
-
-/// Apply two-step regularization to correlation matrix (§3.3.5).
-///
-/// Step 1 (conditional): Robust shrinkage R ← (1-λ)R + λI for fragile regimes.
-/// Step 2 (always): Numerical jitter R ← R + εI to ensure SPD.
-fn apply_correlation_regularization(r: &Matrix9, discrete_mode: bool) -> Matrix9 {
-    let mut r = *r;
-
-    // Step 1: Robust shrinkage (conditional on fragile regime)
-    if is_fragile_regime(&r, discrete_mode) {
-        // Choose λ based on severity (§3.3.5 allows [0.01, 0.2])
-        let cond = estimate_condition_number(&r);
-        let lambda = if cond > CONDITION_NUMBER_THRESHOLD * 10.0 {
-            0.2 // Severe: aggressive shrinkage
-        } else if cond > CONDITION_NUMBER_THRESHOLD {
-            0.1 // Moderate
-        } else if discrete_mode {
-            0.05 // Mild: just discrete mode
-        } else {
-            0.01 // Minimal
-        };
-
-        let identity = Matrix9::identity();
-        r = r * (1.0 - lambda) + identity * lambda;
-    }
-
-    // Step 2: Numerical jitter (always, as needed for Cholesky)
-    // Try increasingly large epsilon until Cholesky succeeds
-    for &eps in &[1e-10, 1e-9, 1e-8, 1e-7, 1e-6] {
-        let r_jittered = r + Matrix9::identity() * eps;
-        if Cholesky::new(r_jittered).is_some() {
-            return r_jittered;
-        }
-    }
-
-    // Fallback: aggressive jitter
-    r + Matrix9::identity() * 1e-5
-}
-
-/// Compute median standard error from sigma_rate.
-fn compute_median_se(sigma_rate: &Matrix9, n_cal: usize) -> f64 {
-    let mut ses: Vec<f64> = (0..9)
-        .map(|i| {
-            let var = sigma_rate[(i, i)].max(DIAGONAL_FLOOR);
-            math::sqrt(var / n_cal.max(1) as f64)
-        })
-        .collect();
-    ses.sort_by(|a, b| a.total_cmp(b));
-    ses[4] // Median of 9 values
-}
-
-/// Calibrate Student's t prior scale σ so that P(max_k |δ_k| > θ_eff | δ ~ t_4(0, σ²R)) = 0.62 (v5.4).
-///
-/// Uses binary search to find σ such that the marginal exceedance probability
-/// matches the target 62%. The t-prior is sampled via scale mixture:
+/// Uses binary search with Monte Carlo exceedance estimation. The half-t distribution
+/// is sampled via scale mixture:
 /// - λ ~ Gamma(ν/2, ν/2) = Gamma(2, 2) for ν=4
-/// - z ~ N(0, I₉)
-/// - δ = (σ/√λ) L_R z
+/// - z ~ N(0, 1)
+/// - δ = |σ_t/√λ · z|
 ///
 /// # Arguments
-/// * `sigma_rate` - Covariance rate matrix from calibration
+/// * `var_rate` - Variance rate (scalar) from bootstrap
 /// * `theta_eff` - Effective threshold in nanoseconds
-/// * `n_cal` - Number of calibration samples (for SE computation)
-/// * `discrete_mode` - Whether discrete timer mode is active
+/// * `n_cal` - Number of calibration samples
 /// * `seed` - Deterministic RNG seed
 ///
 /// # Returns
-/// A tuple of (sigma_t, l_r) where sigma_t is the calibrated scale and l_r is
-/// the Cholesky factor of the regularized correlation matrix.
-pub fn calibrate_t_prior_scale(
-    sigma_rate: &Matrix9,
+/// Calibrated prior scale σ_t achieving target 62% exceedance probability.
+///
+/// # Example
+/// ```
+/// use tacet_core::adaptive::calibration::calibrate_halft_prior_scale_1d;
+///
+/// let var_rate = 1000.0;
+/// let theta_eff = 100.0;
+/// let n_cal = 5000;
+/// let seed = 42;
+///
+/// let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_eff, n_cal, seed);
+/// assert!(sigma_t > 0.0);
+/// ```
+pub fn calibrate_halft_prior_scale_1d(
+    _var_rate: f64,
     theta_eff: f64,
-    n_cal: usize,
-    discrete_mode: bool,
+    _n_cal: usize,
     seed: u64,
-) -> (f64, Matrix9) {
-    let median_se = compute_median_se(sigma_rate, n_cal);
+) -> f64 {
+    // Target exceedance probability
+    const TARGET_EXCEEDANCE: f64 = 0.62;
+    const TOLERANCE: f64 = 0.02;
+    const N_SAMPLES: usize = 10_000;
+    const NU: f64 = 4.0;
 
-    // Compute and cache L_R (Cholesky of regularized correlation matrix)
-    let r = compute_correlation_matrix(sigma_rate);
-    let r_reg = apply_correlation_regularization(&r, discrete_mode);
-    let l_r = match Cholesky::new(r_reg) {
-        Some(c) => c.l().into_owned(),
-        None => Matrix9::identity(),
-    };
+    // Binary search bounds
+    let mut sigma_low = theta_eff / 10.0;
+    let mut sigma_high = theta_eff * 10.0;
 
-    // Precompute normalized effect magnitudes for sample reuse across bisection.
-    //
-    // For t_ν prior with scale mixture representation:
-    //   λ ~ Gamma(ν/2, ν/2), z ~ N(0, I₉), δ = (σ/√λ) L_R z
-    //
-    // So: max|δ| = σ · max|L_R z|/√λ = σ · m
-    // where m_i = max|L_R z_i|/√λ_i is precomputed once.
-    //
-    // Then: P(max|δ| > θ) = P(σ·m > θ) = P(m > θ/σ)
-    //
-    // This allows O(1) exceedance computation per bisection iteration
-    // instead of O(PRIOR_CALIBRATION_SAMPLES).
-    let normalized_effects = precompute_t_prior_effects(&l_r, seed);
+    // Use RNG for Monte Carlo
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
 
-    // Search bounds (same as v5.1)
-    let mut lo = theta_eff * 0.05;
-    let mut hi = (theta_eff * 50.0).max(10.0 * median_se);
+    // Binary search loop (max 30 iterations)
+    for _ in 0..30 {
+        let sigma_mid = (sigma_low + sigma_high) / 2.0;
 
-    for _ in 0..MAX_CALIBRATION_ITERATIONS {
-        let mid = (lo + hi) / 2.0;
+        // Estimate P(|δ| > theta) via Monte Carlo
+        // Sample δ ~ half-t(ν, σ_mid) via scale mixture:
+        //   λ ~ Gamma(ν/2, ν/2), z ~ N(0,1), δ = |σ/√λ · z|
+        let mut exceed_count = 0;
+        for _ in 0..N_SAMPLES {
+            let lambda = sample_gamma(&mut rng, NU / 2.0, NU / 2.0);
+            let z = sample_standard_normal(&mut rng);
+            let delta = (sigma_mid / lambda.sqrt() * z).abs();
 
-        // Compute exceedance using precomputed samples: count(m_i > θ/σ)
-        let threshold = theta_eff / mid;
-        let count = normalized_effects
-            .iter()
-            .filter(|&&m| m > threshold)
-            .count();
-        let exceedance = count as f64 / normalized_effects.len() as f64;
-
-        if (exceedance - TARGET_EXCEEDANCE).abs() < 0.01 {
-            return (mid, l_r); // Close enough
+            if delta > theta_eff {
+                exceed_count += 1;
+            }
         }
 
-        if exceedance > TARGET_EXCEEDANCE {
-            // Too much exceedance -> reduce scale
-            hi = mid;
+        let exceedance_prob = exceed_count as f64 / N_SAMPLES as f64;
+
+        // Check convergence
+        if (exceedance_prob - TARGET_EXCEEDANCE).abs() < TOLERANCE {
+            return sigma_mid;
+        }
+
+        // Adjust bounds
+        if exceedance_prob < TARGET_EXCEEDANCE {
+            sigma_low = sigma_mid;
         } else {
-            // Too little exceedance -> increase scale
-            lo = mid;
+            sigma_high = sigma_mid;
         }
     }
 
-    // Fallback to conservative value
-    (theta_eff * CONSERVATIVE_PRIOR_SCALE, l_r)
+    // Return midpoint if didn't converge
+    (sigma_low + sigma_high) / 2.0
 }
 
-/// Precompute normalized effect magnitudes for t-prior calibration.
+/// Compute measurement floor constant from null noise distribution (W₁ distance).
 ///
-/// Returns a vector of m_i = max_k |L_R z_i|_k / √λ_i where:
-/// - λ_i ~ Gamma(ν/2, ν/2) for ν=4
-/// - z_i ~ N(0, I₉)
+/// Returns the 95th percentile of |Z| where Z ~ N(0, var_rate).
 ///
-/// These can be reused across bisection iterations since:
-/// P(max|δ| > θ | σ) = P(σ·m > θ) = P(m > θ/σ)
-fn precompute_t_prior_effects(l_r: &Matrix9, seed: u64) -> Vec<f64> {
-    use rand_distr::Gamma;
-
-    #[cfg(feature = "parallel")]
-    {
-        let l_r = *l_r;
-        (0..PRIOR_CALIBRATION_SAMPLES)
-            .into_par_iter()
-            .map(|i| {
-                let mut rng = Xoshiro256PlusPlus::seed_from_u64(counter_rng_seed(seed, i as u64));
-                let gamma_dist = Gamma::new(NU / 2.0, 2.0 / NU).unwrap();
-
-                // Sample λ ~ Gamma(ν/2, ν/2)
-                let lambda: f64 = gamma_dist.sample(&mut rng);
-                let inv_sqrt_lambda = 1.0 / math::sqrt(lambda.max(DIAGONAL_FLOOR));
-
-                // Sample z ~ N(0, I_9)
-                let mut z = Vector9::zeros();
-                for j in 0..9 {
-                    z[j] = sample_standard_normal(&mut rng);
-                }
-
-                // Compute m = max|L_R z| / √λ
-                let w = l_r * z;
-                let max_w = w.iter().map(|x| x.abs()).fold(0.0_f64, f64::max);
-                max_w * inv_sqrt_lambda
-            })
-            .collect()
-    }
-
-    #[cfg(not(feature = "parallel"))]
-    {
-        let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
-        let gamma_dist = Gamma::new(NU / 2.0, 2.0 / NU).unwrap();
-        let mut effects = Vec::with_capacity(PRIOR_CALIBRATION_SAMPLES);
-
-        for _ in 0..PRIOR_CALIBRATION_SAMPLES {
-            let lambda: f64 = gamma_dist.sample(&mut rng);
-            let inv_sqrt_lambda = 1.0 / math::sqrt(lambda.max(DIAGONAL_FLOOR));
-
-            let mut z = Vector9::zeros();
-            for i in 0..9 {
-                z[i] = sample_standard_normal(&mut rng);
-            }
-
-            let w = l_r * z;
-            let max_w = w.iter().map(|x| x.abs()).fold(0.0_f64, f64::max);
-            effects.push(max_w * inv_sqrt_lambda);
-        }
-        effects
-    }
-}
-
-/// Compute floor-rate constant c_floor for 9D model.
+/// Used for theta_floor computation: theta_floor(n) = c_floor / sqrt(n)
 ///
-/// c_floor = q_95(max_k |Z_k|) where Z ~ N(0, Σ_rate)
+/// # Arguments
+/// * `var_rate` - Variance rate (scalar) from bootstrap
+/// * `seed` - Deterministic RNG seed
 ///
-/// Used for theta_floor computation: theta_floor_stat(n) = c_floor / sqrt(n)
-pub fn compute_c_floor_9d(sigma_rate: &Matrix9, seed: u64) -> f64 {
-    let chol = match Cholesky::new(*sigma_rate) {
-        Some(c) => c,
-        None => {
-            // Fallback: use trace-based approximation
-            let trace: f64 = (0..9).map(|i| sigma_rate[(i, i)]).sum();
-            return math::sqrt(trace / 9.0) * 2.5; // Approximate 95th percentile
-        }
-    };
-    let l = chol.l().into_owned();
+/// # Returns
+/// The 95th percentile constant c_floor.
+///
+/// # Example
+/// ```
+/// use tacet_core::adaptive::calibration::compute_c_floor_1d;
+///
+/// let var_rate = 100.0;
+/// let seed = 42;
+///
+/// let c_floor = compute_c_floor_1d(var_rate, seed);
+/// assert!(c_floor > 0.0);
+/// // For N(0, 100), q95(|Z|) ≈ 1.645 * sqrt(100) ≈ 16.45
+/// assert!((c_floor - 16.45).abs() < 3.0);
+/// ```
+pub fn compute_c_floor_1d(var_rate: f64, seed: u64) -> f64 {
+    const N_SAMPLES: usize = 50_000;
+    const PERCENTILE: usize = (N_SAMPLES as f64 * 0.95) as usize;
 
-    // Parallel MC sampling when feature enabled
-    #[cfg(feature = "parallel")]
-    let mut max_effects: Vec<f64> = (0..PRIOR_CALIBRATION_SAMPLES)
-        .into_par_iter()
-        .map(|i| {
-            let mut rng = Xoshiro256PlusPlus::seed_from_u64(counter_rng_seed(seed, i as u64));
-            let mut z = Vector9::zeros();
-            for j in 0..9 {
-                z[j] = sample_standard_normal(&mut rng);
-            }
-            let sample = l * z;
-            sample.iter().map(|x| x.abs()).fold(0.0_f64, f64::max)
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
+    let std_dev = var_rate.sqrt();
+
+    // Sample |Z| values
+    let mut samples: Vec<f64> = (0..N_SAMPLES)
+        .map(|_| {
+            let z = sample_standard_normal(&mut rng);
+            (z * std_dev).abs()
         })
         .collect();
 
-    #[cfg(not(feature = "parallel"))]
-    let mut max_effects: Vec<f64> = {
-        let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
-        let mut effects = Vec::with_capacity(PRIOR_CALIBRATION_SAMPLES);
-        for _ in 0..PRIOR_CALIBRATION_SAMPLES {
-            let mut z = Vector9::zeros();
-            for i in 0..9 {
-                z[i] = sample_standard_normal(&mut rng);
-            }
-            let sample = l * z;
-            let max_effect = sample.iter().map(|x| x.abs()).fold(0.0_f64, f64::max);
-            effects.push(max_effect);
-        }
-        effects
-    };
-
-    // 95th percentile using O(n) selection instead of O(n log n) sort
-    let idx =
-        ((PRIOR_CALIBRATION_SAMPLES as f64 * 0.95) as usize).min(PRIOR_CALIBRATION_SAMPLES - 1);
-    let (_, &mut percentile_95, _) = max_effects.select_nth_unstable_by(idx, |a, b| a.total_cmp(b));
-    percentile_95
-}
-
-/// Sample from standard normal using Box-Muller transform.
-fn sample_standard_normal<R: Rng>(rng: &mut R) -> f64 {
-    let u1: f64 = rng.random();
-    let u2: f64 = rng.random();
-    math::sqrt(-2.0 * math::ln(u1.max(1e-12))) * math::cos(2.0 * PI * u2)
+    // Get 95th percentile via selection
+    samples.select_nth_unstable_by(PERCENTILE, |a, b| a.total_cmp(b));
+    samples[PERCENTILE]
 }
 
 #[cfg(test)]
@@ -1063,53 +797,52 @@ mod tests {
             },
         );
 
-        let sigma_rate = Matrix9::identity() * 1000.0;
+        let var_rate = 1000.0;
         let theta_eff = 100.0;
 
         Calibration::new(
-            sigma_rate,
-            10,                  // block_length
-            1.0,                 // iact
+            var_rate,                               // var_rate
+            10,                                     // block_length
+            1.0,                                    // iact
             crate::types::IactMethod::PolitisWhite, // iact_method
-            100.0,               // sigma_t
-            Matrix9::identity(), // l_r (identity for tests)
-            theta_eff,           // theta_ns
-            5000,                // calibration_samples
-            false,               // discrete_mode
-            5.0,                 // mde_ns
-            snapshot,            // calibration_snapshot
-            1.0,                 // timer_resolution_ns
-            10000.0,             // samples_per_second
-            10.0,                // c_floor
-            18.48,               // projection_mismatch_thresh
-            0.001,               // theta_tick
-            theta_eff,           // theta_eff
-            0.1,                 // theta_floor_initial
-            42,                  // rng_seed
-            1,                   // batch_k
+            100.0,                                  // sigma_t
+            theta_eff,                              // theta_ns
+            5000,                                   // calibration_samples
+            false,                                  // discrete_mode
+            5.0,                                    // mde_ns
+            snapshot,                               // calibration_snapshot
+            1.0,                                    // timer_resolution_ns
+            10000.0,                                // samples_per_second
+            10.0,                                   // c_floor
+            18.48,                                  // projection_mismatch_thresh
+            0.001,                                  // theta_tick
+            theta_eff,                              // theta_eff
+            0.1,                                    // theta_floor_initial
+            42,                                     // rng_seed
+            1,                                      // batch_k
         )
     }
 
     #[test]
-    fn test_covariance_scaling() {
+    fn test_variance_scaling() {
         let cal = make_test_calibration();
-        // make_test_calibration uses sigma_rate[(0,0)] = 1000.0
+        // make_test_calibration uses var_rate = 1000.0
 
-        // v6.0: covariance_for_n uses raw n (block bootstrap already accounts for dependence)
-        // At n=1000: sigma_n[(0,0)] = sigma_rate[(0,0)] / n = 1000 / 1000 = 1.0
-        let cov_1000 = cal.covariance_for_n(1000);
+        // v6.0: variance_for_n uses raw n (block bootstrap already accounts for dependence)
+        // At n=1000: var_n = var_rate / n = 1000 / 1000 = 1.0
+        let var_1000 = cal.variance_for_n(1000);
         assert!(
-            (cov_1000[(0, 0)] - 1.0).abs() < 1e-10,
+            (var_1000 - 1.0).abs() < 1e-10,
             "expected 1.0, got {}",
-            cov_1000[(0, 0)]
+            var_1000
         );
 
-        // At n=2000: sigma_n[(0,0)] = 1000 / 2000 = 0.5
-        let cov_2000 = cal.covariance_for_n(2000);
+        // At n=2000: var_n = 1000 / 2000 = 0.5
+        let var_2000 = cal.variance_for_n(2000);
         assert!(
-            (cov_2000[(0, 0)] - 0.5).abs() < 1e-10,
+            (var_2000 - 0.5).abs() < 1e-10,
             "expected 0.5, got {}",
-            cov_2000[(0, 0)]
+            var_2000
         );
     }
 
@@ -1127,11 +860,11 @@ mod tests {
     }
 
     #[test]
-    fn test_covariance_zero_n() {
+    fn test_variance_zero_n() {
         let cal = make_test_calibration();
-        let cov = cal.covariance_for_n(0);
-        // Should return sigma_rate unchanged (avoid NaN)
-        assert!((cov[(0, 0)] - 1000.0).abs() < 1e-10);
+        let var = cal.variance_for_n(0);
+        // Should return var_rate unchanged (avoid NaN)
+        assert!((var - 1000.0).abs() < 1e-10);
     }
 
     #[test]
@@ -1143,37 +876,8 @@ mod tests {
         assert!((time - 0.1).abs() < 1e-10);
     }
 
-    #[test]
-    fn test_compute_prior_cov_9d_unit_diagonal() {
-        // Use identity matrix - correlation of identity is identity
-        let sigma_rate = Matrix9::identity();
-        let prior = compute_prior_cov_9d(&sigma_rate, 10.0, false);
-
-        // R = Corr(I) = I (identity has unit diagonal, no off-diagonal correlation)
-        // Λ₀ = σ²_prior × R = 100 × I
-        // Each diagonal should be ~100 (σ² = 100)
-        // Note: jitter adds ~1e-10 so expect ~100
-        let expected = 100.0;
-        for i in 0..9 {
-            assert!(
-                (prior[(i, i)] - expected).abs() < 1.0,
-                "Diagonal {} was {}, expected ~{}",
-                i,
-                prior[(i, i)],
-                expected
-            );
-        }
-    }
-
-    #[test]
-    fn test_c_floor_computation() {
-        let sigma_rate = Matrix9::identity() * 100.0;
-        let c_floor = compute_c_floor_9d(&sigma_rate, 42);
-
-        // c_floor should be roughly sqrt(100) * 2 to 3 for 95th percentile of max
-        assert!(c_floor > 15.0, "c_floor {} should be > 15", c_floor);
-        assert!(c_floor < 40.0, "c_floor {} should be < 40", c_floor);
-    }
+    // DELETED: test_compute_prior_cov_9d_unit_diagonal() - 9D test
+    // DELETED: test_c_floor_computation() - 9D test
 
     #[test]
     fn test_calibration_config_default() {
@@ -1186,236 +890,267 @@ mod tests {
         assert!(!config.force_discrete_mode);
     }
 
-    // =========================================================================
-    // Reference implementations for validation (original non-optimized versions)
-    // =========================================================================
-
-    /// Reference implementation: compute t-prior exceedance without sample reuse.
-    /// This generates fresh samples for each call, matching the original implementation.
-    fn reference_t_prior_exceedance(l_r: &Matrix9, sigma: f64, theta: f64, seed: u64) -> f64 {
-        use rand_distr::Gamma;
-
-        let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
-        let gamma_dist = Gamma::new(NU / 2.0, 2.0 / NU).unwrap();
-        let mut count = 0usize;
-
-        for _ in 0..PRIOR_CALIBRATION_SAMPLES {
-            let lambda: f64 = gamma_dist.sample(&mut rng);
-            let scale = sigma / crate::math::sqrt(lambda.max(DIAGONAL_FLOOR));
-
-            let mut z = Vector9::zeros();
-            for i in 0..9 {
-                z[i] = sample_standard_normal(&mut rng);
-            }
-
-            let delta = l_r * z * scale;
-            let max_effect = delta.iter().map(|x| x.abs()).fold(0.0_f64, f64::max);
-            if max_effect > theta {
-                count += 1;
-            }
-        }
-
-        count as f64 / PRIOR_CALIBRATION_SAMPLES as f64
-    }
-
-    /// Helper: compute exceedance using precomputed t-prior effects
-    fn optimized_t_prior_exceedance(normalized_effects: &[f64], sigma: f64, theta: f64) -> f64 {
-        let threshold = theta / sigma;
-        let count = normalized_effects
-            .iter()
-            .filter(|&&m| m > threshold)
-            .count();
-        count as f64 / normalized_effects.len() as f64
-    }
+    // DELETED: 9D t-prior test helper functions and tests
+    // - reference_t_prior_exceedance()
+    // - optimized_t_prior_exceedance()
+    // - test_t_prior_precompute_exceedance_matches_reference()
+    // - test_t_prior_exceedance_monotonicity()
+    // - test_calibrate_t_prior_scale_finds_target_exceedance()
+    // - test_calibration_determinism()
+    // - test_precomputed_effects_distribution()
+    // - bench_calibration_timing()
 
     // =========================================================================
-    // Tests verifying optimized implementations match reference
+    // W₁ distance (1D) helper function tests
     // =========================================================================
 
     #[test]
-    fn test_t_prior_precompute_exceedance_matches_reference() {
-        // Test that the optimized exceedance computation matches reference
-        // for various sigma values
-        let l_r = Matrix9::identity();
-        let theta = 10.0;
-        let seed = 12345u64;
-
-        // Precompute effects using the optimized method
-        let normalized_effects = precompute_t_prior_effects(&l_r, seed);
-
-        // Test at multiple sigma values
-        for sigma in [5.0, 10.0, 15.0, 20.0, 30.0] {
-            let optimized = optimized_t_prior_exceedance(&normalized_effects, sigma, theta);
-            let reference = reference_t_prior_exceedance(&l_r, sigma, theta, seed);
-
-            // Allow some tolerance due to different RNG sequences
-            // The key property is that exceedance should be monotonically increasing with sigma
-            assert!(
-                (0.0..=1.0).contains(&optimized),
-                "Optimized exceedance {} out of range for sigma={}",
-                optimized,
-                sigma
-            );
-            assert!(
-                (0.0..=1.0).contains(&reference),
-                "Reference exceedance {} out of range for sigma={}",
-                reference,
-                sigma
-            );
-
-            // Both should be in similar ballpark (within 0.1 of each other)
-            // Note: They won't be exactly equal because the optimized version
-            // uses different random samples
-            println!(
-                "sigma={}: optimized={:.4}, reference={:.4}",
-                sigma, optimized, reference
-            );
-        }
-    }
-
-    #[test]
-    fn test_t_prior_exceedance_monotonicity() {
-        // Key property: exceedance should increase with sigma
-        let l_r = Matrix9::identity();
-        let theta = 10.0;
-        let seed = 42u64;
-
-        let normalized_effects = precompute_t_prior_effects(&l_r, seed);
-
-        let mut prev_exceedance = 0.0;
-        for sigma in [1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0] {
-            let exceedance = optimized_t_prior_exceedance(&normalized_effects, sigma, theta);
-
-            assert!(
-                exceedance >= prev_exceedance,
-                "Exceedance should increase with sigma: sigma={}, exc={}, prev={}",
-                sigma,
-                exceedance,
-                prev_exceedance
-            );
-            prev_exceedance = exceedance;
-        }
-
-        // At very large sigma, exceedance should approach 1
-        let large_sigma_exc = optimized_t_prior_exceedance(&normalized_effects, 1000.0, theta);
-        assert!(
-            large_sigma_exc > 0.99,
-            "Exceedance at large sigma should be ~1, got {}",
-            large_sigma_exc
-        );
-
-        // At very small sigma, exceedance should approach 0
-        let small_sigma_exc = optimized_t_prior_exceedance(&normalized_effects, 0.1, theta);
-        assert!(
-            small_sigma_exc < 0.01,
-            "Exceedance at small sigma should be ~0, got {}",
-            small_sigma_exc
-        );
-    }
-
-    #[test]
-    fn test_calibrate_t_prior_scale_finds_target_exceedance() {
-        // Test that the calibration finds a sigma_t that achieves ~62% exceedance
-        let sigma_rate = Matrix9::identity() * 100.0;
+    fn test_calibrate_halft_prior_scale_1d_basic() {
+        // Test basic calibration produces reasonable scale
+        let var_rate = 100.0;
         let theta_eff = 10.0;
         let n_cal = 5000;
-        let discrete_mode = false;
-        let seed = 42u64;
+        let seed = 42;
 
-        let (sigma_t, l_r) =
-            calibrate_t_prior_scale(&sigma_rate, theta_eff, n_cal, discrete_mode, seed);
+        let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_eff, n_cal, seed);
 
-        // Verify the calibrated sigma_t achieves target exceedance
-        let normalized_effects = precompute_t_prior_effects(&l_r, seed);
-        let exceedance = optimized_t_prior_exceedance(&normalized_effects, sigma_t, theta_eff);
-
+        // Should be positive and in reasonable range relative to theta
+        assert!(sigma_t > 0.0, "sigma_t should be positive");
         assert!(
-            (exceedance - TARGET_EXCEEDANCE).abs() < 0.05,
-            "Calibrated t-prior exceedance {} should be near target {}",
-            exceedance,
-            TARGET_EXCEEDANCE
+            sigma_t > theta_eff * 0.05,
+            "sigma_t {} should be > theta * 0.05 = {}",
+            sigma_t,
+            theta_eff * 0.05
+        );
+        assert!(
+            sigma_t < theta_eff * 50.0,
+            "sigma_t {} should be < theta * 50 = {}",
+            sigma_t,
+            theta_eff * 50.0
         );
     }
 
     #[test]
-    fn test_calibration_determinism() {
-        // Same seed should give same results
-        let sigma_rate = Matrix9::identity() * 100.0;
+    fn test_calibrate_halft_prior_scale_1d_achieves_target() {
+        // Test that calibrated scale achieves target exceedance probability
+        let var_rate = 100.0;
         let theta_eff = 10.0;
         let n_cal = 5000;
-        let discrete_mode = false;
-        let seed = 12345u64;
+        let seed = 42;
 
-        let (sigma_t_1, _) =
-            calibrate_t_prior_scale(&sigma_rate, theta_eff, n_cal, discrete_mode, seed);
-        let (sigma_t_2, _) =
-            calibrate_t_prior_scale(&sigma_rate, theta_eff, n_cal, discrete_mode, seed);
+        let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_eff, n_cal, seed);
+
+        // Verify exceedance probability via MC
+        const N_VERIFY: usize = 50_000;
+        const NU: f64 = 4.0;
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed + 1);
+        let mut exceed_count = 0;
+
+        for _ in 0..N_VERIFY {
+            let lambda = sample_gamma(&mut rng, NU / 2.0, NU / 2.0);
+            let z = sample_standard_normal(&mut rng);
+            let delta = (sigma_t / lambda.sqrt() * z).abs();
+
+            if delta > theta_eff {
+                exceed_count += 1;
+            }
+        }
+
+        let exceedance = exceed_count as f64 / N_VERIFY as f64;
+
+        // Should be within 0.05 of target 0.62
+        assert!(
+            (exceedance - 0.62).abs() < 0.05,
+            "Exceedance {} should be near 0.62",
+            exceedance
+        );
+    }
+
+    #[test]
+    fn test_calibrate_halft_prior_scale_1d_determinism() {
+        // Same seed should give same result
+        let var_rate = 100.0;
+        let theta_eff = 10.0;
+        let n_cal = 5000;
+        let seed = 12345;
+
+        let sigma_1 = calibrate_halft_prior_scale_1d(var_rate, theta_eff, n_cal, seed);
+        let sigma_2 = calibrate_halft_prior_scale_1d(var_rate, theta_eff, n_cal, seed);
 
         assert!(
-            (sigma_t_1 - sigma_t_2).abs() < 1e-10,
+            (sigma_1 - sigma_2).abs() < 1e-10,
             "Same seed should give same sigma_t: {} vs {}",
-            sigma_t_1,
-            sigma_t_2
+            sigma_1,
+            sigma_2
         );
     }
 
     #[test]
-    fn test_precomputed_effects_distribution() {
-        // Test that precomputed effects follow expected distribution
-        let l_r = Matrix9::identity();
-        let seed = 42u64;
-
-        let effects = precompute_t_prior_effects(&l_r, seed);
-
-        // All effects should be positive (they're max of absolute values)
-        assert!(
-            effects.iter().all(|&m| m > 0.0),
-            "All effects should be positive"
-        );
-
-        // Compute mean and check it's reasonable
-        let mean: f64 = effects.iter().sum::<f64>() / effects.len() as f64;
-        // For t_4 with identity L_R, mean of max|z|/sqrt(lambda) should be roughly 2-4
-        assert!(
-            mean > 1.0 && mean < 10.0,
-            "Mean effect {} should be in reasonable range",
-            mean
-        );
-
-        // Check variance is non-zero (samples are diverse)
-        let variance: f64 =
-            effects.iter().map(|&m| (m - mean).powi(2)).sum::<f64>() / (effects.len() - 1) as f64;
-        assert!(variance > 0.1, "Effects should have non-trivial variance");
-    }
-
-    #[test]
-    #[ignore] // Slow benchmark - run with `cargo test -- --ignored`
-    fn bench_calibration_timing() {
-        use std::time::Instant;
-
-        let sigma_rate = Matrix9::identity() * 10000.0;
-        let theta_eff = 100.0;
+    fn test_calibrate_halft_prior_scale_1d_scale_invariance() {
+        // Scaling var_rate and theta_eff by same factor should scale sigma_t proportionally
+        let var_rate = 100.0;
+        let theta_eff = 10.0;
         let n_cal = 5000;
-        let discrete_mode = false;
+        let seed = 42;
 
-        // Warm up
-        let _ = calibrate_t_prior_scale(&sigma_rate, theta_eff, n_cal, discrete_mode, 1);
+        let sigma_1 = calibrate_halft_prior_scale_1d(var_rate, theta_eff, n_cal, seed);
+        let sigma_2 = calibrate_halft_prior_scale_1d(var_rate * 4.0, theta_eff * 2.0, n_cal, seed);
 
-        // Benchmark t-prior calibration
-        let iterations = 10;
-        let start = Instant::now();
-        for i in 0..iterations {
-            let _ = calibrate_t_prior_scale(&sigma_rate, theta_eff, n_cal, discrete_mode, i as u64);
-        }
-        let t_prior_time = start.elapsed();
+        // sigma should scale roughly with sqrt(var_rate) ~ theta
+        // But due to discrete binary search, won't be exact
+        let expected_ratio = 2.0;
+        let actual_ratio = sigma_2 / sigma_1;
 
-        println!(
-            "\n=== Calibration Performance ===\n\
-             \n\
-             T-prior calibration: {:?} per call\n\
-             ({} iterations averaged)",
-            t_prior_time / iterations as u32,
-            iterations
+        assert!(
+            (actual_ratio - expected_ratio).abs() < 0.5,
+            "Ratio {} should be near {}",
+            actual_ratio,
+            expected_ratio
         );
     }
+
+    #[test]
+    fn test_compute_c_floor_1d_basic() {
+        // Test basic computation produces reasonable value
+        let var_rate = 100.0;
+        let seed = 42;
+
+        let c_floor = compute_c_floor_1d(var_rate, seed);
+
+        // For N(0, 100), q95(|Z|) ≈ 1.645 * sqrt(100) = 16.45
+        // Allow some Monte Carlo variance
+        assert!(c_floor > 0.0, "c_floor should be positive");
+        assert!(
+            c_floor > 13.0 && c_floor < 20.0,
+            "c_floor {} should be in range [13, 20] for var=100",
+            c_floor
+        );
+    }
+
+    #[test]
+    fn test_compute_c_floor_1d_determinism() {
+        // Same seed should give same result
+        let var_rate = 100.0;
+        let seed = 12345;
+
+        let c_floor_1 = compute_c_floor_1d(var_rate, seed);
+        let c_floor_2 = compute_c_floor_1d(var_rate, seed);
+
+        assert!(
+            (c_floor_1 - c_floor_2).abs() < 1e-10,
+            "Same seed should give same c_floor: {} vs {}",
+            c_floor_1,
+            c_floor_2
+        );
+    }
+
+    #[test]
+    fn test_compute_c_floor_1d_scaling() {
+        // c_floor should scale with sqrt(var_rate)
+        let var_base = 100.0;
+        let seed = 42;
+
+        let c_floor_base = compute_c_floor_1d(var_base, seed);
+        let c_floor_4x = compute_c_floor_1d(var_base * 4.0, seed);
+
+        // Should scale roughly by factor of 2 (sqrt(4))
+        let ratio = c_floor_4x / c_floor_base;
+        assert!(
+            (ratio - 2.0).abs() < 0.3,
+            "Ratio {} should be near 2.0",
+            ratio
+        );
+    }
+
+    #[test]
+    fn test_compute_c_floor_1d_percentile_property() {
+        // Verify that c_floor is indeed near the 95th percentile
+        let var_rate = 100.0;
+        let seed = 42;
+
+        let c_floor = compute_c_floor_1d(var_rate, seed);
+
+        // Generate fresh samples and check empirical percentile
+        const N_VERIFY: usize = 50_000;
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed + 1);
+        let std_dev = var_rate.sqrt();
+
+        let mut samples: Vec<f64> = (0..N_VERIFY)
+            .map(|_| {
+                let z = sample_standard_normal(&mut rng);
+                (z * std_dev).abs()
+            })
+            .collect();
+
+        samples.sort_by(|a, b| a.total_cmp(b));
+        let percentile_95_idx = (N_VERIFY as f64 * 0.95) as usize;
+        let empirical_q95 = samples[percentile_95_idx];
+
+        // c_floor should be close to empirical 95th percentile
+        assert!(
+            (c_floor - empirical_q95).abs() < 2.0,
+            "c_floor {} should be near empirical q95 {}",
+            c_floor,
+            empirical_q95
+        );
+    }
+
+    #[test]
+    fn test_compute_c_floor_1d_small_variance() {
+        // Test with small variance
+        let var_rate = 1.0;
+        let seed = 42;
+
+        let c_floor = compute_c_floor_1d(var_rate, seed);
+
+        // For N(0, 1), q95(|Z|) ≈ 1.645
+        assert!(
+            c_floor > 1.3 && c_floor < 2.0,
+            "c_floor {} should be near 1.645 for unit variance",
+            c_floor
+        );
+    }
+
+    #[test]
+    fn test_compute_c_floor_1d_large_variance() {
+        // Test with large variance
+        let var_rate = 10000.0;
+        let seed = 42;
+
+        let c_floor = compute_c_floor_1d(var_rate, seed);
+
+        // For N(0, 10000), q95(|Z|) ≈ 1.645 * 100 = 164.5
+        assert!(
+            c_floor > 130.0 && c_floor < 200.0,
+            "c_floor {} should be near 164.5 for var=10000",
+            c_floor
+        );
+    }
+
+    #[test]
+    fn test_halft_prior_scale_1d_monotonicity() {
+        // Increasing theta_eff should increase sigma_t (for fixed exceedance target)
+        let var_rate = 100.0;
+        let n_cal = 5000;
+        let seed = 42;
+
+        let sigma_10 = calibrate_halft_prior_scale_1d(var_rate, 10.0, n_cal, seed);
+        let sigma_20 = calibrate_halft_prior_scale_1d(var_rate, 20.0, n_cal, seed);
+        let sigma_50 = calibrate_halft_prior_scale_1d(var_rate, 50.0, n_cal, seed);
+
+        assert!(
+            sigma_20 > sigma_10,
+            "sigma_t should increase with theta: {} vs {}",
+            sigma_20,
+            sigma_10
+        );
+        assert!(
+            sigma_50 > sigma_20,
+            "sigma_t should increase with theta: {} vs {}",
+            sigma_50,
+            sigma_20
+        );
+    }
+
+    // DELETED: test_halft_vs_9d_scale_relationship() - test comparing 1D vs 9D
 }

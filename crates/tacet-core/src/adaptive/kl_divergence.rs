@@ -6,18 +6,16 @@
 
 use super::Posterior;
 
-/// KL divergence KL(p || q) for 9D Gaussian distributions.
+/// KL divergence KL(p || q) for 1D Gaussian distributions.
 ///
-/// For Gaussians p ~ N(μ_p, Σ_p) and q ~ N(μ_q, Σ_q):
+/// For 1D Gaussians p ~ N(μ_p, σ²_p) and q ~ N(μ_q, σ²_q):
 ///
-/// KL(p||q) = 0.5 × (tr(Σ_q⁻¹ Σ_p) + (μ_q - μ_p)ᵀ Σ_q⁻¹ (μ_q - μ_p) - k + ln(det(Σ_q)/det(Σ_p)))
-///
-/// where k = 9 (dimension).
+/// KL(p||q) = 0.5 × (σ²_p/σ²_q + (μ_p - μ_q)²/σ²_q - 1 + ln(σ²_q/σ²_p))
 ///
 /// This measures how much the posterior has changed from the previous iteration.
 /// Small KL indicates the posterior is no longer updating despite new data.
 ///
-/// Uses the 9D posterior mean and covariance for tracking.
+/// Uses the 1D posterior mean and variance for tracking.
 ///
 /// # Arguments
 ///
@@ -26,67 +24,41 @@ use super::Posterior;
 ///
 /// # Returns
 ///
-/// KL divergence in nats. Returns `f64::INFINITY` if q has singular covariance.
+/// KL divergence in nats. Returns `f64::INFINITY` if q has zero or negative variance.
 pub fn kl_divergence_gaussian(p: &Posterior, q: &Posterior) -> f64 {
-    use nalgebra::Cholesky;
-
-    const K: f64 = 9.0;
-
-    // Compute Cholesky of q's covariance for stable inversion
-    let q_chol = match Cholesky::new(q.lambda_post) {
-        Some(c) => c,
-        None => return f64::INFINITY, // Singular covariance
-    };
-
-    // Mean difference
-    let mu_diff = p.delta_post - q.delta_post;
-
-    // tr(Σ_q⁻¹ Σ_p) via Cholesky solves: sum of diagonal of (L_q⁻¹ Σ_p L_q⁻ᵀ)
-    let mut trace_term = 0.0;
-    for j in 0..9 {
-        let col = p.lambda_post.column(j).into_owned();
-        let solved = q_chol.solve(&col);
-        trace_term += solved[j];
-    }
-
-    // (μ_q - μ_p)ᵀ Σ_q⁻¹ (μ_q - μ_p) via Cholesky
-    let solved_diff = q_chol.solve(&mu_diff);
-    let mahalanobis = mu_diff.dot(&solved_diff);
-
-    // ln(det(Σ_q)/det(Σ_p)) via log determinants
-    let q_log_det: f64 = (0..9)
-        .map(|i| libm::log(q_chol.l()[(i, i)].abs().max(1e-300)))
-        .sum::<f64>()
-        * 2.0;
-
-    let p_chol = match Cholesky::new(p.lambda_post) {
-        Some(c) => c,
-        None => return f64::INFINITY,
-    };
-    let p_log_det: f64 = (0..9)
-        .map(|i| libm::log(p_chol.l()[(i, i)].abs().max(1e-300)))
-        .sum::<f64>()
-        * 2.0;
-
-    if !q_log_det.is_finite() || !p_log_det.is_finite() {
+    // Check for degenerate cases
+    if q.var_post <= 0.0 || p.var_post <= 0.0 {
         return f64::INFINITY;
     }
 
-    let log_det_ratio = q_log_det - p_log_det;
+    // Mean difference
+    let mu_diff = p.w1_post - q.w1_post;
 
-    0.5 * (trace_term + mahalanobis - K + log_det_ratio)
+    // Variance ratio
+    let var_ratio = p.var_post / q.var_post;
+
+    // Squared Mahalanobis distance
+    let mahalanobis = (mu_diff * mu_diff) / q.var_post;
+
+    // Log variance ratio
+    let log_var_ratio = libm::log(q.var_post / p.var_post);
+
+    if !log_var_ratio.is_finite() {
+        return f64::INFINITY;
+    }
+
+    0.5 * (var_ratio + mahalanobis - 1.0 + log_var_ratio)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Matrix9, Vector9};
 
-    fn make_test_posterior(delta_post: Vector9, variance: f64, leak_prob: f64) -> Posterior {
+    fn make_test_posterior(w1_post: f64, variance: f64, leak_prob: f64) -> Posterior {
         Posterior::new(
-            delta_post,
-            Matrix9::identity() * variance,
-            Vec::new(), // delta_draws
+            w1_post,
+            variance,
+            Vec::new(), // w1_draws
             leak_prob,
             1.0,
             100,
@@ -95,11 +67,7 @@ mod tests {
 
     #[test]
     fn test_kl_identical_distributions() {
-        let p = make_test_posterior(
-            Vector9::from_row_slice(&[5.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-            1.0,
-            0.5,
-        );
+        let p = make_test_posterior(5.0, 1.0, 0.5);
         let q = p.clone();
 
         let kl = kl_divergence_gaussian(&p, &q);
@@ -114,32 +82,34 @@ mod tests {
 
     #[test]
     fn test_kl_different_means() {
-        let p = make_test_posterior(
-            Vector9::from_row_slice(&[5.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-            1.0,
-            0.5,
-        );
-        let q = make_test_posterior(Vector9::zeros(), 1.0, 0.5);
+        let p = make_test_posterior(5.0, 1.0, 0.5);
+        let q = make_test_posterior(0.0, 1.0, 0.5);
 
         let kl = kl_divergence_gaussian(&p, &q);
 
-        // For same covariance, KL = 0.5 × ||μ_p - μ_q||²
-        // = 0.5 × (25 + 9) = 17.0
+        // For 1D with same variance: KL = 0.5 × (μ_p - μ_q)² / σ²_q
+        // = 0.5 × 25 / 1 = 12.5
         assert!(
-            libm::fabs(kl - 17.0) < 1e-10,
-            "KL should be 17.0, got {}",
+            libm::fabs(kl - 12.5) < 1e-10,
+            "KL should be 12.5, got {}",
             kl
         );
     }
 
     #[test]
     fn test_kl_different_variances() {
-        let p = make_test_posterior(Vector9::zeros(), 2.0, 0.5);
-        let q = make_test_posterior(Vector9::zeros(), 1.0, 0.5);
+        let p = make_test_posterior(0.0, 2.0, 0.5);
+        let q = make_test_posterior(0.0, 1.0, 0.5);
 
         let kl = kl_divergence_gaussian(&p, &q);
 
-        // KL should be positive for different variances
+        // For 1D with same mean: KL = 0.5 × (σ²_p/σ²_q - 1 + ln(σ²_q/σ²_p))
+        // = 0.5 × (2 - 1 + ln(1/2)) = 0.5 × (1 - 0.693) ≈ 0.153
         assert!(kl > 0.0, "KL should be positive for different variances");
+        assert!(
+            (kl - 0.153).abs() < 0.01,
+            "KL should be ~0.153, got {}",
+            kl
+        );
     }
 }

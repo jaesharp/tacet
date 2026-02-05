@@ -34,7 +34,7 @@ use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
 use crate::result::{PreflightCategory, PreflightSeverity, PreflightWarningInfo};
-use crate::statistics::compute_deciles_inplace;
+use crate::statistics::compute_quantile;
 
 /// Warning from the sanity check.
 #[derive(Debug, Clone)]
@@ -186,14 +186,23 @@ pub fn sanity_check(
     let mut first_half: Vec<f64> = indices[..mid].iter().map(|&i| fixed_samples[i]).collect();
     let mut second_half: Vec<f64> = indices[mid..].iter().map(|&i| fixed_samples[i]).collect();
 
-    // Compute quantile differences
-    let q_first = compute_deciles_inplace(&mut first_half);
-    let q_second = compute_deciles_inplace(&mut second_half);
+    // Compute key quantiles to characterize the distributions
+    // We use Q25, Q50, Q75, Q90 to capture location, spread, and tail behavior
+    let q1_first = compute_quantile(&mut first_half, 0.25);
+    let q2_first = compute_quantile(&mut first_half, 0.50);
+    let q3_first = compute_quantile(&mut first_half, 0.75);
+    let q4_first = compute_quantile(&mut first_half, 0.90);
 
-    // Max absolute quantile difference
-    let max_diff = (0..9)
-        .map(|i| (q_first[i] - q_second[i]).abs())
-        .fold(0.0_f64, f64::max);
+    let q1_second = compute_quantile(&mut second_half, 0.25);
+    let q2_second = compute_quantile(&mut second_half, 0.50);
+    let q3_second = compute_quantile(&mut second_half, 0.75);
+    let q4_second = compute_quantile(&mut second_half, 0.90);
+
+    // Max absolute quantile difference across the four quantiles
+    let max_diff = (q1_first - q1_second).abs()
+        .max((q2_first - q2_second).abs())
+        .max((q3_first - q3_second).abs())
+        .max((q4_first - q4_second).abs());
 
     // Estimate noise level from IQR of the combined samples
     // IQR is robust to outliers and gives a sense of typical variation

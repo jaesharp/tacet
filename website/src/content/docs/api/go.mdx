@@ -42,7 +42,10 @@ func main() {
     case tacet.Pass:
         fmt.Printf("No leak: P(leak)=%.1f%%\n", result.LeakProbability*100)
     case tacet.Fail:
-        fmt.Printf("Leak: %.1f ns, %s\n", result.Effect.TotalNs(), result.Exploitability)
+        fmt.Printf("Leak: %.1f ns (%s), %s\n",
+            result.Effect.MaxEffectNs,
+            result.Effect.TailDiagnostics.PatternLabel,
+            result.Exploitability)
     case tacet.Inconclusive:
         fmt.Printf("Inconclusive: %s\n", result.InconclusiveReason)
     case tacet.Unmeasurable:
@@ -252,13 +255,75 @@ type Result struct {
 
 ```go
 type Effect struct {
-    ShiftNs          float64
-    TailNs           float64
-    CredibleInterval [2]float64
-    Pattern          EffectPattern
+    MaxEffectNs      float64        // L∞ norm of W₁ distance
+    CredibleInterval [2]float64     // 95% credible interval
+    TailDiagnostics  TailDiagnostics // Shift-vs-tail decomposition
+}
+```
+
+### TailDiagnostics
+
+The `TailDiagnostics` structure decomposes the timing effect into uniform shift and tail components:
+
+```go
+type TailDiagnostics struct {
+    ShiftNs        float64         // Median of rank-matched differences
+    TailNs         float64         // Mean absolute deviation from shift
+    TailShare      float64         // Fraction of effect from tail (0.0-1.0)
+    TailSlowShare  float64         // Fraction of tail mass that's positive
+    QuantileShifts QuantileShifts  // Per-quantile timing differences
+    PatternLabel   EffectPattern   // Automatic classification
 }
 
-func (e Effect) TotalNs() float64  // L2 norm of shift and tail
+type QuantileShifts struct {
+    P50Ns float64  // Median shift
+    P90Ns float64  // 90th percentile shift
+    P95Ns float64  // 95th percentile shift
+    P99Ns float64  // 99th percentile shift
+}
+
+type EffectPattern int
+
+const (
+    TailEffect   EffectPattern = iota  // >50% of effect in slow outliers
+    UniformShift                       // <30% of effect in tail
+    Mixed                              // 30-50% in tail
+    Negligible                         // Total effect below measurement floor
+)
+
+func (p EffectPattern) String() string  // "tail effect", "uniform shift", "mixed", "negligible"
+```
+
+**Understanding the decomposition:**
+- **ShiftNs**: Median timing difference across all observations (aligned by rank). Non-zero values indicate consistent timing differences across the entire distribution.
+- **TailNs**: Measures how much individual measurements deviate from the uniform shift. High values indicate some operations are disproportionately slow.
+- **TailShare**: Fraction of total W₁ distance from tail deviations. Values above 0.5 indicate tail-dominated effects.
+
+**Example: Accessing effect details**
+
+```go
+if result.Outcome == tacet.Fail {
+    fmt.Printf("Max effect: %.1f ns\n", result.Effect.MaxEffectNs)
+    fmt.Printf("Pattern: %s\n", result.Effect.TailDiagnostics.PatternLabel)
+
+    tail := result.Effect.TailDiagnostics
+    fmt.Printf("Shift: %.1f ns, Tail: %.1f ns\n", tail.ShiftNs, tail.TailNs)
+
+    // Interpret the effect pattern
+    switch tail.PatternLabel {
+    case tacet.TailEffect:
+        fmt.Printf("Tail-heavy leak: %.0f%% from slow outliers\n", tail.TailShare*100)
+        fmt.Printf("p99: %.1f ns vs median: %.1f ns\n",
+                   tail.QuantileShifts.P99Ns, tail.QuantileShifts.P50Ns)
+    case tacet.UniformShift:
+        fmt.Printf("Uniform timing shift: %.1f ns across distribution\n", tail.ShiftNs)
+    case tacet.Mixed:
+        fmt.Printf("Mixed effect: %.1f ns shift + %.1f ns tail\n",
+                   tail.ShiftNs, tail.TailNs)
+    case tacet.Negligible:
+        fmt.Println("Effect below measurement floor")
+    }
+}
 ```
 
 ### Quality
@@ -320,7 +385,9 @@ func main() {
     case tacet.Pass:
         fmt.Println("Constant-time comparison verified")
     case tacet.Fail:
-        fmt.Printf("Timing leak detected! Effect: %.1f ns\n", result.Effect.TotalNs())
+        fmt.Printf("Timing leak detected! Effect: %.1f ns (%s)\n",
+                   result.Effect.MaxEffectNs,
+                   result.Effect.TailDiagnostics.PatternLabel)
     default:
         fmt.Printf("Test incomplete: %v\n", result.Outcome)
     }

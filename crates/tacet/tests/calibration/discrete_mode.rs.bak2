@@ -124,6 +124,26 @@ fn m_out_of_n_resample_size_formula() {
     );
 }
 
+// =============================================================================
+// UNIT TESTS: Mid-Distribution Quantiles
+// =============================================================================
+
+    // All quantiles should be either 1.0 or 2.0 (the only values in the data)
+    for (i, q) in quantiles.iter().enumerate() {
+        assert!(
+            *q == 1.0 || *q == 2.0,
+            "Quantile {} should be 1.0 or 2.0, got {}",
+            i,
+            q
+        );
+    }
+}
+
+// =============================================================================
+// INTEGRATION TESTS: Discrete Mode FPR Calibration
+// =============================================================================
+
+/// Verify that discrete mode FPR is bounded at the configured alpha level.
 ///
 /// This test forces discrete mode on using the `force_discrete_mode` config
 /// option, then runs FPR calibration to ensure false positive rate is bounded.

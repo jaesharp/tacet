@@ -19,8 +19,8 @@
 //! ```ignore
 //! use tacet_core::{
 //!     analysis::{compute_bayes_gibbs, estimate_mde},
-//!     statistics::{bootstrap_covariance_matrix, compute_deciles},
-//!     types::{Matrix9, Vector9, Class, TimingSample},
+//!     statistics::bootstrap_covariance_matrix,
+//!     types::{Class, TimingSample},
 //! };
 //! ```
 
@@ -34,6 +34,7 @@ pub mod colors;
 pub mod constants;
 pub mod ffi_summary;
 pub mod formatting;
+pub mod histogram;
 pub mod math;
 pub mod orchestration;
 pub mod preflight;
@@ -48,7 +49,8 @@ pub use ffi_summary::{
     OutcomeType, PosteriorSummary,
 };
 pub use result::{
-    EffectEstimate, Exploitability, MeasurementQuality, MinDetectableEffect, Outcome,
-    ResearchOutcome, ResearchStatus, TopQuantile, UnreliablePolicy,
+    EffectEstimate, EffectPattern, Exploitability, MeasurementQuality, MinDetectableEffect,
+    Outcome, QuantileShifts, ResearchOutcome, ResearchStatus, TailDiagnostics, TopQuantile,
+    UnreliablePolicy,
 };
-pub use types::{AttackerModel, Class, Matrix9, TimingSample, Vector9};
+pub use types::{AttackerModel, Class, TimingSample};

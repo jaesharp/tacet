@@ -28,10 +28,7 @@ pub enum IactWarning {
     /// All consecutive pairs were non-positive
     AllPairsNonPositive,
     /// Upper bound (Stan's safeguard) was applied
-    UpperBoundApplied {
-        tau_uncapped: f64,
-        bound: f64,
-    },
+    UpperBoundApplied { tau_uncapped: f64, bound: f64 },
 }
 
 // Manual Eq/Ord implementations for sorting/dedup
@@ -568,7 +565,11 @@ mod tests {
     fn test_quantile_computation() {
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let q50 = compute_quantile(&data, 0.5);
-        assert!((q50 - 3.0).abs() < 0.1, "Median should be ~3.0, got {}", q50);
+        assert!(
+            (q50 - 3.0).abs() < 0.1,
+            "Median should be ~3.0, got {}",
+            q50
+        );
 
         let q90 = compute_quantile(&data, 0.9);
         assert!(q90 > 4.0, "90th percentile should be >4.0, got {}", q90);
@@ -599,7 +600,11 @@ mod tests {
 
         // IID differences should have tau ≈ 1
         assert!(result.tau >= 1.0, "IACT should be >= 1.0");
-        assert!(result.tau < 2.0, "IID data should have low IACT, got {}", result.tau);
+        assert!(
+            result.tau < 2.0,
+            "IID data should have low IACT, got {}",
+            result.tau
+        );
         assert!(result.warnings.is_empty(), "Should have no warnings");
     }
 
@@ -628,7 +633,11 @@ mod tests {
 
         // Constant differences should have tau ≈ 1 (no autocorrelation in differences)
         assert!(result.tau >= 1.0, "IACT should be >= 1.0");
-        assert!(result.tau < 3.0, "Constant shift should have low IACT, got {}", result.tau);
+        assert!(
+            result.tau < 3.0,
+            "Constant shift should have low IACT, got {}",
+            result.tau
+        );
     }
 
     #[test]
@@ -637,15 +646,30 @@ mod tests {
 
         // Create stream with < 20 samples
         let stream = vec![
-            TimingSample { time_ns: 1.0, class: Class::Baseline },
-            TimingSample { time_ns: 2.0, class: Class::Sample },
-            TimingSample { time_ns: 3.0, class: Class::Baseline },
+            TimingSample {
+                time_ns: 1.0,
+                class: Class::Baseline,
+            },
+            TimingSample {
+                time_ns: 2.0,
+                class: Class::Sample,
+            },
+            TimingSample {
+                time_ns: 3.0,
+                class: Class::Baseline,
+            },
         ];
 
         let result = timing_iact_direct(&stream);
 
-        assert_eq!(result.tau, 1.0, "Should return tau=1.0 for insufficient samples");
-        assert!(!result.warnings.is_empty(), "Should have InsufficientSamples warning");
+        assert_eq!(
+            result.tau, 1.0,
+            "Should return tau=1.0 for insufficient samples"
+        );
+        assert!(
+            !result.warnings.is_empty(),
+            "Should have InsufficientSamples warning"
+        );
     }
 
     #[test]
@@ -672,7 +696,11 @@ mod tests {
 
         // IID data should have low IACT
         assert!(result.tau >= 1.0, "IACT should be >= 1.0");
-        assert!(result.tau < 3.0, "IID data should have low IACT, got {}", result.tau);
+        assert!(
+            result.tau < 3.0,
+            "IID data should have low IACT, got {}",
+            result.tau
+        );
     }
 
     #[test]
@@ -722,13 +750,25 @@ mod tests {
         use crate::types::Class;
 
         let stream = vec![
-            TimingSample { time_ns: 1.0, class: Class::Baseline },
-            TimingSample { time_ns: 2.0, class: Class::Sample },
+            TimingSample {
+                time_ns: 1.0,
+                class: Class::Baseline,
+            },
+            TimingSample {
+                time_ns: 2.0,
+                class: Class::Sample,
+            },
         ];
 
         let result = timing_iact_per_quantile(&stream);
 
-        assert_eq!(result.tau, 1.0, "Should return tau=1.0 for insufficient samples");
-        assert!(!result.warnings.is_empty(), "Should have InsufficientSamples warning");
+        assert_eq!(
+            result.tau, 1.0,
+            "Should return tau=1.0 for insufficient samples"
+        );
+        assert!(
+            !result.warnings.is_empty(),
+            "Should have InsufficientSamples warning"
+        );
     }
 }

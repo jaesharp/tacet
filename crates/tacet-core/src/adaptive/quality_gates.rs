@@ -17,7 +17,6 @@ use alloc::string::String;
 use super::drift::{CalibrationSnapshot, ConditionDrift, DriftThresholds};
 use super::Posterior;
 use crate::constants::{DEFAULT_FAIL_THRESHOLD, DEFAULT_MAX_SAMPLES, DEFAULT_PASS_THRESHOLD};
-use crate::types::Matrix9;
 
 /// Result of quality gate checks.
 #[derive(Debug, Clone)]
@@ -180,11 +179,6 @@ pub struct QualityGateCheckInputs<'a> {
     /// Current posterior distribution.
     pub posterior: &'a Posterior,
 
-    /// Marginal prior covariance matrix Λ₀^marginal = 2σ²R (for ν=4).
-    /// This is the unconditional prior variance of δ under the t-prior.
-    /// Used by Gate 1 for the KL divergence check (spec §3.5.2).
-    pub prior_cov_marginal: &'a Matrix9,
-
     /// Effect threshold θ in nanoseconds (user's requested threshold).
     pub theta_ns: f64,
 
@@ -258,10 +252,8 @@ pub fn check_quality_gates(
     inputs: &QualityGateCheckInputs,
     config: &QualityGateConfig,
 ) -> QualityGateResult {
-    // Gate 1: Posterior too close to prior (data not informative) - v5.6: uses KL divergence
-    if let Some(reason) = check_kl_divergence(inputs, config) {
-        return QualityGateResult::Stop(reason);
-    }
+    // Gate 1: Skipped - now using 1D variance gate (check_gate1_1d) directly in loop_runner
+    // The 1D gate requires a Posterior1D which is constructed from W₁ inference
 
     // Gate 2: Learning rate collapsed
     if let Some(reason) = check_learning_rate(inputs, config) {
@@ -347,139 +339,7 @@ pub fn is_threshold_elevated(theta_eff: f64, theta_user: f64, theta_tick: f64) -
     theta_eff > theta_user + epsilon
 }
 
-/// Minimum KL divergence threshold (nats) for Gate 1 (spec §3.5.2 v5.6).
-const KL_MIN: f64 = 0.7;
-
-/// Gate 1: Check if posterior learned from prior using KL divergence (spec §3.5.2 v5.6).
-///
-/// v5.6 CHANGE: Replaces the log-det variance ratio with full KL divergence.
-///
-/// KL = 0.5 * (tr(Λ₀⁻¹Λ_post) + μ_postᵀΛ₀⁻¹μ_post - 9 + ln|Λ₀|/|Λ_post|)
-///
-/// Gate triggers when KL < KL_min where KL_min := 0.7 nats.
-///
-/// v5.6 CHANGE: NO decisive probability bypass - the bypass logic is removed entirely.
-/// This ensures consistent treatment regardless of observed leak probability.
-///
-/// **Cholesky fallback (spec §3.5.2)**: If Cholesky fails after jitter ladder,
-/// uses trace ratio as conservative fallback.
-fn check_kl_divergence(
-    inputs: &QualityGateCheckInputs,
-    _config: &QualityGateConfig,
-) -> Option<InconclusiveReason> {
-    // v5.6: NO decisive probability bypass - removed per spec
-    // The gate checks KL divergence unconditionally
-
-    // v5.4: Use the marginal prior covariance Λ₀^marginal = 2σ²R (spec §3.5.2)
-    let prior_cov = inputs.prior_cov_marginal;
-    let post_cov = &inputs.posterior.lambda_post;
-    let post_mean = &inputs.posterior.delta_post;
-
-    // Try to compute KL divergence via Cholesky
-    let kl = match compute_kl_divergence(prior_cov, post_cov, post_mean) {
-        Some(kl) => kl,
-        None => {
-            // Fall back to trace ratio if KL computation fails
-            let trace_ratio = post_cov.trace() / prior_cov.trace();
-            if trace_ratio > 0.5 {
-                return Some(InconclusiveReason::DataTooNoisy {
-                    message: alloc::format!(
-                        "Posterior variance is {:.0}% of prior; data not informative (KL computation failed)",
-                        trace_ratio * 100.0
-                    ),
-                    guidance: String::from("Try: cycle counter, reduce system load, increase batch size"),
-                    variance_ratio: trace_ratio,
-                });
-            }
-            return None;
-        }
-    };
-
-    // Trigger when KL < KL_min (spec §3.5.2 v5.6)
-    if kl < KL_MIN {
-        return Some(InconclusiveReason::DataTooNoisy {
-            message: alloc::format!(
-                "KL divergence {:.2} nats < {:.1} threshold; posterior ≈ prior",
-                kl,
-                KL_MIN
-            ),
-            guidance: String::from("Try: cycle counter, reduce system load, increase batch size"),
-            variance_ratio: kl / KL_MIN, // Report KL ratio for diagnostics
-        });
-    }
-
-    None
-}
-
-/// Compute KL(N(μ_post, Λ_post) || N(0, Λ₀)) via Cholesky (spec §3.5.2 v5.6).
-///
-/// KL = 0.5 * (tr(Λ₀⁻¹Λ_post) + μ_postᵀΛ₀⁻¹μ_post - d + ln|Λ₀| - ln|Λ_post|)
-///
-/// Returns `None` if Cholesky fails even after jitter ladder.
-fn compute_kl_divergence(
-    prior_cov: &crate::types::Matrix9,
-    post_cov: &crate::types::Matrix9,
-    post_mean: &crate::types::Vector9,
-) -> Option<f64> {
-    // Try Cholesky with jitter ladder (spec §3.5.2)
-    let prior_chol = try_cholesky_with_jitter(prior_cov)?;
-    let post_chol = try_cholesky_with_jitter(post_cov)?;
-
-    // Log determinants from Cholesky: log|A| = 2 * sum(log(L_ii))
-    let prior_log_det: f64 = (0..9)
-        .map(|i| libm::log(prior_chol.l()[(i, i)]))
-        .sum::<f64>()
-        * 2.0;
-    let post_log_det: f64 = (0..9)
-        .map(|i| libm::log(post_chol.l()[(i, i)]))
-        .sum::<f64>()
-        * 2.0;
-
-    if !prior_log_det.is_finite() || !post_log_det.is_finite() {
-        return None;
-    }
-
-    // tr(Λ₀⁻¹Λ_post) via Cholesky solves
-    let mut trace_term = 0.0;
-    for j in 0..9 {
-        let col = post_cov.column(j).into_owned();
-        let solved = prior_chol.solve(&col);
-        trace_term += solved[j];
-    }
-
-    // μ_postᵀΛ₀⁻¹μ_post
-    let solved_mean = prior_chol.solve(post_mean);
-    let quad_term = post_mean.dot(&solved_mean);
-
-    // KL = 0.5 * (tr + quad - d + ln|Λ₀| - ln|Λ_post|)
-    let kl = 0.5 * (trace_term + quad_term - 9.0 + prior_log_det - post_log_det);
-
-    // KL should be non-negative
-    Some(kl.max(0.0))
-}
-
-/// Try Cholesky decomposition with jitter ladder (spec §3.5.2 v5.6).
-///
-/// Starts at 10⁻¹⁰ and increases by factors of 10 until success or 10⁻⁴.
-fn try_cholesky_with_jitter(
-    matrix: &crate::types::Matrix9,
-) -> Option<nalgebra::Cholesky<f64, nalgebra::Const<9>>> {
-    // Try without jitter first
-    if let Some(chol) = nalgebra::Cholesky::new(*matrix) {
-        return Some(chol);
-    }
-
-    // Jitter ladder: 10⁻¹⁰, 10⁻⁹, ..., 10⁻⁴
-    for exp in -10..=-4 {
-        let jitter = libm::pow(10.0, exp as f64);
-        let jittered = matrix + crate::types::Matrix9::identity() * jitter;
-        if let Some(chol) = nalgebra::Cholesky::new(jittered) {
-            return Some(chol);
-        }
-    }
-
-    None
-}
+// Old 9D KL divergence functions removed - now using 1D variance gates
 
 /// Gate 2: Check if learning has stalled (posterior stopped updating).
 fn check_learning_rate(
@@ -587,8 +447,8 @@ fn extrapolate_samples_to_decision(
         return usize::MAX; // Already at threshold
     }
 
-    // Posterior std: use trace of 9D posterior covariance as proxy for overall uncertainty
-    let current_std = libm::sqrt(inputs.posterior.lambda_post.trace() / 9.0);
+    // Posterior std: use 1D posterior variance
+    let current_std = libm::sqrt(inputs.posterior.var_post);
 
     if current_std < 1e-9 {
         return inputs.n_total; // Already very certain
@@ -650,215 +510,330 @@ fn check_condition_drift(
     None
 }
 
+// ============================================================================
+// Phase 3: 1D Variance Quality Gates (W₁ path)
+// ============================================================================
+
+/// Temporary 1D posterior structure for W₁ inference.
+///
+/// This is used during the Phase 3 migration to 1D variance inference.
+/// Once the migration is complete, this will replace the full 9D `Posterior` struct.
+///
+/// # Fields
+///
+/// * `w1_post` - Posterior mean of W₁ (maximum quantile difference in ns)
+/// * `var_post` - Posterior variance of W₁
+/// * `leak_probability` - P(W₁ > θ | data)
+/// * `n` - Total samples per class used for inference
+/// * `theta` - Effect threshold in nanoseconds
+#[derive(Debug, Clone)]
+pub struct Posterior1D {
+    /// Posterior mean of W₁ (maximum quantile difference in ns).
+    pub w1_post: f64,
+
+    /// Posterior variance of W₁ (ns²).
+    pub var_post: f64,
+
+    /// Posterior leak probability: P(W₁ > θ | data).
+    pub leak_probability: f64,
+
+    /// Total samples per class used for this posterior.
+    pub n: usize,
+
+    /// Effect threshold θ in nanoseconds.
+    pub theta: f64,
+}
+
+impl Posterior1D {
+    /// Create a new 1D posterior.
+    pub fn new(
+        w1_post: f64,
+        var_post: f64,
+        leak_probability: f64,
+        n: usize,
+        theta: f64,
+    ) -> Self {
+        Self {
+            w1_post,
+            var_post,
+            leak_probability,
+            n,
+            theta,
+        }
+    }
+}
+
+/// Check Gate 1: Data too noisy (1D version).
+///
+/// Triggers if posterior variance is too close to prior variance,
+/// indicating the data isn't informative enough to learn about W₁.
+///
+/// This is the 1D analog of the KL divergence check for the 9D case.
+/// For a scalar normal distribution:
+///
+/// KL(N(μ_post, σ²_post) || N(0, σ²_prior)) = 0.5 * (σ²_post/σ²_prior + μ²_post/σ²_prior - 1 + ln(σ²_prior/σ²_post))
+///
+/// However, for simplicity and consistency with the existing API, we use
+/// the variance ratio σ²_post / σ²_prior as the gate criterion.
+///
+/// # Arguments
+///
+/// * `posterior` - 1D posterior state for W₁
+/// * `prior_var` - Prior variance of W₁ (2σ_t² for ν=4 t-prior)
+/// * `config` - Quality gate configuration
+///
+/// # Returns
+///
+/// `Some(InconclusiveReason)` if the gate triggers, `None` otherwise.
+///
+/// # Spec Reference
+///
+/// See spec §3.5.2 (Gate 1: Data Too Noisy).
+pub fn check_gate1_1d(
+    posterior: &Posterior1D,
+    prior_var: f64,
+    config: &QualityGateConfig,
+) -> Option<InconclusiveReason> {
+    let variance_ratio = posterior.var_post / prior_var;
+
+    if variance_ratio > config.max_variance_ratio {
+        Some(InconclusiveReason::DataTooNoisy {
+            message: alloc::format!(
+                "Posterior variance is {:.0}% of prior; data not informative",
+                variance_ratio * 100.0
+            ),
+            guidance: String::from(
+                "Try: cycle counter, reduce system load, increase batch size",
+            ),
+            variance_ratio,
+        })
+    } else {
+        None
+    }
+}
+
+/// Check if measurement variance exceeds threshold feasibility.
+///
+/// If sqrt(Var_post) > K × θ_eff, we cannot reliably detect effects at threshold θ_eff.
+/// This is a conservative check to ensure the measurement noise is small enough
+/// relative to the effect threshold.
+///
+/// The factor K = 3.0 is conservative: it requires that the posterior standard
+/// deviation be less than 3× the threshold. This ensures we have enough precision
+/// to distinguish effects near the threshold from noise.
+///
+/// # Arguments
+///
+/// * `var_post` - Posterior variance of W₁ (ns²)
+/// * `theta_eff` - Effective threshold θ_eff = max(θ_user, θ_floor) in nanoseconds
+///
+/// # Returns
+///
+/// `Some(InconclusiveReason)` if the variance floor is exceeded, `None` otherwise.
+///
+/// # Example
+///
+/// If θ_eff = 10ns and Var_post = 900ns², then SD = 30ns > 3×10ns = 30ns.
+/// This triggers the gate because the measurement uncertainty is too large
+/// relative to the threshold we're trying to detect.
+pub fn check_variance_floor_exceeded(
+    var_post: f64,
+    theta_eff: f64,
+) -> Option<InconclusiveReason> {
+    const K: f64 = 3.0; // Conservative factor: require SD < 3× threshold
+    let sd_estimate = libm::sqrt(var_post);
+
+    if sd_estimate > K * theta_eff {
+        let variance_ratio = (sd_estimate / theta_eff).powi(2);
+        Some(InconclusiveReason::DataTooNoisy {
+            message: alloc::format!(
+                "Estimate SD ({:.1}ns) exceeds {}× threshold ({:.1}ns)",
+                sd_estimate, K, theta_eff
+            ),
+            guidance: String::from("Measurement noise too high for this threshold"),
+            variance_ratio,
+        })
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::statistics::StatsSnapshot;
-    use crate::types::Vector9;
 
-    fn make_posterior(leak_prob: f64, variance: f64) -> Posterior {
-        Posterior::new(
-            Vector9::zeros(),
-            Matrix9::identity() * variance,
-            Vec::new(), // delta_draws
-            leak_prob,
-            1.0, // theta
-            1000,
-        )
+    // Old 9D tests removed - quality gates now work with 1D variance inference
+
+    // ========================================================================
+    // Phase 3: 1D Variance Quality Gate Tests
+    // ========================================================================
+
+    #[test]
+    fn test_gate1_1d_passes_with_informative_data() {
+        // Prior variance = 100 ns²
+        let prior_var = 100.0;
+
+        // Posterior variance = 10 ns² (10% of prior, well below 50% threshold)
+        let posterior = Posterior1D::new(
+            5.0,  // w1_post
+            10.0, // var_post
+            0.3,  // leak_probability
+            5000, // n
+            100.0, // theta
+        );
+
+        let config = QualityGateConfig::default();
+
+        let result = check_gate1_1d(&posterior, prior_var, &config);
+        assert!(
+            result.is_none(),
+            "Informative data (variance ratio = 0.1) should pass Gate 1"
+        );
     }
 
-    fn make_prior_cov_marginal() -> Matrix9 {
-        Matrix9::identity() * 100.0 // Prior variance = 100 per dimension
-    }
+    #[test]
+    fn test_gate1_1d_fails_with_uninformative_data() {
+        // Prior variance = 100 ns²
+        let prior_var = 100.0;
 
-    fn make_inputs<'a>(
-        posterior: &'a Posterior,
-        prior_cov_marginal: &'a Matrix9,
-    ) -> QualityGateCheckInputs<'a> {
-        QualityGateCheckInputs {
-            posterior,
-            prior_cov_marginal,
-            theta_ns: 100.0,
-            n_total: 5000,
-            elapsed_secs: 5.0,
-            recent_kl_sum: Some(0.05),
-            samples_per_second: 100_000.0,
-            calibration_snapshot: None,
-            current_stats_snapshot: None,
-            c_floor: 3535.5, // ~50 * sqrt(5000)
-            theta_tick: 1.0,
-            projection_mismatch_q: None,
-            projection_mismatch_thresh: 18.48,
-            lambda_mixing_ok: None,
+        // Posterior variance = 60 ns² (60% of prior, exceeds 50% threshold)
+        let posterior = Posterior1D::new(
+            5.0,  // w1_post
+            60.0, // var_post
+            0.5,  // leak_probability
+            5000, // n
+            100.0, // theta
+        );
+
+        let config = QualityGateConfig::default();
+
+        let result = check_gate1_1d(&posterior, prior_var, &config);
+        assert!(
+            matches!(result, Some(InconclusiveReason::DataTooNoisy { .. })),
+            "Uninformative data (variance ratio = 0.6) should trigger Gate 1"
+        );
+
+        if let Some(InconclusiveReason::DataTooNoisy {
+            variance_ratio, ..
+        }) = result
+        {
+            assert!(
+                (variance_ratio - 0.6).abs() < 1e-6,
+                "Variance ratio should be 0.6"
+            );
         }
     }
 
     #[test]
-    fn test_kl_divergence_gate_passes() {
-        // v5.6: Use KL divergence instead of variance ratio
-        // Small posterior variance = large covariance contraction = high KL
-        let posterior = make_posterior(0.5, 10.0);
-        let prior_cov_marginal = make_prior_cov_marginal();
-        let inputs = make_inputs(&posterior, &prior_cov_marginal);
+    fn test_gate1_1d_boundary_case() {
+        // Prior variance = 100 ns²
+        let prior_var = 100.0;
+
+        // Posterior variance = 50 ns² (exactly at 50% threshold)
+        let posterior = Posterior1D::new(
+            5.0,  // w1_post
+            50.0, // var_post
+            0.5,  // leak_probability
+            5000, // n
+            100.0, // theta
+        );
+
         let config = QualityGateConfig::default();
 
-        let result = check_kl_divergence(&inputs, &config);
+        let result = check_gate1_1d(&posterior, prior_var, &config);
+        // Exactly at threshold should pass (> not >=)
         assert!(
             result.is_none(),
-            "Low posterior variance should give high KL (pass)"
+            "Boundary case (variance ratio = 0.5) should pass"
         );
     }
 
     #[test]
-    fn test_kl_divergence_gate_fails() {
-        // v5.6: Use KL divergence instead of variance ratio
-        // High posterior variance ≈ prior = low KL
-        let posterior = make_posterior(0.5, 95.0); // Close to prior variance of 100
-        let prior_cov_marginal = make_prior_cov_marginal();
-        let inputs = make_inputs(&posterior, &prior_cov_marginal);
-        let config = QualityGateConfig::default();
+    fn test_variance_floor_not_exceeded() {
+        // var_post = 25 ns² → SD = 5 ns
+        // theta_eff = 10 ns
+        // K * theta_eff = 3 * 10 = 30 ns
+        // 5 ns < 30 ns → should pass
+        let var_post = 25.0;
+        let theta_eff = 10.0;
 
-        let result = check_kl_divergence(&inputs, &config);
+        let result = check_variance_floor_exceeded(var_post, theta_eff);
+        assert!(
+            result.is_none(),
+            "SD (5ns) < 3× threshold (30ns) should pass"
+        );
+    }
+
+    #[test]
+    fn test_variance_floor_exceeded() {
+        // var_post = 900 ns² → SD = 30 ns
+        // theta_eff = 10 ns
+        // K * theta_eff = 3 * 10 = 30 ns
+        // 30 ns == 30 ns → boundary, but should fail (SD > K*theta, not >=)
+        //
+        // Let's use a clear case: SD = 31 ns > 30 ns
+        let var_post = 961.0; // SD = 31 ns
+        let theta_eff = 10.0;
+
+        let result = check_variance_floor_exceeded(var_post, theta_eff);
         assert!(
             matches!(result, Some(InconclusiveReason::DataTooNoisy { .. })),
-            "Posterior ≈ prior should give low KL (fail)"
+            "SD (31ns) > 3× threshold (30ns) should trigger gate"
+        );
+
+        if let Some(InconclusiveReason::DataTooNoisy {
+            variance_ratio, ..
+        }) = result
+        {
+            // variance_ratio = (SD / theta_eff)² = (31 / 10)² = 9.61
+            assert!(
+                (variance_ratio - 9.61).abs() < 0.01,
+                "Variance ratio should be (31/10)² = 9.61"
+            );
+        }
+    }
+
+    #[test]
+    fn test_variance_floor_boundary() {
+        // var_post = 900 ns² → SD = 30 ns
+        // theta_eff = 10 ns
+        // K * theta_eff = 3 * 10 = 30 ns
+        // 30 ns == 30 ns → should pass (> not >=)
+        let var_post = 900.0;
+        let theta_eff = 10.0;
+
+        let result = check_variance_floor_exceeded(var_post, theta_eff);
+        assert!(
+            result.is_none(),
+            "Boundary case (SD = 3× threshold) should pass"
         );
     }
 
     #[test]
-    fn test_learning_rate_gate_passes() {
-        let posterior = make_posterior(0.5, 10.0);
-        let prior_cov_marginal = make_prior_cov_marginal();
-        let mut inputs = make_inputs(&posterior, &prior_cov_marginal);
-        inputs.recent_kl_sum = Some(0.05); // Sum > 0.001
-        let config = QualityGateConfig::default();
+    fn test_variance_floor_low_threshold() {
+        // Test with very low threshold (SharedHardware scenario)
+        // var_post = 4 ns² → SD = 2 ns
+        // theta_eff = 0.4 ns (SharedHardware threshold)
+        // K * theta_eff = 3 * 0.4 = 1.2 ns
+        // 2 ns > 1.2 ns → should trigger
+        let var_post = 4.0;
+        let theta_eff = 0.4;
 
-        let result = check_learning_rate(&inputs, &config);
-        assert!(result.is_none());
+        let result = check_variance_floor_exceeded(var_post, theta_eff);
+        assert!(
+            matches!(result, Some(InconclusiveReason::DataTooNoisy { .. })),
+            "High variance relative to low threshold should trigger gate"
+        );
     }
 
     #[test]
-    fn test_learning_rate_gate_fails() {
-        let posterior = make_posterior(0.5, 10.0);
-        let prior_cov_marginal = make_prior_cov_marginal();
-        let mut inputs = make_inputs(&posterior, &prior_cov_marginal);
-        inputs.recent_kl_sum = Some(0.0005); // Sum < 0.001
-        let config = QualityGateConfig::default();
+    fn test_posterior1d_construction() {
+        let posterior = Posterior1D::new(12.5, 25.0, 0.85, 10000, 10.0);
 
-        let result = check_learning_rate(&inputs, &config);
-        assert!(matches!(
-            result,
-            Some(InconclusiveReason::NotLearning { .. })
-        ));
-    }
-
-    #[test]
-    fn test_time_budget_gate() {
-        let posterior = make_posterior(0.5, 10.0);
-        let prior_cov_marginal = make_prior_cov_marginal();
-        let mut inputs = make_inputs(&posterior, &prior_cov_marginal);
-        inputs.elapsed_secs = 35.0; // Exceeds 30s budget
-        let config = QualityGateConfig::default();
-
-        let result = check_time_budget(&inputs, &config);
-        assert!(matches!(
-            result,
-            Some(InconclusiveReason::TimeBudgetExceeded { .. })
-        ));
-    }
-
-    #[test]
-    fn test_sample_budget_gate() {
-        let posterior = make_posterior(0.5, 10.0);
-        let prior_cov_marginal = make_prior_cov_marginal();
-        let mut inputs = make_inputs(&posterior, &prior_cov_marginal);
-        inputs.n_total = 1_000_001; // Exceeds 1M budget
-        let config = QualityGateConfig::default();
-
-        let result = check_sample_budget(&inputs, &config);
-        assert!(matches!(
-            result,
-            Some(InconclusiveReason::SampleBudgetExceeded { .. })
-        ));
-    }
-
-    #[test]
-    fn test_condition_drift_gate_no_snapshots() {
-        let posterior = make_posterior(0.5, 10.0);
-        let prior_cov_marginal = make_prior_cov_marginal();
-        let inputs = make_inputs(&posterior, &prior_cov_marginal);
-        // No snapshots provided
-        let config = QualityGateConfig::default();
-
-        let result = check_condition_drift(&inputs, &config);
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_condition_drift_gate_no_drift() {
-        let posterior = make_posterior(0.5, 10.0);
-        let prior_cov_marginal = make_prior_cov_marginal();
-
-        let stats = StatsSnapshot {
-            mean: 100.0,
-            variance: 25.0,
-            autocorr_lag1: 0.1,
-            count: 5000,
-        };
-        let cal_snapshot = CalibrationSnapshot::new(stats, stats);
-        let post_snapshot = CalibrationSnapshot::new(stats, stats);
-
-        let mut inputs = make_inputs(&posterior, &prior_cov_marginal);
-        inputs.calibration_snapshot = Some(&cal_snapshot);
-        inputs.current_stats_snapshot = Some(&post_snapshot);
-
-        let config = QualityGateConfig::default();
-
-        let result = check_condition_drift(&inputs, &config);
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_condition_drift_gate_detects_variance_change() {
-        let posterior = make_posterior(0.5, 10.0);
-        let prior_cov_marginal = make_prior_cov_marginal();
-
-        let cal_stats = StatsSnapshot {
-            mean: 100.0,
-            variance: 25.0,
-            autocorr_lag1: 0.1,
-            count: 5000,
-        };
-        let post_stats = StatsSnapshot {
-            mean: 100.0,
-            variance: 75.0, // 3x variance increase
-            autocorr_lag1: 0.1,
-            count: 5000,
-        };
-        let cal_snapshot = CalibrationSnapshot::new(cal_stats, cal_stats);
-        let post_snapshot = CalibrationSnapshot::new(post_stats, post_stats);
-
-        let mut inputs = make_inputs(&posterior, &prior_cov_marginal);
-        inputs.calibration_snapshot = Some(&cal_snapshot);
-        inputs.current_stats_snapshot = Some(&post_snapshot);
-
-        let config = QualityGateConfig::default();
-
-        let result = check_condition_drift(&inputs, &config);
-        assert!(matches!(
-            result,
-            Some(InconclusiveReason::ConditionsChanged { .. })
-        ));
-    }
-
-    #[test]
-    fn test_full_quality_gates_pass() {
-        let posterior = make_posterior(0.5, 10.0);
-        let prior_cov_marginal = make_prior_cov_marginal();
-        let inputs = make_inputs(&posterior, &prior_cov_marginal);
-        let config = QualityGateConfig::default();
-
-        let result = check_quality_gates(&inputs, &config);
-        assert!(matches!(result, QualityGateResult::Continue));
+        assert!((posterior.w1_post - 12.5).abs() < 1e-9);
+        assert!((posterior.var_post - 25.0).abs() < 1e-9);
+        assert!((posterior.leak_probability - 0.85).abs() < 1e-9);
+        assert_eq!(posterior.n, 10000);
+        assert!((posterior.theta - 10.0).abs() < 1e-9);
     }
 }

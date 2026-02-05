@@ -18,14 +18,17 @@ use crate::adaptive::{
     AdaptiveState, Calibration, InconclusiveReason, Posterior, QualityGateCheckInputs,
     QualityGateConfig, QualityGateResult,
 };
-use crate::analysis::bayes::compute_bayes_gibbs;
+use crate::analysis::bayes::{compute_bayes_1d, BayesW1Result};
 use crate::constants::{
     DEFAULT_BATCH_SIZE, DEFAULT_FAIL_THRESHOLD, DEFAULT_MAX_SAMPLES, DEFAULT_PASS_THRESHOLD,
     DEFAULT_SEED,
 };
 use crate::measurement::winsorize_f64;
-use crate::statistics::{compute_deciles_inplace, compute_midquantile_deciles};
+use crate::statistics::compute_w1_debiased;
 use tacet_core::adaptive::{check_quality_gates, compute_achievable_at_max, is_threshold_elevated};
+
+use rand::SeedableRng;
+use rand_xoshiro::Xoshiro256PlusPlus;
 
 /// Configuration for the adaptive sampling loop.
 #[derive(Debug, Clone)]
@@ -280,7 +283,6 @@ pub fn run_adaptive(
     let current_stats = state.get_stats_snapshot();
     let gate_inputs = QualityGateCheckInputs {
         posterior: &posterior,
-        prior_cov_marginal: &calibration.prior_cov_marginal,
         theta_ns: config.theta_ns,
         n_total: state.n_total(),
         elapsed_secs: state.elapsed().as_secs_f64(),
@@ -375,7 +377,7 @@ pub fn run_adaptive(
 
 /// Compute posterior distribution from current state.
 ///
-/// Uses scaled covariance: Sigma_n = Sigma_rate / n
+/// Uses scaled variance: var_n = var_rate / n (v6.0 1D inference)
 fn compute_posterior_from_state(
     state: &AdaptiveState,
     calibration: &Calibration,
@@ -392,52 +394,38 @@ fn compute_posterior_from_state(
     let mut sample_ns = state.sample_ns(ns_per_tick);
 
     // Apply outlier winsorization (spec §4.4): cap extreme values at percentile threshold
-    // This MUST happen before quantile computation
+    // This MUST happen before W₁ computation
     let _ = winsorize_f64(&mut baseline_ns, &mut sample_ns, config.outlier_percentile);
 
-    // Compute quantile differences: sample - baseline
-    // Positive values mean sample is slower (timing leak detected)
-    // Negative values mean sample is faster (no leak, or unusual)
-    let observed_diff = if calibration.discrete_mode {
-        let q_baseline = compute_midquantile_deciles(&baseline_ns);
-        let q_sample = compute_midquantile_deciles(&sample_ns);
-        q_sample - q_baseline
-    } else {
-        let mut baseline_sorted = baseline_ns;
-        let mut sample_sorted = sample_ns;
-        let q_baseline = compute_deciles_inplace(&mut baseline_sorted);
-        let q_sample = compute_deciles_inplace(&mut sample_sorted);
-        q_sample - q_baseline
-    };
+    // Compute debiased W₁ distance (v6.0)
+    // Positive values mean sample distribution is shifted right (timing leak detected)
+    // Negative values can occur from debiasing but are handled by Bayesian inference
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(config.seed);
+    let w1_obs = compute_w1_debiased(&baseline_ns, &sample_ns, &mut rng);
 
-    // Scale covariance: Sigma_n = Sigma_rate / n
-    let sigma_n = calibration.sigma_rate / (n as f64);
+    // Scale variance: var_n = var_rate / n (v6.0)
+    let var_n = calibration.var_rate / (n as f64);
 
-    // Run 9D Bayesian inference with Gibbs sampler (v5.4)
+    // Run 1D Bayesian inference with Gibbs sampler (v6.0)
     // IMPORTANT: Use theta_eff (effective threshold accounting for measurement floor),
     // not theta_ns (raw user threshold). The prior was calibrated for theta_eff.
-    let bayes_result = compute_bayes_gibbs(
-        &observed_diff,
-        &sigma_n,
+    let bayes_result: BayesW1Result = compute_bayes_1d(
+        w1_obs,
+        var_n,
         calibration.sigma_t,
-        &calibration.l_r,
         calibration.theta_eff,
-        Some(config.seed),
+        config.seed,
     );
 
-    Some(Posterior::new_with_gibbs(
-        bayes_result.delta_post,
-        bayes_result.lambda_post,
-        bayes_result.delta_draws.clone(),
+    // Note: v6.0 uses simplified 1D posterior without kappa/lambda diagnostics
+    // We can still populate them from the BayesW1Result if needed for backward compatibility
+    Some(Posterior::new(
+        bayes_result.w1_post,
+        bayes_result.var_post,
+        bayes_result.w1_draws,
         bayes_result.leak_probability,
         calibration.theta_eff,
         n,
-        bayes_result.lambda_mean,
-        bayes_result.lambda_mixing_ok,
-        bayes_result.kappa_mean,
-        bayes_result.kappa_cv,
-        bayes_result.kappa_ess,
-        bayes_result.kappa_mixing_ok,
     ))
 }
 
@@ -483,7 +471,6 @@ pub fn adaptive_step(
     let current_stats = state.get_stats_snapshot();
     let gate_inputs = QualityGateCheckInputs {
         posterior: &posterior,
-        prior_cov_marginal: &calibration.prior_cov_marginal,
         theta_ns: config.theta_ns,
         n_total: state.n_total(),
         elapsed_secs: state.elapsed().as_secs_f64(),
@@ -573,7 +560,6 @@ pub fn adaptive_step(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Matrix9, Vector9};
 
     fn make_calibration() -> Calibration {
         use crate::adaptive::CalibrationSnapshot;
@@ -588,32 +574,28 @@ mod tests {
         };
         let calibration_snapshot = CalibrationSnapshot::new(default_stats, default_stats);
 
-        // v5.4+ t-prior fields
-        let l_r = Matrix9::identity(); // Identity for tests
-        let prior_cov_marginal = Matrix9::identity() * 20000.0; // 2 * sigma_t^2 for nu=4
+        // v6.0 1D fields
         Calibration {
-            sigma_rate: Matrix9::identity() * 1000.0,
+            var_rate: 1000.0, // Variance rate for 1D
             block_length: 10,
             iact: 1.0,
             iact_method: tacet_core::types::IactMethod::PolitisWhite,
-            sigma_t: 100.0,     // t-prior scale
-            l_r,                // Cholesky of R
-            prior_cov_marginal, // marginal prior cov
-            timer_resolution_ns: 1.0,
-            samples_per_second: 100_000.0,
-            discrete_mode: false,
+            sigma_t: 100.0,   // t-prior scale
             theta_ns: 100.0,
             calibration_samples: 5000,
+            discrete_mode: false,
             mde_ns: 5.0,
-            preflight_result: tacet_core::preflight::PreflightResult::new(),
             calibration_snapshot,
+            timer_resolution_ns: 1.0,
+            samples_per_second: 100_000.0,
             c_floor: 3535.5, // ~50 * sqrt(5000) - conservative floor-rate constant
-            projection_mismatch_thresh: 18.48, // chi-squared(7, 0.99) fallback
-            theta_floor_initial: 50.0, // c_floor / sqrt(5000) = 50
-            theta_eff: 100.0, // max(theta_ns, theta_floor_initial)
+            projection_mismatch_thresh: 18.48, // fallback threshold
             theta_tick: 1.0, // Timer resolution
+            theta_eff: 100.0, // max(theta_ns, theta_floor_initial)
+            theta_floor_initial: 50.0, // c_floor / sqrt(5000) = 50
             rng_seed: 42,    // Test seed
             batch_k: 1,      // No batching in tests
+            preflight_result: tacet_core::preflight::PreflightResult::new(),
         }
     }
 
@@ -635,12 +617,12 @@ mod tests {
     #[test]
     fn test_adaptive_outcome_accessors() {
         let posterior = Posterior::new(
-            Vector9::zeros(),    // delta_post (dummy 9D)
-            Matrix9::identity(), // lambda_post (dummy 9D)
-            Vec::new(),          // delta_draws
-            0.95,                // leak_probability
-            100.0,               // theta
-            1000,                // n
+            0.0,        // w1_post (scalar W₁ mean)
+            1.0,        // var_post (scalar variance)
+            Vec::new(), // w1_draws
+            0.95,       // leak_probability
+            100.0,      // theta
+            1000,       // n
         );
 
         let outcome = AdaptiveOutcome::LeakDetected {

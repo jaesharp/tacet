@@ -8,4 +8,5 @@ mod json;
 mod terminal;
 
 pub use json::{to_json, to_json_pretty};
+pub use tacet_core::histogram::{render_histogram, render_histogram_with_w1, HistogramConfig};
 pub use terminal::{format_debug_summary, format_diagnostics_section, format_outcome, is_verbose};

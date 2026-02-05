@@ -9,8 +9,9 @@
 
 // Re-export analysis functions from core
 pub use tacet_core::analysis::{
-    analytical_mde, bayes, compute_bayes_gibbs, compute_effect_estimate, compute_max_effect_ci,
-    effect, estimate_mde, mde, BayesResult, MaxEffectCI, MdeEstimate,
+    analytical_mde, bayes, compute_bayes_1d, compute_effect_estimate,
+    compute_effect_estimate_analytical, compute_tail_diagnostics, effect, estimate_mde, mde,
+    BayesW1Result, MdeEstimate,
 };
 
 // Keep diagnostics locally (depends on main crate types)

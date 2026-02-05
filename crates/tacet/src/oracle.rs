@@ -23,7 +23,6 @@ use crate::adaptive::{
     calibrate, run_adaptive, AdaptiveConfig, AdaptiveOutcome, AdaptiveState, Calibration,
     CalibrationConfig, InconclusiveReason as AdaptiveInconclusiveReason,
 };
-use crate::analysis::compute_max_effect_ci;
 use crate::config::Config;
 use crate::constants::DEFAULT_SEED;
 use crate::helpers::InputPair;
@@ -1521,16 +1520,13 @@ impl TimingOracle {
                 );
             }
 
-            // Compute max effect CI from 9D posterior
-            let max_effect_ci = compute_max_effect_ci(
-                &posterior.delta_post,
-                &posterior.lambda_post,
-                self.config.measurement_seed.unwrap_or(DEFAULT_SEED),
-            );
+            // Compute max effect from 1D posterior
+            use tacet_core::analysis::compute_effect_estimate;
+            let effect_estimate = compute_effect_estimate(&posterior.w1_draws);
 
             // Check stopping conditions
             // EffectDetected: CI.lower > 1.1 * theta_floor
-            if max_effect_ci.ci.0 > 1.1 * theta_floor {
+            if effect_estimate.credible_interval_ns.0 > 1.1 * theta_floor {
                 return self.build_research_outcome(
                     ResearchStatus::EffectDetected,
                     &adaptive_state,
@@ -1542,7 +1538,7 @@ impl TimingOracle {
             }
 
             // NoEffectDetected: CI.upper < 0.9 * theta_floor
-            if max_effect_ci.ci.1 < 0.9 * theta_floor {
+            if effect_estimate.credible_interval_ns.1 < 0.9 * theta_floor {
                 return self.build_research_outcome(
                     ResearchStatus::NoEffectDetected,
                     &adaptive_state,
@@ -1577,13 +1573,10 @@ impl TimingOracle {
 
         // Compute max effect CI from 9D posterior
         let (max_effect_ns, max_effect_ci, detectable) = if let Some(p) = posterior {
-            let ci = compute_max_effect_ci(
-                &p.delta_post,
-                &p.lambda_post,
-                self.config.measurement_seed.unwrap_or(DEFAULT_SEED),
-            );
-            let detectable = ci.ci.0 > theta_floor;
-            (ci.mean, ci.ci, detectable)
+            use tacet_core::analysis::compute_effect_estimate;
+            let effect = compute_effect_estimate(&p.w1_draws);
+            let detectable = effect.credible_interval_ns.0 > theta_floor;
+            (effect.max_effect_ns, effect.credible_interval_ns, detectable)
         } else {
             (0.0, (0.0, 0.0), false)
         };
@@ -1731,16 +1724,22 @@ fn build_effect_estimate(posterior: &Posterior, _theta_ns: f64, batch_k: u32) ->
             effect.credible_interval_ns.0 / k,
             effect.credible_interval_ns.1 / k,
         ),
-        top_quantiles: effect
-            .top_quantiles
-            .into_iter()
-            .map(|tq| crate::result::TopQuantile {
-                quantile_p: tq.quantile_p,
-                mean_ns: tq.mean_ns / k,
-                ci95_ns: (tq.ci95_ns.0 / k, tq.ci95_ns.1 / k),
-                exceed_prob: tq.exceed_prob,
-            })
-            .collect(),
+        tail_diagnostics: effect.tail_diagnostics.map(|tail| {
+            use crate::result::{QuantileShifts, TailDiagnostics};
+            TailDiagnostics {
+                shift_ns: tail.shift_ns / k,
+                tail_ns: tail.tail_ns / k,
+                tail_share: tail.tail_share, // Ratio stays the same
+                tail_slow_share: tail.tail_slow_share, // Ratio stays the same
+                quantile_shifts: QuantileShifts {
+                    p50_ns: tail.quantile_shifts.p50_ns / k,
+                    p90_ns: tail.quantile_shifts.p90_ns / k,
+                    p95_ns: tail.quantile_shifts.p95_ns / k,
+                    p99_ns: tail.quantile_shifts.p99_ns / k,
+                },
+                pattern_label: tail.pattern_label, // Pattern stays the same
+            }
+        }),
     }
 }
 

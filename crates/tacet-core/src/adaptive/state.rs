@@ -269,13 +269,12 @@ impl Default for AdaptiveState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Matrix9, Vector9};
 
     fn make_test_posterior(leak_prob: f64, n: usize) -> Posterior {
         Posterior::new(
-            Vector9::zeros(),
-            Matrix9::identity(),
-            Vec::new(), // delta_draws
+            0.0,        // w1_post: f64
+            1.0,        // var_post: f64
+            Vec::new(), // w1_draws: Vec<f64>
             leak_prob,
             100.0, // theta
             n,

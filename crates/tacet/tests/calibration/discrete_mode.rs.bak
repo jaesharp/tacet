@@ -124,6 +124,64 @@ fn m_out_of_n_resample_size_formula() {
     );
 }
 
+// =============================================================================
+// UNIT TESTS: Mid-Distribution Quantiles
+// =============================================================================
+
+#[test]
+fn midquantile_handles_ties() {
+    use tacet::statistics::compute_midquantile_deciles;
+
+    // Data with 90% ties at value 1.0, 10% at value 2.0
+    let mut data: Vec<f64> = vec![1.0; 90];
+    data.extend(vec![2.0; 10]);
+
+    let quantiles = compute_midquantile_deciles(&data);
+
+    // With 90 values at 1.0 and 10 values at 2.0:
+    // 10th percentile should be 1.0 (falls within first 90%)
+    // 90th percentile should be 2.0 (falls within last 10%)
+    assert_eq!(quantiles[0], 1.0, "10th percentile should be 1.0");
+    assert_eq!(quantiles[8], 2.0, "90th percentile should be 2.0");
+}
+
+#[test]
+fn midquantile_symmetric_ties() {
+    use tacet::statistics::compute_midquantile_deciles;
+
+    // Data with 50% at 1.0, 50% at 2.0
+    let mut data: Vec<f64> = vec![1.0; 50];
+    data.extend(vec![2.0; 50]);
+
+    let quantiles = compute_midquantile_deciles(&data);
+
+    // With 50/50 split at values 1.0 and 2.0:
+    // The mid-CDF approach assigns F_mid(1.0) = 0.25 (center of first group)
+    // and F_mid(2.0) = 0.75 (center of second group)
+    //
+    // So deciles 10, 20 should return 1.0 (p < 0.25 maps to first value)
+    // and deciles 30, 40, 50, 60, 70, 80, 90 should return 2.0 (p > 0.25)
+    //
+    // Just verify the extreme deciles are correct
+    assert_eq!(quantiles[0], 1.0, "10th percentile should be 1.0");
+    assert_eq!(quantiles[8], 2.0, "90th percentile should be 2.0");
+
+    // All quantiles should be either 1.0 or 2.0 (the only values in the data)
+    for (i, q) in quantiles.iter().enumerate() {
+        assert!(
+            *q == 1.0 || *q == 2.0,
+            "Quantile {} should be 1.0 or 2.0, got {}",
+            i,
+            q
+        );
+    }
+}
+
+// =============================================================================
+// INTEGRATION TESTS: Discrete Mode FPR Calibration
+// =============================================================================
+
+/// Verify that discrete mode FPR is bounded at the configured alpha level.
 ///
 /// This test forces discrete mode on using the `force_discrete_mode` config
 /// option, then runs FPR calibration to ensure false positive rate is bounded.

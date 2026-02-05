@@ -8,13 +8,8 @@
 
 pub mod bayes;
 pub mod effect;
-pub mod gibbs;
 pub mod mde;
 
-pub use bayes::{compute_bayes_gibbs, compute_max_effect_ci, BayesResult, MaxEffectCI};
-pub use effect::{
-    compute_effect_estimate, compute_effect_estimate_analytical, compute_top_quantiles,
-    regularize_covariance,
-};
-pub use gibbs::{run_gibbs_inference, GibbsResult, NU, N_BURN, N_GIBBS, N_KEEP};
+pub use bayes::{compute_bayes_1d, BayesW1Result};
+pub use effect::{compute_effect_estimate, compute_effect_estimate_analytical, compute_tail_diagnostics};
 pub use mde::{analytical_mde, estimate_mde, MdeEstimate};

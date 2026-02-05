@@ -1,252 +1,203 @@
 //! Effect estimation from posterior samples (spec §5.2).
 //!
-//! This module computes effect estimates from the 9D posterior over quantile
-//! differences. The primary metric is max_k |δ_k| - the maximum absolute
-//! effect across all deciles.
+//! This module computes effect estimates using the W₁ Wasserstein distance
+//! decomposed into shift and tail components.
 //!
 //! ## Effect Reporting (spec §5.2)
 //!
-//! - `max_effect_ns`: Posterior mean of max_k |δ_k|
-//! - `credible_interval_ns`: 95% CI for max|δ|
-//! - `top_quantiles`: Top 2-3 quantiles by exceedance probability
+//! - W₁ Wasserstein distance between baseline and sample distributions
+//! - Decomposition: W₁ ≈ shift + tail
+//! - Quantile-level diagnostics (p50/p90/p95/p99)
+//! - Pattern classification (uniform shift, tail effect, mixed, negligible)
 
 extern crate alloc;
 
 use alloc::vec::Vec;
 
-use crate::constants::DECILES;
-use crate::math;
-use crate::result::{EffectEstimate, TopQuantile};
-use crate::types::{Matrix9, Vector9};
+use crate::result::{EffectEstimate, EffectPattern, QuantileShifts, TailDiagnostics};
 
-/// Per-quantile statistics: (index, quantile_p, mean_ns, ci95_ns, exceed_prob).
-type QuantileStats = (usize, f64, f64, (f64, f64), f64);
-
-/// Compute effect estimate from delta draws (spec §5.2).
+/// Compute effect estimate from W₁ posterior samples (spec §5.2).
 ///
-/// Takes posterior samples of the 9D effect vector δ and computes:
-/// - max_effect_ns: posterior mean of max_k |δ_k|
-/// - credible_interval_ns: 95% CI for max|δ|
-/// - top_quantiles: top 2-3 quantiles by exceedance probability
+/// Takes posterior samples of W₁ (1D Wasserstein distance) and computes:
+/// - max_effect_ns: posterior mean of W₁
+/// - credible_interval_ns: 95% CI for W₁
+/// - tail_diagnostics: None (not computed here)
 ///
 /// # Arguments
 ///
-/// * `delta_draws` - Posterior samples of δ ∈ ℝ⁹
-/// * `theta` - Threshold for exceedance probability computation
+/// * `w1_draws` - Posterior samples of W₁
 ///
 /// # Returns
 ///
-/// An `EffectEstimate` with max effect and top quantiles.
-pub fn compute_effect_estimate(delta_draws: &[Vector9], theta: f64) -> EffectEstimate {
-    if delta_draws.is_empty() {
+/// An `EffectEstimate` with W₁ effect and no tail diagnostics.
+pub fn compute_effect_estimate(w1_draws: &[f64]) -> EffectEstimate {
+    if w1_draws.is_empty() {
         return EffectEstimate::default();
     }
 
-    let n = delta_draws.len();
+    let n = w1_draws.len();
 
-    // Compute max|δ| for each draw
-    let mut max_effects: Vec<f64> = Vec::with_capacity(n);
-    for delta in delta_draws {
-        let max_abs = delta.iter().map(|x| x.abs()).fold(0.0_f64, f64::max);
-        max_effects.push(max_abs);
-    }
-
-    // Posterior mean of max|δ|
-    let max_effect_ns = max_effects.iter().sum::<f64>() / n as f64;
+    // Posterior mean of W₁
+    let max_effect_ns = w1_draws.iter().sum::<f64>() / n as f64;
 
     // 95% credible interval (2.5th and 97.5th percentiles)
-    max_effects.sort_by(|a, b| a.total_cmp(b));
+    let mut sorted = w1_draws.to_vec();
+    sorted.sort_by(|a, b| a.total_cmp(b));
     let lo_idx = ((n as f64 * 0.025).round() as usize).min(n - 1);
     let hi_idx = ((n as f64 * 0.975).round() as usize).min(n - 1);
-    let credible_interval_ns = (max_effects[lo_idx], max_effects[hi_idx]);
-
-    // Compute top quantiles by exceedance probability
-    let top_quantiles = compute_top_quantiles(delta_draws, theta);
+    let credible_interval_ns = (sorted[lo_idx], sorted[hi_idx]);
 
     EffectEstimate {
         max_effect_ns,
         credible_interval_ns,
-        top_quantiles,
+        tail_diagnostics: None,
     }
 }
 
-/// Compute top 2-3 quantiles by exceedance probability.
-///
-/// For each quantile k, computes:
-/// - mean_ns: posterior mean δ_k
-/// - ci95_ns: 95% marginal CI for δ_k
-/// - exceed_prob: P(|δ_k| > θ | data)
-///
-/// Returns the top quantiles (up to 3) with exceed_prob > 0.5.
-pub fn compute_top_quantiles(delta_draws: &[Vector9], theta: f64) -> Vec<TopQuantile> {
-    if delta_draws.is_empty() {
-        return Vec::new();
-    }
-
-    let n = delta_draws.len();
-
-    // Compute per-quantile statistics
-    let mut quantile_stats: Vec<QuantileStats> = Vec::with_capacity(9);
-
-    for k in 0..9 {
-        // Extract draws for quantile k
-        let mut values: Vec<f64> = delta_draws.iter().map(|d| d[k]).collect();
-
-        // Mean
-        let mean = values.iter().sum::<f64>() / n as f64;
-
-        // 95% CI
-        values.sort_by(|a, b| a.total_cmp(b));
-        let lo_idx = ((n as f64 * 0.025).round() as usize).min(n - 1);
-        let hi_idx = ((n as f64 * 0.975).round() as usize).min(n - 1);
-        let ci = (values[lo_idx], values[hi_idx]);
-
-        // Exceedance probability: P(|δ_k| > θ | data)
-        let exceed_count = delta_draws.iter().filter(|d| d[k].abs() > theta).count();
-        let exceed_prob = exceed_count as f64 / n as f64;
-
-        quantile_stats.push((k, DECILES[k], mean, ci, exceed_prob));
-    }
-
-    // Sort by exceedance probability (descending)
-    quantile_stats.sort_by(|a, b| b.4.total_cmp(&a.4));
-
-    // Take top 2-3 with exceed_prob > 0.5
-    quantile_stats
-        .into_iter()
-        .filter(|(_, _, _, _, exceed_prob)| *exceed_prob > 0.5)
-        .take(3)
-        .map(
-            |(_, quantile_p, mean_ns, ci95_ns, exceed_prob)| TopQuantile {
-                quantile_p,
-                mean_ns,
-                ci95_ns,
-                exceed_prob,
-            },
-        )
-        .collect()
-}
-
-/// Compute effect estimate from posterior mean and covariance (analytical).
+/// Compute effect estimate from posterior mean and variance (analytical).
 ///
 /// This is a faster alternative to `compute_effect_estimate` when only the
-/// posterior mean and covariance are available (no draws).
+/// posterior mean and variance are available (no draws).
 ///
 /// # Arguments
 ///
-/// * `delta_post` - Posterior mean δ_post
-/// * `lambda_post` - Posterior covariance Λ_post
-/// * `theta` - Threshold for exceedance probability
+/// * `w1_post` - Posterior mean of W₁
+/// * `var_post` - Posterior variance of W₁
+/// * `_theta` - Threshold for exceedance probability (unused in 1D case)
 ///
 /// # Returns
 ///
-/// An `EffectEstimate` with approximate max effect (uses mean of |δ_post|).
+/// An `EffectEstimate` with approximate effect using mean and SE.
 pub fn compute_effect_estimate_analytical(
-    delta_post: &Vector9,
-    lambda_post: &Matrix9,
-    theta: f64,
+    w1_post: f64,
+    var_post: f64,
+    _theta: f64,
 ) -> EffectEstimate {
-    // Max absolute effect from posterior mean
-    let max_effect_ns = delta_post.iter().map(|x| x.abs()).fold(0.0_f64, f64::max);
+    use crate::math::sqrt;
 
-    // Approximate CI using marginal variances
-    // This is a rough approximation - the true CI requires sampling
-    let max_k = delta_post
-        .iter()
-        .enumerate()
-        .max_by(|(_, a), (_, b)| a.abs().total_cmp(&b.abs()))
-        .map(|(k, _)| k)
-        .unwrap_or(0);
+    // Effect is simply |W₁|
+    let max_effect_ns = w1_post.abs();
 
-    let se = math::sqrt(lambda_post[(max_k, max_k)].max(1e-12));
+    // Approximate CI using marginal variance
+    let se = sqrt(var_post.max(1e-12));
     let ci_low = (max_effect_ns - 1.96 * se).max(0.0);
     let ci_high = max_effect_ns + 1.96 * se;
 
-    // Compute top quantiles analytically
-    let top_quantiles = compute_top_quantiles_analytical(delta_post, lambda_post, theta);
-
-    EffectEstimate {
-        max_effect_ns,
-        credible_interval_ns: (ci_low, ci_high),
-        top_quantiles,
-    }
+    EffectEstimate::new(max_effect_ns, (ci_low, ci_high))
 }
 
-/// Compute top quantiles analytically from posterior mean and covariance.
-fn compute_top_quantiles_analytical(
-    delta_post: &Vector9,
-    lambda_post: &Matrix9,
-    theta: f64,
-) -> Vec<TopQuantile> {
-    let mut quantile_stats: Vec<QuantileStats> = Vec::with_capacity(9);
-
-    for k in 0..9 {
-        let mean = delta_post[k];
-        let se = math::sqrt(lambda_post[(k, k)].max(1e-12));
-
-        // 95% CI
-        let ci = (mean - 1.96 * se, mean + 1.96 * se);
-
-        // Exceedance probability: P(|δ_k| > θ)
-        // For Gaussian N(μ, σ²): P(|X| > θ) = 1 - Φ((θ-μ)/σ) + Φ((-θ-μ)/σ)
-        let exceed_prob = compute_exceedance_prob(mean, se, theta);
-
-        quantile_stats.push((k, DECILES[k], mean, ci, exceed_prob));
-    }
-
-    // Sort by exceedance probability (descending)
-    quantile_stats.sort_by(|a, b| b.4.total_cmp(&a.4));
-
-    // Take top 2-3 with exceed_prob > 0.5
-    quantile_stats
-        .into_iter()
-        .filter(|(_, _, _, _, exceed_prob)| *exceed_prob > 0.5)
-        .take(3)
-        .map(
-            |(_, quantile_p, mean_ns, ci95_ns, exceed_prob)| TopQuantile {
-                quantile_p,
-                mean_ns,
-                ci95_ns,
-                exceed_prob,
+/// Compute tail diagnostics from baseline and sample distributions.
+///
+/// Decomposes W₁ ≈ shift + tail and computes pattern labels.
+///
+/// # Algorithm
+///
+/// 1. Sort both distributions
+/// 2. Compute rank-matched differences: dᵢ = baseline[i] - sample[i]
+/// 3. shift = median(diffs)
+/// 4. tail = mean(|dᵢ - shift|)
+/// 5. tail_share = tail / (|shift| + tail)
+/// 6. tail_slow_share = % of positive tail mass (baseline slower)
+/// 7. Compute quantile shifts (p50/p90/p95/p99)
+/// 8. Pattern labeling based on tail_share
+pub fn compute_tail_diagnostics(
+    baseline: &[f64],
+    sample: &[f64],
+    w1_deb: f64,
+) -> TailDiagnostics {
+    // Handle edge cases
+    if baseline.is_empty() || sample.is_empty() || baseline.len() != sample.len() {
+        return TailDiagnostics {
+            shift_ns: 0.0,
+            tail_ns: 0.0,
+            tail_share: 0.0,
+            tail_slow_share: 0.5,
+            quantile_shifts: QuantileShifts {
+                p50_ns: 0.0,
+                p90_ns: 0.0,
+                p95_ns: 0.0,
+                p99_ns: 0.0,
             },
-        )
-        .collect()
-}
-
-/// Compute P(|X| > θ) for X ~ N(μ, σ²).
-fn compute_exceedance_prob(mu: f64, sigma: f64, theta: f64) -> f64 {
-    if sigma < 1e-12 {
-        // Degenerate case
-        return if mu.abs() > theta { 1.0 } else { 0.0 };
+            pattern_label: EffectPattern::Negligible,
+        };
     }
-    let phi_upper = math::normal_cdf((theta - mu) / sigma);
-    let phi_lower = math::normal_cdf((-theta - mu) / sigma);
-    1.0 - (phi_upper - phi_lower)
-}
 
-/// Apply variance floor regularization for numerical stability (spec §3.3.2).
-///
-/// When some quantiles have zero or near-zero variance (common in discrete mode
-/// with ties), the covariance matrix becomes ill-conditioned.
-///
-/// Formula (spec §3.3.2):
-///   σ²ᵢ ← max(σ²ᵢ, 0.01 × σ̄²) + ε
-/// where σ̄² = tr(Σ)/9 and ε = 10⁻¹⁰ + σ̄² × 10⁻⁸
-pub fn regularize_covariance(sigma: &Matrix9) -> Matrix9 {
-    let trace: f64 = (0..9).map(|i| sigma[(i, i)]).sum();
-    let mean_var = trace / 9.0;
+    let n = baseline.len();
 
-    // Use 1% of mean variance as floor, with absolute minimum of 1e-10
-    let min_var = (0.01 * mean_var).max(1e-10);
+    // 1. Sort both distributions
+    let mut baseline_sorted = baseline.to_vec();
+    let mut sample_sorted = sample.to_vec();
+    baseline_sorted.sort_unstable_by(|a, b| a.total_cmp(b));
+    sample_sorted.sort_unstable_by(|a, b| a.total_cmp(b));
 
-    // Also add small jitter proportional to scale for numerical stability
-    let jitter = 1e-10 + mean_var * 1e-8;
+    // 2. Compute rank-matched differences
+    let diffs: Vec<f64> = baseline_sorted
+        .iter()
+        .zip(sample_sorted.iter())
+        .map(|(b, s)| b - s)
+        .collect();
 
-    let mut regularized = *sigma;
-    for i in 0..9 {
-        regularized[(i, i)] = regularized[(i, i)].max(min_var) + jitter;
+    // 3. Shift = median(diffs)
+    let mut diffs_copy = diffs.clone();
+    let mid = n / 2;
+    diffs_copy.select_nth_unstable_by(mid, |a, b| a.total_cmp(b));
+    let shift_ns = if n % 2 == 0 {
+        (diffs_copy[mid - 1] + diffs_copy[mid]) / 2.0
+    } else {
+        diffs_copy[mid]
+    };
+
+    // 4. Tail = mean(|dᵢ - shift|)
+    let tail_ns = diffs.iter().map(|&d| (d - shift_ns).abs()).sum::<f64>() / n as f64;
+
+    // 5. Tail share
+    let total_effect = shift_ns.abs() + tail_ns;
+    let tail_share = if total_effect > 1e-12 {
+        tail_ns / total_effect
+    } else {
+        0.0
+    };
+
+    // 6. Tail slow share (fraction of tail that's positive = baseline slower)
+    let pos_tail_sum: f64 = diffs.iter().map(|&d| (d - shift_ns).max(0.0)).sum();
+    let total_tail_sum: f64 = diffs.iter().map(|&d| (d - shift_ns).abs()).sum();
+    let tail_slow_share = if total_tail_sum > 1e-12 {
+        pos_tail_sum / total_tail_sum
+    } else {
+        0.5 // Symmetric if no tail
+    };
+
+    // 7. Compute quantile shifts
+    let p90_idx = (0.90 * n as f64) as usize;
+    let p95_idx = (0.95 * n as f64) as usize;
+    let p99_idx = ((0.99 * n as f64) as usize).min(n - 1);
+
+    let quantile_shifts = QuantileShifts {
+        p50_ns: baseline_sorted[n / 2] - sample_sorted[n / 2],
+        p90_ns: baseline_sorted[p90_idx] - sample_sorted[p90_idx],
+        p95_ns: baseline_sorted[p95_idx] - sample_sorted[p95_idx],
+        p99_ns: baseline_sorted[p99_idx] - sample_sorted[p99_idx],
+    };
+
+    // 8. Pattern labeling
+    let pattern_label = if w1_deb.abs() < 1.0 {
+        EffectPattern::Negligible
+    } else if tail_share >= 0.5 {
+        EffectPattern::TailEffect
+    } else if tail_share < 0.3 {
+        EffectPattern::UniformShift
+    } else {
+        EffectPattern::Mixed
+    };
+
+    TailDiagnostics {
+        shift_ns,
+        tail_ns,
+        tail_share,
+        tail_slow_share,
+        quantile_shifts,
+        pattern_label,
     }
-    regularized
 }
 
 #[cfg(test)]
@@ -255,17 +206,12 @@ mod tests {
 
     #[test]
     fn test_effect_estimate_basic() {
-        // Create some sample draws
-        let draws: Vec<Vector9> = (0..100)
-            .map(|i| {
-                let val = (i as f64) * 0.1;
-                Vector9::from_row_slice(&[val, val, val, val, val, val, val, val, val])
-            })
-            .collect();
+        // Create some sample W₁ draws
+        let draws: Vec<f64> = (0..100).map(|i| (i as f64) * 0.1).collect();
 
-        let estimate = compute_effect_estimate(&draws, 5.0);
+        let estimate = compute_effect_estimate(&draws);
 
-        // Max effect should be around 9.9 (max draw is 99 * 0.1 = 9.9)
+        // Max effect should be around 4.95 (mean of 0..9.9)
         assert!(
             estimate.max_effect_ns > 4.0,
             "max effect should be significant"
@@ -282,60 +228,253 @@ mod tests {
 
     #[test]
     fn test_effect_estimate_empty() {
-        let estimate = compute_effect_estimate(&[], 5.0);
+        let estimate = compute_effect_estimate(&[]);
         assert_eq!(estimate.max_effect_ns, 0.0);
-        assert!(estimate.top_quantiles.is_empty());
+        assert!(estimate.tail_diagnostics.is_none());
     }
 
     #[test]
-    fn test_top_quantiles_threshold() {
-        // Create draws where only the 90th percentile exceeds threshold
-        let draws: Vec<Vector9> = (0..100)
-            .map(|_| Vector9::from_row_slice(&[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0]))
-            .collect();
+    fn test_tail_diagnostics_uniform_shift() {
+        // Create two distributions with a uniform 10ns shift
+        let n = 1000;
+        let baseline: Vec<f64> = (0..n).map(|i| 100.0 + i as f64 * 0.1).collect();
+        let sample: Vec<f64> = (0..n).map(|i| 90.0 + i as f64 * 0.1).collect();
 
-        let top = compute_top_quantiles(&draws, 5.0);
+        // W₁ is approximately 10ns (uniform shift)
+        let w1_deb = 10.0;
 
-        // Should have the 90th percentile (index 8, quantile_p = 0.9)
-        assert!(!top.is_empty());
-        assert!((top[0].quantile_p - 0.9).abs() < 0.01);
-        assert!(top[0].exceed_prob > 0.99);
-    }
+        let diagnostics = compute_tail_diagnostics(&baseline, &sample, w1_deb);
 
-    #[test]
-    fn test_regularize_covariance() {
-        let mut sigma = Matrix9::zeros();
-        for i in 0..9 {
-            sigma[(i, i)] = if i == 0 { 0.0 } else { 1.0 }; // First diagonal is zero
-        }
-
-        let regularized = regularize_covariance(&sigma);
-
-        // All diagonal elements should be positive
-        for i in 0..9 {
-            assert!(
-                regularized[(i, i)] > 0.0,
-                "diagonal {} should be positive",
-                i
-            );
-        }
-    }
-
-    #[test]
-    fn test_exceedance_prob() {
-        // Large mean should have high exceedance
-        let prob_high = compute_exceedance_prob(100.0, 10.0, 50.0);
-        assert!(prob_high > 0.99, "large mean should exceed threshold");
-
-        // Small mean should have low exceedance for high threshold
-        let prob_low = compute_exceedance_prob(1.0, 1.0, 50.0);
-        assert!(prob_low < 0.01, "small mean should not exceed threshold");
-
-        // Zero mean, threshold equals 2σ -> ~5% exceedance
-        let prob_2sigma = compute_exceedance_prob(0.0, 1.0, 2.0);
+        // Should detect uniform shift
         assert!(
-            (prob_2sigma - 0.0455).abs() < 0.01,
-            "2σ threshold should have ~4.5% exceedance"
+            diagnostics.shift_ns > 9.0 && diagnostics.shift_ns < 11.0,
+            "shift should be ~10ns, got {}",
+            diagnostics.shift_ns
+        );
+        assert!(
+            diagnostics.tail_ns < 1.0,
+            "tail should be minimal for uniform shift, got {}",
+            diagnostics.tail_ns
+        );
+        assert!(
+            diagnostics.tail_share < 0.3,
+            "tail_share should be low for uniform shift, got {}",
+            diagnostics.tail_share
+        );
+        assert_eq!(
+            diagnostics.pattern_label,
+            EffectPattern::UniformShift,
+            "should classify as uniform shift"
+        );
+
+        // Quantile shifts should all be similar
+        assert!(
+            (diagnostics.quantile_shifts.p50_ns - 10.0).abs() < 1.0,
+            "p50 shift should be ~10ns"
+        );
+        assert!(
+            (diagnostics.quantile_shifts.p90_ns - 10.0).abs() < 1.0,
+            "p90 shift should be ~10ns"
+        );
+        assert!(
+            (diagnostics.quantile_shifts.p95_ns - 10.0).abs() < 1.0,
+            "p95 shift should be ~10ns"
+        );
+    }
+
+    #[test]
+    fn test_tail_diagnostics_tail_effect() {
+        // Create distributions where only the tail differs
+        let n = 1000;
+        let mut baseline: Vec<f64> = (0..n).map(|i| 100.0 + i as f64 * 0.01).collect();
+        let sample: Vec<f64> = (0..n).map(|i| 100.0 + i as f64 * 0.01).collect();
+
+        // Add tail effect to top 10% of baseline
+        for i in (n * 9 / 10)..n {
+            baseline[i] += 50.0; // Add 50ns to tail
+        }
+
+        // W₁ should capture this tail effect
+        let w1_deb = 5.0; // Approximate W₁ from 10% tail effect
+
+        let diagnostics = compute_tail_diagnostics(&baseline, &sample, w1_deb);
+
+        // Should detect tail effect
+        assert!(
+            diagnostics.shift_ns.abs() < 5.0,
+            "shift should be small for tail effect, got {}",
+            diagnostics.shift_ns
+        );
+        assert!(
+            diagnostics.tail_ns > 4.0,
+            "tail should be large for tail effect, got {}",
+            diagnostics.tail_ns
+        );
+        assert!(
+            diagnostics.tail_share > 0.5,
+            "tail_share should be high for tail effect, got {}",
+            diagnostics.tail_share
+        );
+        assert_eq!(
+            diagnostics.pattern_label,
+            EffectPattern::TailEffect,
+            "should classify as tail effect"
+        );
+
+        // Tail slow share should indicate baseline is slower in tail
+        assert!(
+            diagnostics.tail_slow_share > 0.8,
+            "tail_slow_share should indicate baseline slower, got {}",
+            diagnostics.tail_slow_share
+        );
+
+        // Quantile shifts should show increasing effect at higher quantiles
+        assert!(
+            diagnostics.quantile_shifts.p99_ns > diagnostics.quantile_shifts.p50_ns,
+            "p99 shift should be larger than p50 for tail effect"
+        );
+    }
+
+    #[test]
+    fn test_tail_diagnostics_mixed_pattern() {
+        // Create distributions with both shift and tail effect
+        let n = 1000;
+        let mut baseline: Vec<f64> = (0..n).map(|i| 105.0 + i as f64 * 0.1).collect();
+        let sample: Vec<f64> = (0..n).map(|i| 100.0 + i as f64 * 0.1).collect();
+
+        // Add larger tail effect to top 30% of baseline to create mixed pattern
+        for i in (n * 7 / 10)..n {
+            baseline[i] += 15.0;
+        }
+
+        // W₁ should capture both components
+        let w1_deb = 10.0;
+
+        let diagnostics = compute_tail_diagnostics(&baseline, &sample, w1_deb);
+
+        // Should detect mixed pattern
+        assert!(
+            diagnostics.shift_ns > 2.0,
+            "shift should be present, got {}",
+            diagnostics.shift_ns
+        );
+        assert!(
+            diagnostics.tail_ns > 2.0,
+            "tail should be present, got {}",
+            diagnostics.tail_ns
+        );
+        assert!(
+            diagnostics.tail_share >= 0.3 && diagnostics.tail_share <= 0.5,
+            "tail_share should be in mixed range, got {}",
+            diagnostics.tail_share
+        );
+        assert_eq!(
+            diagnostics.pattern_label,
+            EffectPattern::Mixed,
+            "should classify as mixed pattern"
+        );
+    }
+
+    #[test]
+    fn test_tail_diagnostics_negligible() {
+        // Create identical distributions
+        let n = 1000;
+        let baseline: Vec<f64> = (0..n).map(|i| 100.0 + i as f64 * 0.1).collect();
+        let sample = baseline.clone();
+
+        // W₁ is negligible
+        let w1_deb = 0.5;
+
+        let diagnostics = compute_tail_diagnostics(&baseline, &sample, w1_deb);
+
+        // Should detect negligible effect
+        assert_eq!(
+            diagnostics.pattern_label,
+            EffectPattern::Negligible,
+            "should classify as negligible"
+        );
+        assert!(
+            diagnostics.shift_ns.abs() < 1e-6,
+            "shift should be near zero, got {}",
+            diagnostics.shift_ns
+        );
+        assert!(
+            diagnostics.tail_ns < 1e-6,
+            "tail should be near zero, got {}",
+            diagnostics.tail_ns
+        );
+    }
+
+    #[test]
+    fn test_tail_diagnostics_empty_input() {
+        // Test empty arrays
+        let diagnostics = compute_tail_diagnostics(&[], &[], 0.0);
+
+        assert_eq!(diagnostics.shift_ns, 0.0);
+        assert_eq!(diagnostics.tail_ns, 0.0);
+        assert_eq!(diagnostics.tail_share, 0.0);
+        assert_eq!(diagnostics.tail_slow_share, 0.5);
+        assert_eq!(diagnostics.pattern_label, EffectPattern::Negligible);
+    }
+
+    #[test]
+    fn test_tail_diagnostics_mismatched_lengths() {
+        // Test mismatched array lengths
+        let baseline = vec![1.0, 2.0, 3.0];
+        let sample = vec![1.0, 2.0];
+
+        let diagnostics = compute_tail_diagnostics(&baseline, &sample, 0.0);
+
+        assert_eq!(diagnostics.shift_ns, 0.0);
+        assert_eq!(diagnostics.tail_ns, 0.0);
+        assert_eq!(diagnostics.pattern_label, EffectPattern::Negligible);
+    }
+
+    #[test]
+    fn test_tail_diagnostics_single_element() {
+        // Test single-element arrays
+        let baseline = vec![100.0];
+        let sample = vec![90.0];
+
+        let diagnostics = compute_tail_diagnostics(&baseline, &sample, 10.0);
+
+        // Should handle single element gracefully
+        assert!(
+            (diagnostics.shift_ns - 10.0).abs() < 1e-6,
+            "shift should be 10ns for single element"
+        );
+        // With single element, tail should be zero
+        assert!(
+            diagnostics.tail_ns < 1e-6,
+            "tail should be zero for single element"
+        );
+    }
+
+    #[test]
+    fn test_tail_diagnostics_symmetric_tail() {
+        // Create distributions with symmetric tail deviations
+        let n = 1000;
+        let mut baseline: Vec<f64> = (0..n).map(|i| 100.0 + i as f64 * 0.01).collect();
+        let mut sample: Vec<f64> = (0..n).map(|i| 100.0 + i as f64 * 0.01).collect();
+
+        // Add symmetric tail effects
+        for i in (n * 9 / 10)..n {
+            if i % 2 == 0 {
+                baseline[i] += 20.0;
+            } else {
+                sample[i] += 20.0;
+            }
+        }
+
+        let w1_deb = 2.0;
+
+        let diagnostics = compute_tail_diagnostics(&baseline, &sample, w1_deb);
+
+        // tail_slow_share should be close to 0.5 for symmetric tail
+        assert!(
+            (diagnostics.tail_slow_share - 0.5).abs() < 0.1,
+            "tail_slow_share should be ~0.5 for symmetric tail, got {}",
+            diagnostics.tail_slow_share
         );
     }
 }

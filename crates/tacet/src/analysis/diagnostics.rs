@@ -7,8 +7,6 @@
 use crate::measurement::OutlierStats;
 use crate::preflight::PreflightResult;
 use crate::result::Diagnostics;
-use crate::types::{Matrix9, Vector9};
-use nalgebra::Cholesky;
 
 /// Additional diagnostic information computed during analysis.
 #[derive(Debug, Clone, Default)]
@@ -33,15 +31,15 @@ pub struct DiagnosticsExtra {
 ///
 /// # Arguments
 ///
-/// * `calib_cov` - Covariance matrix from calibration set
-/// * `observed_diff` - Observed quantile differences (9D vector)
+/// * `calib_variance` - Variance from calibration set (W₁ distance)
+/// * `observed_diff` - Observed W₁ distance
 /// * `outlier_stats` - Statistics about outlier filtering
 /// * `preflight` - Preflight check results (sanity, generator, autocorrelation, system)
 /// * `interleaved_samples` - Raw timing samples in measurement order
 /// * `extra` - Additional diagnostic information (block length, filtered quantiles, etc.)
 pub fn compute_diagnostics(
-    calib_cov: &Matrix9,
-    observed_diff: &Vector9,
+    calib_variance: f64,
+    observed_diff: f64,
     outlier_stats: &OutlierStats,
     preflight: &PreflightResult,
     interleaved_samples: &[crate::types::TimingSample],
@@ -50,7 +48,7 @@ pub fn compute_diagnostics(
     let mut warnings = Vec::new();
 
     // Silence unused variable warning
-    let _ = (calib_cov, observed_diff);
+    let _ = (calib_variance, observed_diff);
 
     // Add preflight warnings first (most important)
     for warning in &preflight.warnings.sanity {
@@ -277,23 +275,6 @@ fn check_outlier_asymmetry(rate_fixed: f64, rate_random: f64) -> bool {
     true
 }
 
-/// Safe Cholesky decomposition with jitter.
-#[allow(dead_code)]
-fn safe_cholesky(matrix: &Matrix9) -> Option<Cholesky<f64, nalgebra::Const<9>>> {
-    if let Some(chol) = Cholesky::new(*matrix) {
-        return Some(chol);
-    }
-
-    // Add jitter and retry
-    let trace = matrix.trace();
-    let jitter = 1e-10 + (trace / 9.0) * 1e-8;
-    let mut regularized = *matrix;
-    for i in 0..9 {
-        regularized[(i, i)] += jitter;
-    }
-
-    Cholesky::new(regularized)
-}
 
 #[cfg(test)]
 mod tests {

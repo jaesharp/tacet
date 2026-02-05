@@ -153,14 +153,10 @@ mod tests {
         let cal = result.unwrap();
 
         assert!(
-            cal.sigma_rate.trace() > 0.0,
-            "Sigma rate should be positive"
+            cal.var_rate > 0.0,
+            "Variance rate should be positive"
         );
         assert!(cal.block_length >= 1, "Block length should be at least 1");
-        assert!(
-            cal.prior_cov_marginal[(0, 0)] > 0.0,
-            "Prior marginal variance should be positive"
-        );
         assert!(cal.sigma_t > 0.0, "Sigma t should be positive");
         assert!(
             cal.samples_per_second > 0.0,

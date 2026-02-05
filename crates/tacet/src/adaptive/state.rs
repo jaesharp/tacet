@@ -177,7 +177,6 @@ impl Default for AdaptiveState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Matrix9, Vector9};
 
     #[test]
     fn test_adaptive_state_new() {
@@ -227,12 +226,12 @@ mod tests {
         let mut state = AdaptiveState::new();
 
         let posterior = Posterior::new(
-            Vector9::zeros(),    // delta_post (9D)
-            Matrix9::identity(), // lambda_post (9D)
-            Vec::new(),          // delta_draws
-            0.75,                // leak_probability
-            100.0,               // theta
-            1000,                // n
+            0.0,        // w1_post (scalar W₁ mean)
+            1.0,        // var_post (scalar variance)
+            Vec::new(), // w1_draws
+            0.75,       // leak_probability
+            100.0,      // theta
+            1000,       // n
         );
 
         let kl = state.update_posterior(posterior.clone());
@@ -284,12 +283,12 @@ mod tests {
         state.update_kl(0.5);
 
         let posterior = Posterior::new(
-            Vector9::zeros(),    // delta_post (9D)
-            Matrix9::identity(), // lambda_post (9D)
-            Vec::new(),          // delta_draws
-            0.75,                // leak_probability
-            100.0,               // theta
-            100,                 // n
+            0.0,        // w1_post (scalar W₁ mean)
+            1.0,        // var_post (scalar variance)
+            Vec::new(), // w1_draws
+            0.75,       // leak_probability
+            100.0,      // theta
+            100,        // n
         );
         state.update_posterior(posterior);
 

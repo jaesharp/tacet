@@ -1,10 +1,10 @@
 //! Posterior distribution representation for Bayesian inference.
 //!
-//! The posterior is Gaussian: δ | Δ ~ N(δ_post, Λ_post) where:
-//! - δ ∈ ℝ⁹ is the per-decile timing difference vector
-//! - Δ is the observed quantile difference vector
+//! The posterior is Gaussian: W₁ | D ~ N(w1_post, var_post) where:
+//! - W₁ is the scalar weighted mean timing difference
+//! - D is the observed empirical timing difference
 //!
-//! Effect estimation uses max_k |δ_k| as the primary metric (spec §5.2).
+//! Effect estimation uses |W₁| as the primary metric.
 
 extern crate alloc;
 use alloc::vec::Vec;
@@ -12,28 +12,27 @@ use alloc::vec::Vec;
 use crate::analysis::{compute_effect_estimate, compute_effect_estimate_analytical};
 use crate::math::sqrt;
 use crate::result::{EffectEstimate, MeasurementQuality};
-use crate::types::{Matrix9, Vector9};
 
-/// Posterior distribution parameters for the 9D effect vector δ.
+/// Posterior distribution parameters for the scalar effect W₁.
 ///
-/// The posterior is Gaussian: δ | Δ ~ N(δ_post, Λ_post) where each δ_k
-/// represents the timing difference at decile k.
+/// The posterior is Gaussian: W₁ | D ~ N(w1_post, var_post) where W₁
+/// represents the weighted mean timing difference.
 ///
 /// Uses Student's t prior (ν=4) via Gibbs sampling for robust inference.
 #[derive(Clone, Debug)]
 pub struct Posterior {
-    /// 9D posterior mean δ_post in nanoseconds.
-    pub delta_post: Vector9,
+    /// Posterior mean w1_post in nanoseconds.
+    pub w1_post: f64,
 
-    /// 9D posterior covariance Λ_post.
-    pub lambda_post: Matrix9,
+    /// Posterior variance var_post.
+    pub var_post: f64,
 
-    /// Retained δ draws from the Gibbs sampler.
+    /// Retained W₁ draws from the Gibbs sampler.
     /// Used for effect estimation via `compute_effect_estimate`.
-    pub delta_draws: Vec<Vector9>,
+    pub w1_draws: Vec<f64>,
 
-    /// Leak probability: P(max_k |δ_k| > θ | Δ).
-    /// Computed via Monte Carlo integration over the 9D posterior.
+    /// Leak probability: P(|W₁| > θ | D).
+    /// Computed via Monte Carlo integration over the 1D posterior.
     pub leak_probability: f64,
 
     /// Effect threshold used for leak probability computation.
@@ -73,17 +72,17 @@ impl Posterior {
     /// Create a new posterior with given parameters.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        delta_post: Vector9,
-        lambda_post: Matrix9,
-        delta_draws: Vec<Vector9>,
+        w1_post: f64,
+        var_post: f64,
+        w1_draws: Vec<f64>,
         leak_probability: f64,
         theta: f64,
         n: usize,
     ) -> Self {
         Self {
-            delta_post,
-            lambda_post,
-            delta_draws,
+            w1_post,
+            var_post,
+            w1_draws,
             leak_probability,
             theta,
             n,
@@ -99,9 +98,9 @@ impl Posterior {
     /// Create a new posterior with Gibbs sampler diagnostics (v5.4, v5.6).
     #[allow(clippy::too_many_arguments)]
     pub fn new_with_gibbs(
-        delta_post: Vector9,
-        lambda_post: Matrix9,
-        delta_draws: Vec<Vector9>,
+        w1_post: f64,
+        var_post: f64,
+        w1_draws: Vec<f64>,
         leak_probability: f64,
         theta: f64,
         n: usize,
@@ -113,9 +112,9 @@ impl Posterior {
         kappa_mixing_ok: bool,
     ) -> Self {
         Self {
-            delta_post,
-            lambda_post,
-            delta_draws,
+            w1_post,
+            var_post,
+            w1_draws,
             leak_probability,
             theta,
             n,
@@ -128,35 +127,30 @@ impl Posterior {
         }
     }
 
-    /// Get the max absolute effect across all deciles from posterior mean.
+    /// Get the absolute effect from posterior mean.
     pub fn max_effect_ns(&self) -> f64 {
-        self.delta_post
-            .iter()
-            .map(|x| x.abs())
-            .fold(0.0_f64, f64::max)
+        self.w1_post.abs()
     }
 
     /// Build an EffectEstimate from this posterior.
     ///
-    /// Uses delta draws if available, otherwise uses analytical approximation.
+    /// Uses W₁ draws if available, otherwise uses analytical approximation.
     pub fn to_effect_estimate(&self) -> EffectEstimate {
-        if !self.delta_draws.is_empty() {
-            compute_effect_estimate(&self.delta_draws, self.theta)
+        if !self.w1_draws.is_empty() {
+            compute_effect_estimate(&self.w1_draws)
         } else {
-            compute_effect_estimate_analytical(&self.delta_post, &self.lambda_post, self.theta)
+            compute_effect_estimate_analytical(self.w1_post, self.var_post, self.theta)
         }
     }
 
     /// Get measurement quality based on the posterior uncertainty.
     ///
     /// Quality is determined by the minimum detectable effect (MDE),
-    /// which is approximately the maximum marginal standard deviation.
+    /// which is approximately 2 × standard error.
     pub fn measurement_quality(&self) -> MeasurementQuality {
-        // MDE is approximately max_k sqrt(λ_post[k,k])
-        let max_se = (0..9)
-            .map(|k| sqrt(self.lambda_post[(k, k)].max(1e-12)))
-            .fold(0.0_f64, f64::max);
-        MeasurementQuality::from_mde_ns(max_se * 2.0)
+        // MDE is approximately 2 × sqrt(var_post)
+        let se = sqrt(self.var_post.max(1e-12));
+        MeasurementQuality::from_mde_ns(se * 2.0)
     }
 
     /// Convert to an FFI-friendly summary containing only scalar fields.
@@ -185,14 +179,13 @@ mod tests {
 
     #[test]
     fn test_posterior_accessors() {
-        let delta_post =
-            Vector9::from_row_slice(&[10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]);
-        let lambda_post = Matrix9::identity();
+        let w1_post = 10.0;
+        let var_post = 1.0;
 
         let posterior = Posterior::new(
-            delta_post,
-            lambda_post,
-            Vec::new(), // delta_draws
+            w1_post,
+            var_post,
+            Vec::new(), // w1_draws
             0.75,
             5.0, // theta
             1000,
@@ -205,13 +198,13 @@ mod tests {
 
     #[test]
     fn test_posterior_clone() {
-        let delta_post = Vector9::from_row_slice(&[5.0; 9]);
-        let lambda_post = Matrix9::identity();
+        let w1_post = 5.0;
+        let var_post = 1.0;
 
         let posterior = Posterior::new(
-            delta_post,
-            lambda_post,
-            Vec::new(), // delta_draws
+            w1_post,
+            var_post,
+            Vec::new(), // w1_draws
             0.5,
             5.0, // theta
             500,
@@ -224,17 +217,13 @@ mod tests {
 
     #[test]
     fn test_effect_estimate_from_draws() {
-        let delta_post = Vector9::from_row_slice(&[10.0; 9]);
-        let lambda_post = Matrix9::identity();
+        let w1_post = 10.0;
+        let var_post = 1.0;
 
         // Create some sample draws
-        let delta_draws: Vec<Vector9> = (0..100)
-            .map(|_| {
-                Vector9::from_row_slice(&[10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0])
-            })
-            .collect();
+        let w1_draws: Vec<f64> = (0..100).map(|_| 10.0).collect();
 
-        let posterior = Posterior::new(delta_post, lambda_post, delta_draws, 0.99, 5.0, 1000);
+        let posterior = Posterior::new(w1_post, var_post, w1_draws, 0.99, 5.0, 1000);
 
         let effect = posterior.to_effect_estimate();
         assert!(effect.max_effect_ns > 9.0, "max effect should be around 10");

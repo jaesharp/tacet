@@ -69,17 +69,14 @@ use std::ptr;
 use std::slice;
 
 use tacet_core::adaptive::{
-    calibrate_t_prior_scale, compute_c_floor_9d, AdaptiveState, AdaptiveStepConfig, Calibration,
-    CalibrationSnapshot, StepResult,
+    calibrate_halft_prior_scale_1d, compute_c_floor_1d, AdaptiveState, AdaptiveStepConfig,
+    Calibration, CalibrationSnapshot, StepResult,
 };
-use tacet_core::analysis::compute_bayes_gibbs;
+use tacet_core::analysis::compute_bayes_1d;
 use tacet_core::constants::DEFAULT_BOOTSTRAP_ITERATIONS;
 use tacet_core::result::{Exploitability, MeasurementQuality};
-use tacet_core::statistics::{
-    bootstrap_difference_covariance_discrete, compute_deciles_inplace, optimal_block_length,
-    StatsSnapshot,
-};
-use tacet_core::types::AttackerModel;
+use tacet_core::statistics::{bootstrap_w1_variance, StatsSnapshot};
+use tacet_core::types::{AttackerModel, Class, TimingSample};
 
 mod types;
 
@@ -351,23 +348,27 @@ pub unsafe extern "C" fn to_calibrate(
     let unique_fraction = (unique_baseline.len() + unique_sample.len()) as f64 / (2 * count) as f64;
     let discrete_mode = unique_fraction < 0.1;
 
-    // Compute block length using Politis-White algorithm (use circular bootstrap length)
-    let block_length_baseline = optimal_block_length(&baseline_ns).circular.ceil() as usize;
-    let block_length_sample = optimal_block_length(&sample_ns).circular.ceil() as usize;
-    let block_length = block_length_baseline.max(block_length_sample).max(1);
-
-    // Bootstrap covariance estimation using discrete mode function (works for both)
+    // Create interleaved TimingSample array for W₁ bootstrap
     let seed = if cfg.seed == 0 { 42 } else { cfg.seed };
-    let cov_estimate = bootstrap_difference_covariance_discrete(
-        &baseline_ns,
-        &sample_ns,
-        DEFAULT_BOOTSTRAP_ITERATIONS,
-        seed,
-    );
-    let sigma_rate = cov_estimate.matrix * count as f64; // Convert to rate: sigma_rate = sigma_cal * n_cal
+    let mut interleaved = Vec::with_capacity(2 * count);
+    for i in 0..count {
+        interleaved.push(TimingSample {
+            time_ns: baseline_ns[i],
+            class: Class::Baseline,
+        });
+        interleaved.push(TimingSample {
+            time_ns: sample_ns[i],
+            class: Class::Sample,
+        });
+    }
+
+    // Bootstrap W₁ variance estimation
+    let var_estimate = bootstrap_w1_variance(&interleaved, DEFAULT_BOOTSTRAP_ITERATIONS, seed, discrete_mode);
+    let var_rate = var_estimate.variance * count as f64; // Convert to rate: var_rate = var_cal * n_cal
+    let block_length = var_estimate.block_size;
 
     // Compute c_floor for theta_floor estimation
-    let c_floor = compute_c_floor_9d(&sigma_rate, seed);
+    let c_floor = compute_c_floor_1d(var_rate, seed);
 
     // Compute initial theta_floor
     let n_eff = (count / block_length).max(1);
@@ -376,9 +377,8 @@ pub unsafe extern "C" fn to_calibrate(
     let theta_floor_initial = theta_floor_stat.max(theta_tick);
     let theta_eff = theta_ns.max(theta_floor_initial);
 
-    // Calibrate Student's t prior scale
-    let (sigma_t, l_r) =
-        calibrate_t_prior_scale(&sigma_rate, theta_eff, count, discrete_mode, seed);
+    // Calibrate half-t prior scale
+    let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_eff, count, seed);
 
     // Compute calibration snapshot for drift detection
     let baseline_stats = compute_stats_snapshot(&baseline_ns);
@@ -388,19 +388,18 @@ pub unsafe extern "C" fn to_calibrate(
     // Placeholder MDE (would need proper computation)
     let mde_ns = theta_floor_stat;
 
-    // Projection mismatch threshold (chi-squared 99th percentile for 7 DoF)
-    let projection_mismatch_thresh = 18.48;
+    // Projection mismatch threshold (not used for 1D, placeholder)
+    let projection_mismatch_thresh = 0.0;
 
     // Estimate samples per second (would be measured during calibration in real usage)
     let samples_per_second = 100_000.0; // Placeholder
 
     let calibration = Calibration::new(
-        sigma_rate,
+        var_rate,
         block_length,
         1.0, // iact (default for PolitisWhite mode)
         tacet_core::types::IactMethod::PolitisWhite, // iact_method
         sigma_t,
-        l_r,
         theta_ns,
         count,
         discrete_mode,
@@ -910,59 +909,63 @@ pub unsafe extern "C" fn to_analyze(
         .map(|&t| t as f64 * ns_per_tick)
         .collect();
 
-    // Compute quantile differences
+    // Check for discrete mode (< 10% unique values)
+    let unique_baseline: std::collections::HashSet<u64> = baseline_slice.iter().copied().collect();
+    let unique_sample: std::collections::HashSet<u64> = sample_slice.iter().copied().collect();
+    let unique_fraction = (unique_baseline.len() + unique_sample.len()) as f64 / (2 * count) as f64;
+    let discrete_mode = unique_fraction < 0.1;
+
+    // Create interleaved TimingSample array for W₁ computation
+    let seed = if cfg.seed == 0 { 42 } else { cfg.seed };
+    let mut interleaved = Vec::with_capacity(2 * count);
+    for i in 0..count {
+        interleaved.push(TimingSample {
+            time_ns: baseline_ns[i],
+            class: Class::Baseline,
+        });
+        interleaved.push(TimingSample {
+            time_ns: sample_ns[i],
+            class: Class::Sample,
+        });
+    }
+
+    // Compute observed W₁ distance
     let mut baseline_sorted = baseline_ns.clone();
     let mut sample_sorted = sample_ns.clone();
-    let q_baseline = compute_deciles_inplace(&mut baseline_sorted);
-    let q_sample = compute_deciles_inplace(&mut sample_sorted);
-    let observed_diff = q_baseline - q_sample;
+    baseline_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    sample_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let w1_obs: f64 = baseline_sorted
+        .iter()
+        .zip(sample_sorted.iter())
+        .map(|(b, s)| (b - s).abs())
+        .sum::<f64>()
+        / count as f64;
 
-    // Bootstrap covariance
-    let seed = if cfg.seed == 0 { 42 } else { cfg.seed };
-    let cov_estimate = bootstrap_difference_covariance_discrete(
-        &baseline_ns,
-        &sample_ns,
-        DEFAULT_BOOTSTRAP_ITERATIONS,
-        seed,
-    );
-    let sigma_rate = cov_estimate.matrix * count as f64;
+    // Bootstrap W₁ variance
+    let var_estimate = bootstrap_w1_variance(&interleaved, DEFAULT_BOOTSTRAP_ITERATIONS, seed, discrete_mode);
+    let var_rate = var_estimate.variance * count as f64;
+    let block_length = var_estimate.block_size;
 
     // Compute theta_eff
-    let c_floor = compute_c_floor_9d(&sigma_rate, seed);
-    let block_length_baseline = optimal_block_length(&baseline_ns).circular.ceil() as usize;
-    let block_length_sample = optimal_block_length(&sample_ns).circular.ceil() as usize;
-    let block_length = block_length_baseline.max(block_length_sample).max(1);
+    let c_floor = compute_c_floor_1d(var_rate, seed);
     let n_eff = (count / block_length).max(1);
     let theta_floor = (c_floor / (n_eff as f64).sqrt()).max(ns_per_tick);
     let theta_eff = theta_ns.max(theta_floor);
 
     // Calibrate prior
-    let discrete_mode = false; // Simple assumption for one-shot
-    let (sigma_t, l_r) =
-        calibrate_t_prior_scale(&sigma_rate, theta_eff, count, discrete_mode, seed);
+    let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_eff, count, seed);
 
-    // Scale covariance
-    let sigma_n = sigma_rate / n_eff as f64;
+    // Scale variance
+    let var_n = var_rate / n_eff as f64;
 
     // Run Bayesian inference
-    let bayes_result = compute_bayes_gibbs(
-        &observed_diff,
-        &sigma_n,
-        sigma_t,
-        &l_r,
-        theta_eff,
-        Some(seed),
-    );
+    let bayes_result = compute_bayes_1d(w1_obs, var_n, sigma_t, theta_eff, seed);
 
-    // Extract max effect from posterior mean
-    let max_effect_ns = bayes_result
-        .delta_post
-        .iter()
-        .map(|x| x.abs())
-        .fold(0.0_f64, f64::max);
+    // Extract max effect from posterior mean (for 1D, this is just the absolute value)
+    let max_effect_ns = bayes_result.w1_post.abs();
 
     // Use effect magnitude CI from Gibbs sampler
-    let (ci_low, ci_high) = bayes_result.effect_magnitude_ci;
+    let (ci_low, ci_high) = bayes_result.credible_interval;
 
     // Determine outcome
     let leak_prob = bayes_result.leak_probability;
@@ -981,7 +984,7 @@ pub unsafe extern "C" fn to_analyze(
     let mde_ns = theta_floor;
     let quality: ToMeasurementQuality = MeasurementQuality::from_mde_ns(mde_ns).into();
 
-    // Build diagnostics from bayes_result
+    // Build diagnostics from bayes_result (1D version has no lambda/kappa fields)
     let diagnostics = ToDiagnostics {
         dependence_length: block_length as u64,
         effective_sample_size: n_eff as u64,
@@ -989,14 +992,14 @@ pub unsafe extern "C" fn to_analyze(
         stationarity_ok: true,
         discrete_mode,
         timer_resolution_ns: ns_per_tick,
-        lambda_mean: bayes_result.lambda_mean,
-        lambda_sd: bayes_result.lambda_sd,
-        lambda_ess: bayes_result.lambda_ess,
-        lambda_mixing_ok: bayes_result.lambda_mixing_ok,
-        kappa_mean: bayes_result.kappa_mean,
-        kappa_cv: bayes_result.kappa_cv,
-        kappa_ess: bayes_result.kappa_ess,
-        kappa_mixing_ok: bayes_result.kappa_mixing_ok,
+        lambda_mean: 1.0,  // Not available in 1D version
+        lambda_sd: 0.0,
+        lambda_ess: 0.0,
+        lambda_mixing_ok: true,
+        kappa_mean: 1.0,   // Not available in 1D version
+        kappa_cv: 0.0,
+        kappa_ess: 0.0,
+        kappa_mixing_ok: true,
     };
 
     // Build result

@@ -19,6 +19,7 @@ mod detection;
 mod iact;
 mod online_stats;
 mod quantile;
+mod wasserstein;
 
 pub use acquisition::{AcquisitionStream, SampleClass};
 pub use autocorrelation::{estimate_dependence_length, lag1_autocorrelation, lag2_autocorrelation};
@@ -30,19 +31,12 @@ pub use bootstrap::{
     block_bootstrap_resample, block_bootstrap_resample_into, block_bootstrap_resample_joint_into,
     compute_block_size, counter_rng_seed,
 };
-pub use covariance::{
-    apply_variance_floor, bootstrap_covariance_matrix, bootstrap_difference_covariance,
-    bootstrap_difference_covariance_discrete, compute_covariance_rate,
-    scale_covariance_for_inference, scale_covariance_rate, CovarianceEstimate,
-};
+pub use covariance::{bootstrap_w1_variance, W1VarianceEstimate};
 pub use detection::{compute_min_uniqueness_ratio, DISCRETE_MODE_THRESHOLD};
 pub use iact::{
     geyer_ims_iact, timing_iact_combined, timing_iact_direct, timing_iact_per_quantile, IactResult,
     IactWarning,
 };
 pub use online_stats::{OnlineStats, StatsSnapshot};
-pub use quantile::{
-    compute_deciles, compute_deciles_fast, compute_deciles_inplace, compute_deciles_sorted,
-    compute_deciles_with_buffer, compute_midquantile, compute_midquantile_deciles,
-    compute_midquantile_deciles_sorted, compute_quantile,
-};
+pub use quantile::{compute_midquantile, compute_quantile};
+pub use wasserstein::{compute_w1_debiased, compute_w1_distance};

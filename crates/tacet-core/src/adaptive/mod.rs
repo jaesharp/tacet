@@ -25,15 +25,16 @@ mod state;
 mod step;
 
 pub use calibration::{
-    calibrate, calibrate_t_prior_scale, compute_c_floor_9d, compute_prior_cov_9d, Calibration,
+    calibrate, calibrate_halft_prior_scale_1d, compute_c_floor_1d, Calibration,
     CalibrationConfig, CalibrationError, NU,
 };
 pub use drift::{CalibrationSnapshot, ConditionDrift, DriftThresholds};
 pub use kl_divergence::kl_divergence_gaussian;
 pub use posterior::Posterior;
 pub use quality_gates::{
-    check_quality_gates, compute_achievable_at_max, is_threshold_elevated, InconclusiveReason,
-    QualityGateCheckInputs, QualityGateConfig, QualityGateResult,
+    check_gate1_1d, check_quality_gates, check_variance_floor_exceeded, compute_achievable_at_max,
+    is_threshold_elevated, InconclusiveReason, Posterior1D, QualityGateCheckInputs,
+    QualityGateConfig, QualityGateResult,
 };
 pub use state::AdaptiveState;
 pub use step::{adaptive_step, AdaptiveOutcome, AdaptiveStepConfig, StepResult};

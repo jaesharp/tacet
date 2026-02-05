@@ -25,10 +25,10 @@
 use std::time::{Duration, Instant};
 
 use tacet_core::adaptive::{
-    calibrate_t_prior_scale, compute_achievable_at_max, compute_c_floor_9d, compute_prior_cov_9d,
+    calibrate_halft_prior_scale_1d, compute_achievable_at_max, compute_c_floor_1d,
     is_threshold_elevated,
 };
-use tacet_core::analysis::{compute_bayes_gibbs, compute_effect_estimate, estimate_mde};
+use tacet_core::analysis::{compute_effect_estimate, estimate_mde};
 use tacet_core::constants::{
     DEFAULT_BOOTSTRAP_ITERATIONS, DEFAULT_FAIL_THRESHOLD, DEFAULT_PASS_THRESHOLD,
 };
@@ -36,12 +36,11 @@ use tacet_core::result::{
     Diagnostics, EffectEstimate, Exploitability, InconclusiveReason, IssueCode, MeasurementQuality,
     Outcome, QualityIssue,
 };
-use tacet_core::statistics::{
-    bootstrap_difference_covariance, bootstrap_difference_covariance_discrete,
-    compute_deciles_inplace, AcquisitionStream,
-};
+use tacet_core::statistics::{bootstrap_w1_variance, compute_w1_debiased, AcquisitionStream};
 use tacet_core::types::AttackerModel;
-use tacet_core::Vector9;
+
+use rand::SeedableRng;
+use rand_xoshiro::Xoshiro256PlusPlus;
 
 /// Configuration for single-pass analysis.
 #[derive(Debug, Clone)]
@@ -187,12 +186,9 @@ pub fn analyze_single_pass(
     let baseline = &baseline_ns[..n];
     let test = &test_ns[..n];
 
-    // Step 1: Compute quantile differences (the observed effect)
-    let mut baseline_sorted = baseline.to_vec();
-    let mut test_sorted = test.to_vec();
-    let q_baseline = compute_deciles_inplace(&mut baseline_sorted);
-    let q_test = compute_deciles_inplace(&mut test_sorted);
-    let delta_hat: Vector9 = q_baseline - q_test;
+    // Step 1: Compute W₁ distance with debiasing (the observed effect)
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(config.seed);
+    let w1_obs = compute_w1_debiased(baseline, test, &mut rng);
 
     // Step 2: Detect discrete mode (spec §3.3.2)
     let unique_baseline: std::collections::HashSet<i64> =
@@ -202,38 +198,27 @@ pub fn analyze_single_pass(
         (unique_baseline.len() as f64 / n as f64).min(unique_test.len() as f64 / n as f64);
     let discrete_mode = min_uniqueness < 0.10;
 
-    // Step 3: Bootstrap covariance estimation (spec §3.3.1)
-    // Use acquisition stream for non-discrete mode to preserve dependence structure
-    let cov_estimate = if discrete_mode {
-        // Discrete mode: use m-out-of-n bootstrap
-        bootstrap_difference_covariance_discrete(
-            baseline,
-            test,
-            config.bootstrap_iterations,
-            config.seed,
-        )
-    } else {
-        // Non-discrete mode: create interleaved acquisition stream per spec §3.3.1
-        let mut acquisition_stream = AcquisitionStream::with_capacity(2 * n);
-        acquisition_stream.push_batch_interleaved(baseline, test);
-        let interleaved = acquisition_stream.to_timing_samples();
+    // Step 3: Bootstrap W₁ variance estimation (spec §3.3.1)
+    // Create interleaved acquisition stream per spec §3.3.1
+    let mut acquisition_stream = AcquisitionStream::with_capacity(2 * n);
+    acquisition_stream.push_batch_interleaved(baseline, test);
+    let interleaved = acquisition_stream.to_timing_samples();
 
-        bootstrap_difference_covariance(
-            &interleaved,
-            config.bootstrap_iterations,
-            config.seed,
-            false, // is_fragile - let block length handle it
-        )
-    };
-    let sigma = cov_estimate.matrix;
+    let var_estimate = bootstrap_w1_variance(
+        &interleaved,
+        config.bootstrap_iterations,
+        config.seed,
+        discrete_mode, // is_fragile - use discrete mode flag
+    );
+    let variance = var_estimate.variance;
 
-    // Check covariance validity
-    if !cov_estimate.is_stable() {
+    // Check variance validity
+    if variance <= 1e-12 {
         let effect = EffectEstimate::default();
         return SinglePassResult {
             outcome: Outcome::Inconclusive {
                 reason: InconclusiveReason::DataTooNoisy {
-                    message: "Covariance matrix estimation failed".to_string(),
+                    message: "Variance estimation failed or too small".to_string(),
                     guidance: "Data may have too little variance or numerical issues".to_string(),
                 },
                 leak_probability: 0.5,
@@ -253,12 +238,12 @@ pub fn analyze_single_pass(
         };
     }
 
-    // Step 4: Compute covariance rate and measurement floor (spec §3.3.4)
-    // sigma_rate = sigma * n (covariance scales as 1/n)
-    let sigma_rate = sigma * (n as f64);
+    // Step 4: Compute variance rate and measurement floor (spec §3.3.4)
+    // var_rate = variance * n (variance scales as 1/n)
+    let var_rate = variance * (n as f64);
 
-    // Compute c_floor: 95th percentile of max_k |Z_k| where Z ~ N(0, Σ_rate)
-    let c_floor = compute_c_floor_9d(&sigma_rate, config.seed);
+    // Compute c_floor: 95th percentile of |Z| where Z ~ N(0, var_rate)
+    let c_floor = compute_c_floor_1d(var_rate, config.seed);
 
     // Statistical floor: c_floor / √n
     let theta_floor_stat = c_floor / (n as f64).sqrt();
@@ -278,51 +263,41 @@ pub fn analyze_single_pass(
         theta_floor
     };
 
-    // Step 5: Student's t prior calibration (spec §3.3.5)
-    let (sigma_t, l_r) =
-        calibrate_t_prior_scale(&sigma_rate, theta_eff, n, discrete_mode, config.seed);
+    // Step 5: half-t prior calibration for 1D (spec §3.3.5)
+    let sigma_t = calibrate_halft_prior_scale_1d(var_rate, theta_eff, n, config.seed);
 
-    // Compute marginal prior covariance for variance ratio check (spec §3.5.2)
-    // For t_4: Var(δ) = (ν/(ν-2)) σ² R = 2σ² R
-    let prior_cov_marginal = compute_prior_cov_9d(
-        &sigma_rate,
-        sigma_t * std::f64::consts::SQRT_2,
-        discrete_mode,
-    );
+    // Compute marginal prior variance for variance ratio check (spec §3.5.2)
+    // For half-t_4: Var(|δ|) ≈ 2σ_t² (using half-normal approximation)
+    let prior_var = 2.0 * sigma_t * sigma_t;
 
     // Step 6: Compute MDE for quality assessment (spec §3.4.6)
-    let mde = estimate_mde(&sigma, 0.05); // α = 0.05
+    let mde = estimate_mde(variance, 0.05); // α = 0.05
     let quality = MeasurementQuality::from_mde_ns(mde.mde_ns);
 
     // Debug output for investigation
     if std::env::var("TIMING_ORACLE_DEBUG").is_ok() {
         eprintln!(
             "[DEBUG] n = {}, discrete_mode = {}, block_length = {}",
-            n, discrete_mode, cov_estimate.block_size
+            n, discrete_mode, var_estimate.block_size
         );
         eprintln!("[DEBUG] theta_user = {:.2} ns, theta_floor_stat = {:.2} ns, theta_tick = {:.2} ns, theta_floor = {:.2} ns, theta_eff = {:.2} ns",
             config.theta_ns, theta_floor_stat, theta_tick, theta_floor, theta_eff);
         eprintln!("[DEBUG] c_floor = {:.2} ns·√n", c_floor);
         eprintln!("[DEBUG] MDE: {:.2} ns", mde.mde_ns);
-        eprintln!("[DEBUG] delta_hat = {:?}", delta_hat.as_slice());
-        eprintln!(
-            "[DEBUG] sigma diagonal = [{:.2e}, {:.2e}, {:.2e}, ..., {:.2e}]",
-            sigma[(0, 0)],
-            sigma[(1, 1)],
-            sigma[(2, 2)],
-            sigma[(8, 8)]
-        );
+        eprintln!("[DEBUG] w1_obs = {:.2} ns", w1_obs);
+        eprintln!("[DEBUG] variance = {:.2e}", variance);
         eprintln!("[DEBUG] sigma_t = {:.2e}", sigma_t);
     }
 
-    // Step 7: Compute Bayesian posterior with Gibbs sampling (spec §3.4.4)
-    let bayes_result = compute_bayes_gibbs(
-        &delta_hat,
-        &sigma,
+    // Step 7: Compute 1D Bayesian posterior (spec §3.4.4)
+    // Scale variance for sample size: var_n = variance / n
+    let var_n = variance / (n as f64);
+    let bayes_result = tacet_core::analysis::compute_bayes_1d(
+        w1_obs,
+        var_n,
         sigma_t,
-        &l_r,
         theta_eff,
-        Some(config.seed),
+        config.seed,
     );
     let leak_probability = bayes_result.leak_probability;
 
@@ -332,28 +307,17 @@ pub fn analyze_single_pass(
             leak_probability
         );
         eprintln!(
-            "[DEBUG] lambda: mean={:.3}, sd={:.3}, cv={:.3}, ess={:.1}, mixing_ok={}",
-            bayes_result.lambda_mean,
-            bayes_result.lambda_sd,
-            bayes_result.lambda_cv,
-            bayes_result.lambda_ess,
-            bayes_result.lambda_mixing_ok
-        );
-        eprintln!(
-            "[DEBUG] delta_post = [{:.1}, {:.1}, {:.1}, ..., {:.1}]",
-            bayes_result.delta_post[0],
-            bayes_result.delta_post[1],
-            bayes_result.delta_post[2],
-            bayes_result.delta_post[8]
+            "[DEBUG] w1_post = {:.3}, var_post = {:.3e}",
+            bayes_result.w1_post, bayes_result.var_post
         );
     }
 
     // Step 8: Compute effect estimate from Bayesian result
-    let effect_estimate = compute_effect_estimate(&bayes_result.delta_draws, theta_eff);
+    let effect_estimate = compute_effect_estimate(&bayes_result.w1_draws);
 
     // Step 9: Check variance ratio quality gate (spec §3.5.2)
     // Compute variance ratio: posterior_var / prior_var
-    let variance_ratio = compute_variance_ratio(&bayes_result.lambda_post, &prior_cov_marginal);
+    let variance_ratio = bayes_result.var_post / prior_var;
     let data_too_noisy = variance_ratio > config.max_variance_ratio;
 
     if std::env::var("TIMING_ORACLE_DEBUG").is_ok() {
@@ -377,34 +341,9 @@ pub fn analyze_single_pass(
         });
     }
 
-    // v5.6: Emit NumericalIssue when kappa chain mixing is bad
-    if !bayes_result.kappa_mixing_ok {
-        quality_issues.push(QualityIssue {
-            code: IssueCode::NumericalIssue,
-            message: format!(
-                "κ chain mixing poor (CV={:.2}, ESS={:.0})",
-                bayes_result.kappa_cv, bayes_result.kappa_ess
-            ),
-            guidance: "Posterior may be unreliable; consider longer time budget.".to_string(),
-        });
-    }
-
-    // v5.6: Emit LikelihoodInflated when kappa_mean < 0.3
-    if bayes_result.kappa_mean < 0.3 {
-        quality_issues.push(QualityIssue {
-            code: IssueCode::LikelihoodInflated,
-            message: format!(
-                "Likelihood covariance inflated ~{:.1}x due to data/model mismatch",
-                1.0 / bayes_result.kappa_mean
-            ),
-            guidance: "Uncertainty was increased for robustness. Effect estimates remain valid."
-                .to_string(),
-        });
-    }
-
     // Build diagnostics
-    // Use block_size from covariance estimation (spec §3.3.2 compliant)
-    let block_length = cov_estimate.block_size;
+    // Use block_size from variance estimation (spec §3.3.2 compliant)
+    let block_length = var_estimate.block_size;
     let diagnostics = Diagnostics {
         dependence_length: block_length,
         effective_sample_size: n / block_length.max(1),
@@ -428,21 +367,21 @@ pub fn analyze_single_pass(
         timer_name: "external".to_string(),
         platform: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
         timer_fallback_reason: None, // N/A for pre-collected data
-        // Gibbs sampler diagnostics
-        gibbs_iters_total: 256,
-        gibbs_burnin: 64,
-        gibbs_retained: 192,
-        lambda_mean: bayes_result.lambda_mean,
-        lambda_sd: bayes_result.lambda_sd,
-        lambda_cv: bayes_result.lambda_cv,
-        lambda_ess: bayes_result.lambda_ess,
-        lambda_mixing_ok: bayes_result.lambda_mixing_ok,
-        // v5.6 kappa diagnostics
-        kappa_mean: bayes_result.kappa_mean,
-        kappa_sd: bayes_result.kappa_sd,
-        kappa_cv: bayes_result.kappa_cv,
-        kappa_ess: bayes_result.kappa_ess,
-        kappa_mixing_ok: bayes_result.kappa_mixing_ok,
+        // Gibbs sampler diagnostics (no longer applicable for 1D, use defaults)
+        gibbs_iters_total: 5000,
+        gibbs_burnin: 1000,
+        gibbs_retained: 4000,
+        lambda_mean: 1.0,
+        lambda_sd: 0.0,
+        lambda_cv: 0.0,
+        lambda_ess: 0.0,
+        lambda_mixing_ok: true,
+        // v5.6 kappa diagnostics (not used in 1D W₁)
+        kappa_mean: 1.0,
+        kappa_sd: 0.0,
+        kappa_cv: 0.0,
+        kappa_ess: 0.0,
+        kappa_mixing_ok: true,
     };
 
     // Step 10: Make decision based on quality check and posterior (v5.5 threshold elevation rule)
@@ -554,22 +493,6 @@ pub fn analyze_single_pass(
         samples_used: n,
         analysis_time: start_time.elapsed(),
     }
-}
-
-/// Compute variance ratio (average diagonal posterior/prior ratio).
-fn compute_variance_ratio(
-    posterior_cov: &tacet_core::Matrix9,
-    prior_cov: &tacet_core::Matrix9,
-) -> f64 {
-    let mut sum = 0.0;
-    for i in 0..9 {
-        let prior_var = prior_cov[(i, i)];
-        let post_var = posterior_cov[(i, i)];
-        if prior_var > 1e-12 {
-            sum += post_var / prior_var;
-        }
-    }
-    sum / 9.0
 }
 
 /// Create default diagnostics for error cases.

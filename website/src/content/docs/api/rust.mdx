@@ -34,7 +34,9 @@ assert!(outcome.passed(), "Timing leak detected");
 // Or access detailed fields when needed
 if outcome.failed() {
     let effect = outcome.effect().unwrap();
-    eprintln!("Effect: {:.1}ns shift, {:.1}ns tail", effect.shift_ns, effect.tail_ns);
+    eprintln!("Effect: {:.1}ns ({})",
+              effect.max_effect_ns,
+              effect.tail_diagnostics.pattern_label);
 }
 ```
 
@@ -158,10 +160,73 @@ impl Outcome {
 
 ```rust
 pub struct EffectEstimate {
-    pub shift_ns: f64,              // Uniform shift component
-    pub tail_ns: f64,               // Tail effect component
+    pub max_effect_ns: f64,         // L∞ norm of W₁ distance
     pub credible_interval_ns: (f64, f64), // 95% CI
-    pub pattern: EffectPattern,     // UniformShift, TailEffect, Mixed, etc.
+    pub tail_diagnostics: TailDiagnostics, // Shift-vs-tail decomposition
+}
+```
+
+The `tail_diagnostics` field decomposes the timing effect into uniform shift and tail components:
+
+```rust
+pub struct TailDiagnostics {
+    pub shift_ns: f64,              // Median of rank-matched differences
+    pub tail_ns: f64,               // Mean absolute deviation from shift
+    pub tail_share: f64,            // Fraction of effect from tail (0.0-1.0)
+    pub tail_slow_share: f64,       // Fraction of tail mass that's positive
+    pub quantile_shifts: QuantileShifts, // Per-quantile timing differences
+    pub pattern_label: EffectPattern,    // Automatic classification
+}
+
+pub struct QuantileShifts {
+    pub p50_ns: f64,                // Median shift
+    pub p90_ns: f64,                // 90th percentile shift
+    pub p95_ns: f64,                // 95th percentile shift
+    pub p99_ns: f64,                // 99th percentile shift
+}
+
+pub enum EffectPattern {
+    TailEffect,      // >50% of effect in slow outliers
+    UniformShift,    // <30% of effect in tail, consistent across distribution
+    Mixed,           // 30-50% in tail, both components present
+    Negligible,      // Total effect below measurement floor
+}
+```
+
+**Understanding the decomposition:**
+- **shift_ns**: Represents the median timing difference across all observations (aligned by rank). A non-zero shift indicates consistent timing differences across the entire distribution.
+- **tail_ns**: Measures how much individual measurements deviate from the uniform shift. High values indicate some operations are disproportionately slow.
+- **tail_share**: The fraction of the total W₁ distance coming from tail deviations. Values above 0.5 indicate tail-dominated effects.
+
+**Example: Accessing effect details**
+
+```rust
+if outcome.failed() {
+    let effect = outcome.effect().unwrap();
+    let tail = &effect.tail_diagnostics;
+
+    println!("Max effect: {:.1}ns", effect.max_effect_ns);
+    println!("Pattern: {}", tail.pattern_label);
+    println!("Shift: {:.1}ns, Tail: {:.1}ns", tail.shift_ns, tail.tail_ns);
+
+    // Interpret the effect pattern
+    match tail.pattern_label {
+        EffectPattern::TailEffect => {
+            println!("Tail-heavy leak: {:.0}% from slow outliers", tail.tail_share * 100.0);
+            println!("p99: {:.1}ns vs median: {:.1}ns",
+                     tail.quantile_shifts.p99_ns, tail.quantile_shifts.p50_ns);
+        }
+        EffectPattern::UniformShift => {
+            println!("Uniform timing shift: {:.1}ns across distribution", tail.shift_ns);
+        }
+        EffectPattern::Mixed => {
+            println!("Mixed effect: {:.1}ns shift + {:.1}ns tail",
+                     tail.shift_ns, tail.tail_ns);
+        }
+        EffectPattern::Negligible => {
+            println!("Effect below measurement floor");
+        }
+    }
 }
 ```
 

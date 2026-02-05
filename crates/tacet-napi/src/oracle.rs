@@ -135,12 +135,11 @@ pub fn calibrate_samples(
     match calibrate(&baseline, &sample, ns_per_tick, &cal_config) {
         Ok(cal) => {
             let core_cal = CoreCalibration::new(
-                cal.sigma_rate,
+                cal.var_rate,
                 cal.block_length,
                 cal.iact,
                 cal.iact_method,
                 cal.sigma_t,
-                cal.l_r,
                 cal.theta_ns,
                 cal.calibration_samples,
                 cal.discrete_mode,
@@ -284,12 +283,11 @@ pub fn analyze(
 
     // Convert to core Calibration
     let core_cal = CoreCalibration::new(
-        cal.sigma_rate,
+        cal.var_rate,
         cal.block_length,
         cal.iact,
         cal.iact_method,
         cal.sigma_t,
-        cal.l_r,
         cal.theta_ns,
         cal.calibration_samples,
         cal.discrete_mode,
