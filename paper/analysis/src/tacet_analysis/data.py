@@ -107,11 +107,10 @@ def get_expected_combinations(preset: str = "medium") -> dict:
     - Heatmap 3 (NoiseLevel × Tool): effect=0, IID noise, all σ values
     """
     # Common across presets
-    # Note: "silent" and "rtlf" are R reference implementations, "tlsfuzzer" is Python
+    # Note: "silent" is R reference implementation, "rtlf-native" is Rust reimplementation, "tlsfuzzer" is Python
     base = {
         "tools": [
-            "ad-test", "dudect", "ks-test", "mona",
-            "rtlf", "silent", "tacet", "timing-tvla", "tlsfuzzer"
+            "dudect", "rtlf-native", "silent", "tacet", "timing-tvla", "tlsfuzzer"
         ],
         "tacet_thresholds": [0.4, 100.0],  # SharedHardware and AdjacentNetwork
     }
@@ -123,9 +122,9 @@ def get_expected_combinations(preset: str = "medium") -> dict:
             "effect_sigma_mults": [0, 0.1, 0.2, 0.4, 1, 2, 4, 10, 20],
             "noise_models": [
                 "ar1-n0.6", "ar1-n0.4", "ar1-n0.2", "iid",
-                "ar1-0.2", "ar1-0.4", "ar1-0.6"
+                "ar1-0.2", "ar1-0.4", "ar1-0.6", "ar1-0.8"
             ],
-            "synthetic_sigma_ns_values": [2, 5, 10, 20, 50],
+            "synthetic_sigma_ns_values": [5],
             "n_datasets": 100,
         }
     else:  # medium (default)

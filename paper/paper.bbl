@@ -1,5 +1,12 @@
 \begin{thebibliography}{10}
 
+\bibitem{ctverif}
+Jos{\'e}~Bacelar Almeida, Manuel Barbosa, Gilles Barthe, Fran{\c{c}}ois
+  Dupressoir, and Michael Emmi.
+\newblock {Verifying Constant-Time Implementations}.
+\newblock In {\em 25th USENIX Security Symposium (USENIX Security 16)}, pages
+  53--70. USENIX Association, 2016.
+
 \bibitem{bernstein2005cache}
 Daniel~J. Bernstein.
 \newblock {Cache-timing attacks on AES}, 2005.
@@ -40,6 +47,11 @@ Martin Dunsche, Marcel Maehren, Nurullah Erinola, Robert Merget, Nicolai
   Side-Channel Analyses with Bounded Type-1 Errors}.
 \newblock In {\em 33rd USENIX Security Symposium (USENIX Security 24)}. USENIX
   Association, 2024.
+
+\bibitem{tvla}
+Gilbert Goodwill, Benjamin Jun, Josh Jaffe, and Pankaj Rohatgi.
+\newblock {A testing methodology for side-channel resistance validation}.
+\newblock In {\em NIST Non-Invasive Attack Testing Workshop}, 2011.
 
 \bibitem{marvin}
 Hubert Kario.
@@ -114,6 +126,20 @@ C{\'e}dric Villani.
 \newblock {\em {Optimal Transport: Old and New}}, volume 338 of {\em
   Grundlehren der Mathematischen Wissenschaften}.
 \newblock Springer, 2009.
+
+\bibitem{hertzbleed}
+Yingchen Wang, Riccardo Paccagnella, Elizabeth~Tang He, Hovav Shacham,
+  Christopher~W. Fletcher, and David Kohlbrenner.
+\newblock {Hertzbleed: Turning Power Side-Channel Attacks Into Remote Timing
+  Attacks on x86}.
+\newblock In {\em 31st USENIX Security Symposium (USENIX Security 22)}, pages
+  679--697. USENIX Association, 2022.
+
+\bibitem{ctwasm}
+Conrad Watt, John Renner, Natalie Popescu, Sunjay Cauligi, and Deian Stefan.
+\newblock {CT-Wasm: Type-Driven Secure Cryptography for the Web Ecosystem}.
+\newblock In {\em Proceedings of the ACM on Programming Languages (POPL)},
+  volume~3, pages 1--29, 2019.
 
 \bibitem{flushreload}
 Yuval Yarom and Katrina Falkner.

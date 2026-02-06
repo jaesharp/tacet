@@ -4,7 +4,7 @@ from pathlib import Path
 
 # Project paths
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "thorough-w1-v7.3-pre-final"
+DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "thorough-merged-v5"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
 FIGURES_DIR = OUTPUT_DIR / "figures"
 
@@ -95,7 +95,7 @@ EFFECT_NAMES = {
 TOOL_ORDER = [
     "tacet",
     "silent",
-    "rtlf",
+    "rtlf-native",
     "tlsfuzzer",
     "dudect",
     "timing-tvla",
@@ -104,23 +104,22 @@ TOOL_ORDER = [
     "mona",
 ]
 
-# Primary tools for paper figures (7 tools, cleaner plots)
-PRIMARY_TOOLS = ["tacet", "silent", "rtlf", "dudect", "timing-tvla", "tlsfuzzer", "mona"]
+# Primary tools for paper figures (6 tools from post-fix thorough run)
+PRIMARY_TOOLS = ["tacet", "silent", "rtlf-native", "dudect", "timing-tvla", "tlsfuzzer"]
 
 # Distinctive color palette for 7 primary tools
 PRIMARY_TOOL_COLORS = {
     "tacet": "#FF6060",        # Coral red (Tacet brand accent)
     "silent": "#8b5cf6",       # Purple
-    "rtlf": "#3b82f6",         # Blue
+    "rtlf-native": "#3b82f6",  # Blue
     "dudect": "#f59e0b",       # Amber
     "timing-tvla": "#10b981",  # Emerald
     "tlsfuzzer": "#6b7280",    # Gray
-    "mona": "#ec4899",         # Pink
 }
 
 # Thorough dataset path (higher trial count, more effect sizes)
 # Lives under paper/analysis/results/ (not repo-root results/)
-THOROUGH_DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "thorough-w1-v7.3-pre-final"
+THOROUGH_DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "thorough-merged-v5"
 
 # Target figure widths matching the LaTeX layout:
 #   USENIX textwidth = 7.0", figure* uses width=0.85\textwidth, figure uses ~columnwidth

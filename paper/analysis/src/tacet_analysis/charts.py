@@ -1916,6 +1916,203 @@ def plot_power_heatmap_v3_trimodal(
     return fig
 
 
+def plot_power_heatmap_combined(
+    raw_df: pd.DataFrame,
+    noise_model: str = "ar1-0.6",
+    tacet_threshold_ns: float = 0.4,
+    ref_sigma_ns: float = 5.0,
+    effect_sizes: Optional[list[float]] = None,
+    output_path: Optional[Path] = None,
+    figsize: tuple[float, float] = (10.5, 6.5),
+) -> plt.Figure:
+    """Combined power heatmap: tools on y-axis with sub-rows per effect pattern.
+
+    Replaces the three-panel layout (shift | tail | bimodal) with a single grid
+    where each tool has three sub-rows. This uses ~1/3 the horizontal space.
+
+    Caption should note: "Sub-rows per tool: S = shift, T = tail (upper 5%),
+    B = bimodal. All tools achieve 100% detection at ≥20σ (omitted)."
+    """
+    setup_paper_style()
+
+    if effect_sizes is None:
+        # Drop 20σ (all tools at 100%); keep 10σ as convergence reference
+        effect_sizes = [0, 0.1, 0.4, 1, 2, 10]
+
+    df = raw_df[raw_df["noise_model"] == noise_model].copy()
+    df = _filter_by_threshold(df, tacet_threshold_ns)
+
+    tools_present = [t for t in PRIMARY_TOOLS if t in df["tool"].unique()]
+    effects_present = [e for e in effect_sizes if e in df["effect_sigma_mult"].unique()]
+
+    patterns = ["shift", "tail", "bimodal"]
+    pattern_abbrev = {"shift": "shift", "tail": "tail", "bimodal": "bimodal"}
+
+    n_tools = len(tools_present)
+    n_effects = len(effects_present)
+    n_patterns = len(patterns)
+    group_gap = 0.4  # visual gap between tool groups
+
+    def row_y(tool_idx: int, pattern_idx: int) -> float:
+        return tool_idx * (n_patterns + group_gap) + pattern_idx
+
+    total_height = n_tools * n_patterns + (n_tools - 1) * group_gap
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Show all spines for the grid border
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(0.5)
+        spine.set_color(COLORS["border"])
+
+    # Aggregate all data
+    pattern_filter = df["effect_pattern"].isin(patterns)
+    effect_filter = df["effect_sigma_mult"].isin(effects_present)
+    agg = df[pattern_filter & effect_filter].groupby(
+        ["tool", "effect_sigma_mult", "effect_pattern"]
+    ).agg(
+        n_trials=("verdict", "count"),
+        pass_rate=("verdict", lambda x: (x == "pass").mean()),
+        fail_rate=("verdict", lambda x: (x == "fail").mean()),
+        inc_rate=("verdict", lambda x: (x == "inconclusive").mean()),
+    ).reset_index()
+
+    tacet_idx = tools_present.index("tacet") if "tacet" in tools_present else None
+
+    # Draw cells (no per-cell borders; group borders drawn separately)
+    for i, tool in enumerate(tools_present):
+        for p, pattern in enumerate(patterns):
+            y = row_y(i, p)
+            for j, effect in enumerate(effects_present):
+                rect = plt.Rectangle(
+                    (j, y), 1, 1,
+                    facecolor="white",
+                    edgecolor="none",
+                )
+                ax.add_patch(rect)
+
+                mask = (
+                    (agg["tool"] == tool)
+                    & (agg["effect_sigma_mult"] == effect)
+                    & (agg["effect_pattern"] == pattern)
+                )
+                rows = agg[mask]
+                if len(rows) > 0:
+                    r = rows.iloc[0]
+                    _draw_stacked_bar_cell(
+                        ax, j, y, 1, 1,
+                        found_rate=r["fail_rate"],
+                        not_found_rate=r["pass_rate"],
+                        uncertain_rate=r["inc_rate"],
+                    )
+
+    # Single horizontal lines between tool groups (in the gap)
+    for i in range(1, n_tools):
+        sep_y = row_y(i, 0) - group_gap / 2
+        ax.axhline(y=sep_y, color=COLORS["border"], linewidth=0.6, zorder=5)
+
+    # Axes limits (inverted so first tool is at top)
+    ax.set_xlim(0, n_effects)
+    ax.set_ylim(-0.2, total_height + 0.2)
+    ax.invert_yaxis()
+
+    # X-axis: effect sizes (σ)
+    ax.set_xticks([x + 0.5 for x in range(n_effects)])
+    ax.set_xticklabels(
+        [EFFECT_NAMES.get(e, str(e)) for e in effects_present], fontsize=11
+    )
+    ax.set_xlabel("Effect size (σ)", fontsize=12)
+
+    # Secondary x-axis: nanoseconds
+    ax_top = ax.twiny()
+    ax_top.set_xlim(0, n_effects)
+    ax_top.set_xticks([x + 0.5 for x in range(n_effects)])
+    ns_labels = [_format_ns_label(e, ref_sigma_ns) for e in effects_present]
+    ax_top.set_xticklabels(ns_labels, fontsize=11)
+    ax_top.set_xlabel("Effect size (ns, σ = 5 ns)", fontsize=12)
+    # Style the top spine to match
+    ax_top.spines["top"].set_visible(True)
+    ax_top.spines["top"].set_linewidth(0.5)
+    ax_top.spines["top"].set_color(COLORS["border"])
+
+    # Y-axis: tool names centered on their 3-row groups
+    tool_centers = [row_y(i, 0) + (n_patterns - 1) / 2 for i in range(n_tools)]
+    ax.set_yticks(tool_centers)
+    # Place tool names manually so we can bold Tacet reliably
+    ax.set_yticks(tool_centers)
+    ax.set_yticklabels([""] * n_tools)  # blank tick labels
+    ax.tick_params(axis="y", length=0)
+
+    from matplotlib.transforms import blended_transform_factory
+    label_trans = blended_transform_factory(ax.transAxes, ax.transData)
+    for i, tool in enumerate(tools_present):
+        is_tacet = tool == "tacet"
+        if is_tacet:
+            # mathtext bold so it renders regardless of system font
+            threshold_str = f"{tacet_threshold_ns:.1f}" if tacet_threshold_ns < 1 else f"{tacet_threshold_ns:.0f}"
+            label = r"$\mathbf{Tacet}$" + f" (θ={threshold_str}ns)"
+        else:
+            label = _format_tool_label_with_threshold(tool, tacet_threshold_ns)
+        ax.text(
+            -0.10, tool_centers[i], label,
+            ha="right", va="center",
+            fontsize=11,
+            transform=label_trans,
+        )
+
+    # Pattern sub-labels (S/T/B) between tool names and grid
+    from matplotlib.transforms import blended_transform_factory
+    trans = blended_transform_factory(ax.transAxes, ax.transData)
+    for i in range(n_tools):
+        for p, pattern in enumerate(patterns):
+            y_pos = row_y(i, p) + 0.5
+            label = pattern_abbrev[pattern]
+            is_tacet = tools_present[i] == "tacet"
+            ax.text(
+                -0.01, y_pos, label,
+                ha="right", va="center", fontsize=9,
+                color=COLORS["text"] if is_tacet else COLORS["text_secondary"],
+                fontweight="bold" if is_tacet else "normal",
+                transform=trans,
+            )
+
+    # Legend below with breathing room
+    legend_elements = [
+        plt.Rectangle(
+            (0, 0), 1, 1, facecolor=VERDICT_COLORS["found"],
+            edgecolor=COLORS["border"], label="Effect found",
+        ),
+        plt.Rectangle(
+            (0, 0), 1, 1, facecolor=VERDICT_COLORS["not_found"],
+            edgecolor=COLORS["border"], label="Effect not found",
+        ),
+        plt.Rectangle(
+            (0, 0), 1, 1, facecolor=VERDICT_COLORS["uncertain"],
+            edgecolor=COLORS["border"], label="Inconclusive",
+        ),
+    ]
+    ax.legend(
+        handles=legend_elements,
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1.0),
+        ncol=1,
+        frameon=False,
+        fontsize=10,
+    )
+
+    plt.tight_layout()
+
+    if output_path:
+        fig.savefig(
+            output_path, dpi=300, bbox_inches="tight",
+            facecolor=COLORS["background"],
+        )
+        print(f"Saved: {output_path}")
+
+    return fig
+
+
 def plot_tail_power_curve_v3(
     summary_df: pd.DataFrame,
     tacet_threshold_ns: float = 0.4,

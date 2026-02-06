@@ -312,8 +312,8 @@ pub fn compute_achievable_at_max(
     };
     let theta_floor_at_max = libm::fmax(c_floor / libm::sqrt(n_blocks as f64), theta_tick);
 
-    // 10% relative tolerance, consistent with is_threshold_elevated
-    let epsilon = libm::fmax(theta_tick, 0.10 * theta_user);
+    // Compute epsilon: max(theta_tick, 1e-6 * theta_user)
+    let epsilon = libm::fmax(theta_tick, 1e-6 * theta_user);
 
     // Achievable if floor at max_samples would be within tolerance of user threshold
     theta_floor_at_max <= theta_user + epsilon
@@ -324,13 +324,7 @@ pub fn compute_achievable_at_max(
 /// Returns `true` if θ_eff > θ_user + ε, meaning the effective threshold
 /// is elevated beyond the tolerance band around the user's requested threshold.
 ///
-/// The epsilon tolerance is: ε = max(θ_tick, 0.10 × θ_user)
-///
-/// The 10% relative floor ensures that marginal floor elevation (e.g. θ_floor = 0.42ns
-/// vs θ_user = 0.4ns) doesn't block a Pass when the Bayesian posterior is confident.
-/// Without this, synthetic data (timer_resolution_ns = 0) collapses ε to ~0,
-/// and even real hardware with sub-nanosecond tick size can trigger spurious
-/// ThresholdElevated from normal W₁ sampling noise.
+/// The epsilon tolerance is: ε = max(θ_tick, 1e-6 × θ_user)
 ///
 /// This check is used at decision time: if P < pass_threshold but the threshold
 /// is elevated, we return ThresholdElevated instead of Pass.
@@ -340,8 +334,8 @@ pub fn is_threshold_elevated(theta_eff: f64, theta_user: f64, theta_tick: f64) -
         return false;
     }
 
-    // 10% relative tolerance absorbs marginal floor elevation from W₁ sampling noise.
-    let epsilon = libm::fmax(theta_tick, 0.10 * theta_user);
+    // Compute epsilon: max(theta_tick, 1e-6 * theta_user)
+    let epsilon = libm::fmax(theta_tick, 1e-6 * theta_user);
 
     // Elevated if effective threshold exceeds user threshold + tolerance
     theta_eff > theta_user + epsilon

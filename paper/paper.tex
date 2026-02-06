@@ -83,19 +83,6 @@
 \newcommand{\us}[1]{\SI{#1}{\micro\second}}
 \newcommand{\ms}[1]{\SI{#1}{\milli\second}}
 
-% Reduce title box height for anonymous submission (no authors)
-\makeatletter
-\def\@maketitle{\newpage
- \vbox to 1.0in{
- \vspace*{\fill}
- \begin{center}%
-  {\Large\bf \@title \par}%
- \end{center}%
- \par
- \vspace*{\fill}
- }
-}
-\makeatother
 
 % Typography improvements
 \clubpenalty=10000      % Prevent orphans (single line at bottom of page)
@@ -133,7 +120,7 @@
 % Solution: calibrated Bayesian verdicts
 % Results: highlight key evaluation findings
 
-Timing side-channel attacks remain a real threat to cryptographic implementations.
+Timing side-channel attacks continue to compromise cryptographic implementations.
 Existing detection tools output Pass or Fail without reporting when measurement
 conditions make results unreliable—developers see ``pass'' and assume safety,
 unaware the test lacked power to detect exploitable leaks.
@@ -147,12 +134,12 @@ stream-based block bootstrap and detects degraded conditions through quality gat
 %
 In our evaluation, \tacet detected CVE-2023-49092 (MARVIN attack) in
 RustCrypto's RSA implementation without prior knowledge of the vulnerability. Across 2{,}270 trials on a heavily loaded
-server---1{,}600 synthetic calibration trials and 670 on real cryptographic
-implementations spanning 7~libraries---\tacet produced 5~false positives (0.22\%
+server (1{,}600 synthetic calibration trials and 670 on real cryptographic
+implementations spanning 7~libraries), \tacet produced 5~false positives (0.22\%
 aggregate FPR; 0.47\% conditional on definitive verdict), consistent with the
 $\leq$5\% target.
-Designed for CI integration, \tacet eliminates flaky tests by returning Inconclusive
-under degraded measurement conditions rather than unreliable verdicts. The library
+Designed for CI integration, \tacet reduces flaky tests by returning Inconclusive
+under degraded measurement conditions instead of unreliable verdicts. The library
 is implemented in Rust with C/C++, Go, and JavaScript bindings.
 
 \end{abstract}
@@ -170,7 +157,7 @@ these tools may output ``pass'' even when the evidence is insufficient—develop
 see a passing result and assume their code has no exploitable leak, unaware the
 test could not actually detect anything.
 
-Timing side-channels remain a real threat. The MARVIN attack~\cite{marvin} showed
+Timing side-channels have concrete consequences. The MARVIN attack~\cite{marvin} showed
 that RSA PKCS\#1 v1.5 implementations in over 40 libraries leak plaintext through
 nanosecond-scale timing differences in big-integer arithmetic. Attacks span threat
 models from remote network adversaries to co-located processes, with precision
@@ -181,7 +168,7 @@ random inputs. \dudect~\cite{dudect}, the most widely used tool, applies Welch's
 t-test. More recent tools like \rtlf~\cite{rtlf} and \silent~\cite{silent} use
 quantile comparisons with bootstrap-based inference. However, these tools provide
 Pass/Fail verdicts without quantifying when evidence is insufficient~\cite{trailofbits-dudect}.
-Under noisy conditions—common in CI with shared resources and variable load—tools
+Under noisy conditions (common in CI with shared resources and variable load), tools
 may output ``pass'' when the evidence is genuinely insufficient, giving unwarranted
 confidence in vulnerable code.
 
@@ -207,7 +194,7 @@ Beyond the W$_1$ statistic (\Cref{sec:approach:wasserstein}), we contribute a Ba
 framework (\Cref{sec:approach:inference}) with empirically calibrated three-way verdicts
 (Pass/Fail/Inconclusive; \Cref{sec:approach:decisions}), quality gates that detect
 degraded measurement conditions (\Cref{sec:approach:gates}), and an explicit measurement
-floor (\Cref{sec:approach:floor}) that prevents claiming ``no leak'' when the system
+floor (\Cref{sec:approach:floor}) so the system cannot claim ``no leak'' when it
 cannot resolve effects at the requested threshold.
 
 %-------------------------------------------------------------------------------
@@ -223,12 +210,12 @@ Our contributions are:
     \item \textbf{Bayesian decision framework}: A three-way verdict system
           (Pass/Fail/Inconclusive) that outputs posterior probabilities
           $\prob{\text{leak} > \theta \given \text{data}}$ and maps them
-          to decisions, preventing forced verdicts when evidence is insufficient.
+          to decisions. When evidence is insufficient, the system withholds a verdict.
 
     \item \textbf{Robustness to dependent data}: Stream-based block bootstrap
           on the acquisition stream to handle autocorrelation in timing
-          measurements, preserving cross-class temporal dependencies that
-          violate standard iid assumptions.
+          measurements. Unlike per-class resampling, this retains cross-class
+          temporal dependencies that violate standard iid assumptions.
 
     \item \textbf{Comprehensive evaluation and implementation}: Comparison
           against existing tools (\dudect, \tlsfuzzer, \rtlf, \silent, TVLA) on
@@ -266,9 +253,10 @@ Several tools exist for detecting timing side-channels during development.
 
 \paragraph{\dudect~\cite{dudect}.}
 The most widely used tool. \dudect applies Welch's t-test to compare timing
-distributions between fixed and random inputs. It is simple, fast, and available
-in C with Rust bindings. It uses parametric statistics, prioritizing simplicity
-and interpretability, and outputs a t-statistic for binary decision-making.
+distributions between fixed and random inputs---the same statistical core as
+TVLA (Test Vector Leakage Assessment)~\cite{tvla}, originally developed for
+power side-channel evaluation. It is simple, fast, and available in C with
+Rust bindings, outputting a t-statistic for binary decision-making.
 
 \paragraph{\tlsfuzzer~\cite{tlsfuzzer}.}
 A network-level timing analysis tool that applies multiple statistical tests
@@ -282,12 +270,26 @@ distributions using an i.i.d.\ bootstrap with 10,000 iterations. This captures
 distributional differences beyond means. The tool is designed for independent
 samples and operates on pre-collected measurement files.
 
-\paragraph{\silent~\cite{silent}.}
+\paragraph{\silent~\cite{silent} (preprint).}
 The most statistically sophisticated prior work. \silent uses a 9-quantile test
 statistic with $m$-dependent block bootstrap that handles autocorrelated data.
 It provides bounded Type-I error via relevance testing against a user-defined
 threshold $\Delta$. The approach emphasizes distributional shape via quantile
 comparisons.
+
+\paragraph{Static verification.}
+A complementary line of work proves constant-time execution at the source or
+IR level. ct-verif~\cite{ctverif} uses product programs to verify that no
+secret-dependent branches or memory accesses exist; ct-wasm~\cite{ctwasm}
+enforces a constant-time type discipline for WebAssembly. These tools provide
+formal guarantees but verify the \emph{code model}, not the \emph{hardware
+execution}. Microarchitectural effects---speculative execution~\cite{spectre},
+data-dependent operand timing~\cite{hertzbleed}, and port contention---can
+introduce timing variation in code that is constant-time at the source level.
+Dynamic tools like \tacet test compiled binaries on real hardware, catching
+leaks that static models do not cover. The two approaches are complementary:
+static tools eliminate algorithmic timing dependence, while dynamic tools
+validate the binary on target hardware.
 
 %-------------------------------------------------------------------------------
 \subsection{Feature Comparison}
@@ -341,8 +343,8 @@ Integrated measurement & \CIRCLE & \CIRCLE & \Circle & \Circle & \CIRCLE \\
 \section{Tacet's Approach}
 \label{sec:approach}
 
-\tacet is designed around one principle: when measurement conditions cannot support
-a confident conclusion, say so rather than guess. This section describes the
+\tacet's central design choice is to say ``insufficient evidence'' when measurement
+conditions cannot support a confident conclusion. This section describes the
 statistical methodology.
 
 \tacet operates in two phases. During \emph{initialization}, it collects an initial
@@ -420,12 +422,12 @@ The W$_1$ distance integrates CDF differences across the entire gap between timi
 clusters, providing strong signal for separated distributions.
 
 Our evaluation confirms this advantage (\Cref{fig:power_heatmap}): bimodal effects
-(panel c) show strongest detection across all tools, consistent with W$_1$'s
-theoretical optimality for separated distributions. Quantile-based methods that
-sample only at specific points (p10, p20, ..., p90) miss the full distributional
-separation---our ablation (\Cref{sec:evaluation:ablation}) shows replacing W$_1$
-with 9-quantile comparison eliminates bimodal detection entirely (0\% across all
-effect sizes).
+show strongest detection across all tools, consistent with W$_1$'s
+theoretical optimality for separated distributions. Our ablation
+(\Cref{sec:evaluation:ablation}) quantifies this: replacing W$_1$ with 9-decile
+differences (p10--p90) eliminates bimodal detection at $\leq 2\sigma$; \silent's
+finer quantile grid (through p95) recovers partial sensitivity (15\% at $0.2\sigma$,
+100\% at $1\sigma$), but W$_1$ achieves 100\% from $0.2\sigma$.
 
 \paragraph{Threshold interpretation.}
 Because $\theta$ is a W$_1$ distance, it measures aggregate distributional displacement.
@@ -434,10 +436,12 @@ For a uniform shift of $c$ nanoseconds, $W_1 \approx c$. For concentrated effect
 A Pass verdict at threshold $\theta$ means: with 95\% posterior confidence, the
 aggregate distributional difference is below $\theta$ under the tested conditions.
 
-For a mean-estimation attacker, query complexity scales as
-$\sigma^2_{\text{attacker}} / W_1^2$ regardless of leak geometry.
-This bound applies to remote and adjacent-network attackers where measurement noise
-masks individual query timings. For co-located attackers with cycle-level precision,
+For a mean-estimation attacker exploiting mean timing differences,
+query complexity scales as $\sigma^2_{\text{attacker}} / \Delta\mu^2$,
+and since $|\Delta\mu| \leq W_1$, a bound on $W_1$ bounds
+mean-estimation difficulty.
+This relationship is most relevant to remote and adjacent-network attackers,
+where measurement noise masks individual query timings. For co-located attackers with cycle-level precision,
 $W_1 < \theta$ bounds mean-estimation attacks but does not rule out threshold
 classifiers exploiting rare high-magnitude events (\Cref{sec:discussion:limitations}).
 
@@ -495,8 +499,8 @@ system under tested conditions, not a finite-sample guarantee:
 \Cref{sec:evaluation:results} validates that the bounds hold across
 our benchmark suite, but under extreme autocorrelation ($\rho = 0.8$)
 FPR rises to 8\%---still the lowest among tools with comparable
-detection power, with further degradation mitigated by Inconclusive
-verdicts rather than forced Pass/Fail.
+detection power. Further degradation is mitigated by Inconclusive
+verdicts instead of forced Pass/Fail.
 
 \begin{itemize}
     \item \textbf{Pass}: The posterior probability of a timing leak exceeding
@@ -519,9 +523,9 @@ Binary tools cannot distinguish between ``no leak above threshold'' and
 the test should be re-run under better conditions or with more samples,
 not that the implementation is safe.
 
-For CI integration, this prevents flaky tests. Rather than randomly passing or
-failing based on environmental noise, \tacet returns Inconclusive when conditions
-are poor. Developers can configure how to handle this (retry, warn, or fail-closed)
+In CI, this reduces flaky tests: \tacet returns Inconclusive when conditions
+are poor, so results do not oscillate between pass and fail across runs.
+Developers can configure how to handle Inconclusive (retry, warn, or fail-closed)
 based on their security requirements.
 
 %-------------------------------------------------------------------------------
@@ -547,13 +551,13 @@ many nominal samples equal one independent observation. The effective sample siz
 $n_{\text{eff}} = n / \hat{\tau}$ can be much smaller than the nominal count when
 autocorrelation is strong.
 
-\silent also uses block bootstrap to handle autocorrelation. The key distinction
-is that \tacet uses \emph{stream-based bootstrap}—resampling the interleaved
-acquisition stream rather than per-class samples. This preserves cross-class
+\silent also uses block bootstrap to handle autocorrelation. The difference
+is that \tacet uses \emph{stream-based bootstrap}: resampling the interleaved
+acquisition stream, not per-class samples. This preserves cross-class
 temporal dependencies (e.g., cache state carrying from a Fixed measurement to
-the next Random measurement). Additionally, \tacet actively monitors for
+the next Random measurement). \tacet also monitors for
 stationarity violations via quality gates, and outputs Inconclusive when
-autocorrelation is too severe to handle, rather than forcing a verdict.
+autocorrelation is too severe to handle.
 
 %-------------------------------------------------------------------------------
 \subsection{Quality Gates}
@@ -682,20 +686,18 @@ effective resolution (\Cref{app:batching}).
 \tacet is designed for CI pipelines:
 
 \begin{itemize}
-    \item \textbf{Non-flaky}: Tests return Inconclusive under poor conditions
-          rather than randomly passing or failing. This eliminates the ``rerun
-          until green'' problem.
+    \item Tests return Inconclusive under poor conditions instead of randomly
+          passing or failing, avoiding the ``rerun until green'' problem.
 
-    \item \textbf{Configurable budgets}: Time and sample budgets can be set per
-          test, allowing quick checks during development (10\,s) and thorough
-          validation before release (60\,s+).
+    \item Time and sample budgets can be set per test: 10\,s for development
+          checks, 60\,s+ for pre-release validation.
 
-    \item \textbf{Exit codes}: The CLI returns distinct exit codes for Pass (0),
-          Fail (1), and Inconclusive (2). Organizations can configure fail-closed
-          (treat Inconclusive as failure) or fail-open (treat as warning) policies.
+    \item The CLI returns distinct exit codes for Pass (0), Fail (1), and
+          Inconclusive (2). Organizations can configure fail-closed (treat
+          Inconclusive as failure) or fail-open (treat as warning) policies.
 
-    \item \textbf{Structured output}: JSON output includes the posterior probability,
-          effect size estimate with credible intervals, and diagnostics.
+    \item JSON output includes the posterior probability, effect size estimate
+          with credible intervals, and diagnostics.
 \end{itemize}
 
 %===============================================================================
@@ -766,8 +768,7 @@ detection power.
 
 \silent also handles autocorrelation via $m$-dependent bootstrap, reaching
 12\% FPR at $\rho = 0.8$. Where \silent must still output
-Pass or Fail, \tacet returns Inconclusive when evidence is insufficient,
-preventing forced verdicts under degraded conditions.
+Pass or Fail, \tacet returns Inconclusive when evidence is insufficient.
 
 Standard statistical tests (Anderson-Darling, Kolmogorov-Smirnov) perform
 worse: AD-test reaches 45\% FPR at $\rho = 0.8$ and already exceeds the 5\%
@@ -811,13 +812,14 @@ correctly widening confidence intervals.
 
 \begin{figure*}[ht]
     \centering
-    \includegraphics[width=\textwidth]{analysis/outputs/figures/v3-fig2-experimental_with_bimodal.png}
-    \caption{Detection power by effect size for (a) shift, (b) tail, and (c) bimodal
-             patterns under AR(1) noise with $\rho = 0.6$ (W$_1$ distance statistic).
-             Bimodal effects (cache hits vs.\ misses) show strongest detection across
-             all tools---W$_1$'s integration of CDF differences captures the full mode
-             separation. At large effects ($\geq 5\sigma$), all tools achieve 100\%
-             detection. \tacet returns Inconclusive when precision is insufficient.}
+    \includegraphics[width=\textwidth]{analysis/outputs/figures/v3-fig2-combined_power_heatmap.png}
+    \caption{Detection power by effect size under AR(1) noise with $\rho = 0.6$
+             (W$_1$ distance statistic). Each tool has three sub-rows for shift, tail
+             (upper 5\%), and bimodal effect patterns. Bimodal effects show strongest
+             detection across all tools---W$_1$'s integration of CDF differences
+             captures the full mode separation. All tools achieve 100\% detection at
+             $\geq 20\sigma$ (omitted). \tacet returns Inconclusive when precision
+             is insufficient.}
     \label{fig:power_heatmap}
 \end{figure*}
 
@@ -881,40 +883,42 @@ effects $\geq$2$\times$ threshold, confirming accurate quantification.
 
 \paragraph{Effect geometry.}
 \Cref{fig:power_heatmap} shows detection varies by leak geometry. Bimodal effects
-(panel c) show strongest detection---consistent with W$_1$'s theoretical advantage
-for separated distributions. For tail-only effects (panel b, upper 5\% shifted),
+show strongest detection---consistent with W$_1$'s theoretical advantage
+for separated distributions. For tail-only effects (upper 5\% shifted),
 \tacet achieves 100\% detection at $\geq 1\sigma$ under i.i.d.\ conditions but
 shows lower power at near-threshold effects than \silent (33\% vs.\ 96\% at $0.4\sigma$).
-However, our ablation below demonstrates that quantile methods entirely fail on
-bimodal and tail effects under autocorrelation, while W$_1$ maintains detection
-capability.
+However, our ablation below demonstrates that quantile-based test statistics show
+reduced bimodal sensitivity that scales with quantile coverage---from complete
+blindness at p10--p90 to partial detection at p5--p95---while W$_1$ achieves full
+detection by integrating across the entire distribution.
 
 %-------------------------------------------------------------------------------
 \subsection{Ablation Studies}
 \label{sec:evaluation:ablation}
 
-We ablate the two design choices most critical for calibrated detection under
-autocorrelation: the choice of test statistic and the bootstrap resampling
-strategy. Both experiments use the medium benchmark preset
-(5{,}000 samples/class, 30 trials/condition, SharedHardware $\theta = \ns{0.4}$)
-with all other components held constant.
+We ablate the choice of test statistic, the design decision most critical for
+detection across effect geometries. The experiment uses the medium benchmark
+preset (10{,}000 samples/class, 30 trials/condition, SharedHardware
+$\theta = \ns{0.4}$) with all other pipeline components held constant.
 
-\paragraph{Test statistic: W$_1$ distance vs.\ 9-quantile.}
-Replacing the W$_1$ distance statistic with a 9-quantile test
-statistic---comparing decile-level differences (p10--p90) with max
-aggregation, as used in our v6.0 prototype---eliminates bimodal and tail
-detection entirely: 0\% detection across all effect sizes and noise models
-(0/360 trials), including $20\sigma$ effects. The 9-quantile approach also
-fails under strong autocorrelation ($\rho = 0.8$): shift detection drops to
-0\% at $4\sigma$ and $20\sigma$, with non-monotonic power peaking at 80\%
-for $1\sigma$ before collapsing.
+\paragraph{Test statistic: W$_1$ distance vs.\ 9-decile.}
+Replacing the W$_1$ distance with a 9-decile test statistic---max-aggregated
+differences at p10--p90, holding all other pipeline components fixed---reveals
+two failure modes.
 
-The structural explanation: deciles sample at discrete points (p10, p20, ..., p90),
-missing effects concentrated between quantiles or spanning wide ranges (bimodal gaps).
-W$_1$ integrates rank-matched differences across the full distribution, so separated
-modes and rare outliers contribute proportionally to their displacement. This ablation
-confirms W$_1$ enables detection of cache-timing patterns that quantile approaches
-structurally cannot achieve.
+First, the 9-decile approach is blind to bimodal effects at moderate sizes:
+near-zero detection at $\leq 2\sigma$ across all noise models, while W$_1$
+achieves 100\% from $0.2\sigma$. \silent falls between the two, reaching 15\%
+at $0.2\sigma$ and 100\% at $1\sigma$---its quantile grid extends to p95, which
+partially captures the slow mode, but with lower sensitivity than
+full-distribution integration. Second, under strong autocorrelation
+($\rho = 0.8$), 9-decile shift detection collapses---dropping to 0\% at
+$1$--$2\sigma$ while W$_1$ maintains 100\% from $1\sigma$ onward.
+
+For tail-only effects, the 9-decile approach achieves comparable detection to
+W$_1$ at $\geq 1\sigma$, since the shifted fraction falls within the p90 range.
+The advantage of W$_1$ is robustness: it integrates differences across the full
+distribution, requiring no assumption about which quantile range is affected.
 
 %-------------------------------------------------------------------------------
 \subsection{Crypto Library Validation}
@@ -1131,27 +1135,25 @@ benchmarks in future work.
 \section{Conclusion}
 \label{sec:conclusion}
 
-\tacet detected CVE-2023-49092 in RustCrypto's RSA implementation without
-prior knowledge of the vulnerability (\Cref{sec:evaluation:marvin}), validating
-its utility as a general-purpose regression tool. Across 2{,}270 total trials (1{,}600 calibration + 670 on real
-cryptographic implementations) on a heavily loaded 64-vCPU server, \tacet produced
+Without prior knowledge of CVE-2023-49092, \tacet flagged RustCrypto's RSA
+implementation during routine testing (\Cref{sec:evaluation:marvin}).
+Across 2{,}270 trials (1{,}600 calibration + 670 on real cryptographic
+implementations) on a heavily loaded 64-vCPU server, the tool produced
 5~false positives (0.22\% aggregate FPR; 0.47\% conditional on definitive
 verdict), consistent with the $\leq$5\% target under the tested benchmark
-conditions. Under extreme
-autocorrelation ($\rho = 0.8$), \tacet's FPR rises to 8\%---still the lowest
-among tools with comparable detection power (existing tools: 7--40\%), with
-further degradation handled by Inconclusive verdicts.
+conditions. Under extreme autocorrelation ($\rho = 0.8$), FPR rises to
+8\%, still below all other tools with comparable detection power (7--40\%).
+Inconclusive verdicts absorb further degradation.
 
-The key methodological contributions are: Wasserstein-1 distance for tail-sensitive
+The methodological contributions are: Wasserstein-1 distance for tail-sensitive
 detection of timing leaks; Bayesian posterior probabilities for interpretable
 uncertainty quantification; stream-based block bootstrap for handling autocorrelated
-data; quality gates that detect measurement validity violations and trigger
-Inconclusive verdicts; and measurement floor tracking that prevents claims of
-``no leak'' when the system cannot resolve effects at the requested threshold.
+data; quality gates that detect measurement validity violations; and measurement
+floor tracking so the system cannot claim ``no leak'' when it cannot resolve
+effects at the requested threshold.
 
-\tacet is designed for CI pipelines: the three-way verdict system eliminates
-flaky tests by returning Inconclusive rather than randomly passing or failing
-under variable conditions. Available as open-source software under the MPL~v2
+\tacet is designed for CI pipelines: the three-way verdict system reduces
+flaky tests by returning Inconclusive when conditions are poor. Available as open-source software under the MPL~v2
 license with native support for Rust, C, C++, Go, and JavaScript, \tacet
 provides uncertainty-aware verdicts that align testing outcomes with measurable
 evidence quality.
@@ -1208,7 +1210,7 @@ lowers the barrier for maintainers to adopt rigorous timing analysis.
 at \url{https://anonymous.4open.science/r/tacet-75EB/} (MPL v2 license):
 \begin{itemize}[nosep,leftmargin=*]
     \item \textbf{Source code}: Complete implementation in \texttt{crates/} directory
-    \item \textbf{Specification}: \texttt{website/.../reference/specification.md} (v7.0)
+    \item \textbf{Specification}: \texttt{website/.../reference/specification.md}
     \item \textbf{Benchmark scripts}: \texttt{crates/tacet-bench/} directory
     \item \textbf{Benchmark results}: \texttt{results/} directory with raw CSV data
 \end{itemize}
@@ -1226,6 +1228,7 @@ experiments in \Cref{sec:evaluation}.
 %===============================================================================
 % OPTIONAL APPENDIX: STATISTICAL METHODOLOGY (after references per USENIX)
 %===============================================================================
+\clearpage
 \appendix
 
 \section{Statistical Methodology Details}
@@ -1272,6 +1275,15 @@ When the estimated variance $v_n$ is too small (e.g., from unmodeled autocorrela
 scale parameter $\kappa$ is pulled below 1, automatically inflating uncertainty. This prevents
 overconfident posteriors when our dependence model is mis-specified.
 
+\paragraph{Support mismatch.}
+The Student-$t$ likelihood has support on $\mathbb{R}$, while the true $\widehat{W}_1 \geq 0$.
+In practice this is benign: the Half-Student-$t$ prior restricts $W$ to $[0, \infty)$, and
+the observed $\widehat{W}_1$ is always positive (typically well above zero due to finite-sample
+bias), so the posterior places negligible mass on negative values. We verified empirically that
+the posterior probability assigned to $W < 0$ is below $10^{-6}$ across all benchmark conditions.
+A truncated likelihood would be formally correct but would break the conjugate Gibbs structure
+(\Cref{app:inference}) for negligible gain.
+
 The variance $v_n$ is computed from calibration-phase bootstrap as:
 \begin{equation}
 v_n = \frac{v_{\text{rate}}}{n_{\text{blocks}}(n)}
@@ -1295,7 +1307,7 @@ P\!\left(W > \theta_{\text{user}} \mid W \sim \text{Half-}t_\nu(0, \sigma_t^2)\r
 This calibration targets the \emph{threat-model threshold} (what the user wants to detect),
 not the measurement floor. The value $\pi_0 = 0.62$ expresses genuine prior uncertainty
 without strong bias toward either ``leak'' or ``no leak.'' It is chosen to be slightly above
-0.5 to account for the Half-t distribution's support being restricted to positive values.
+0.5 to account for the Half-t distribution's support being restricted to positive values.\footnote{The system is robust to this choice: varying $\pi_0$ across $[0.50, 0.70]$ produces identical pass/fail decisions and posterior $P(\text{leak}) = 0.0\%$ on all null trials in our synthetic benchmark suite (60 null datasets per value, two noise models, SharedHardware attacker model). With ${\geq}\,5{,}000$ calibration samples, the likelihood dominates the half-$t$ prior.}
 
 We implement inference using the equivalent scale-mixture representation:
 \begin{align}
@@ -1316,8 +1328,8 @@ Each iteration samples:
 \item $\kappa^{(t)} \sim p(\kappa \mid W^{(t)}, \widehat{W}_1)$ --- a gamma distribution
 \end{enumerate}
 
-All conditionals are conjugate and admit closed-form sampling. Unlike the 9-dimensional quantile
-approach (v6.0), this requires no matrix inversions or Cholesky decompositions---all operations
+All conditionals are conjugate and admit closed-form sampling. Unlike a multi-dimensional quantile
+approach, this requires no matrix inversions or Cholesky decompositions---all operations
 are scalar.
 
 \paragraph{Convergence and Cost.}
@@ -1331,7 +1343,7 @@ diagnostics, though this rarely occurs in practice.
 
 Computational cost per posterior update is $O(N_{\text{gibbs}}) \approx 256$ scalar operations---
 negligible compared to measurement time ($<1$ms on modern hardware). This is substantially faster
-than the 9-dimensional approach (v6.0), which required $O(d^3 + d^2 \cdot N_{\text{gibbs}})$
+than a multi-dimensional quantile approach, which would require $O(d^3 + d^2 \cdot N_{\text{gibbs}})$
 operations dominated by Cholesky decompositions.
 
 \paragraph{Leak Probability.}

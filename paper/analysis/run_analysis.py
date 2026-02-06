@@ -20,6 +20,7 @@ from tacet_analysis.charts import (
     plot_fpr_heatmap_v3,
     plot_power_heatmap_v3,
     plot_power_heatmap_v3_trimodal,
+    plot_power_heatmap_combined,
     plot_tail_power_curve_v3,
     plot_fpr_small_multiples,
     plot_fpr_grouped_bars_stages,
@@ -172,7 +173,13 @@ def main():
                 output_path=figures_dir / "v3-fig2-experimental_with_bimodal.png",
             )
 
-            print("\n  Experimental figure saved to:", figures_dir)
+            print("  Generating v3-fig2-combined: combined subgrid heatmap...")
+            plot_power_heatmap_combined(
+                thorough_raw,
+                output_path=figures_dir / "v3-fig2-combined_power_heatmap.png",
+            )
+
+            print("\n  Experimental figures saved to:", figures_dir)
 
             # v4 figures (alternative autocorrelation visualizations)
             print("\n" + "=" * 60)

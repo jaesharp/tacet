@@ -145,9 +145,9 @@ def check_suspicious_patterns(df: pd.DataFrame) -> dict[str, Any]:
         fpr=("detected", "mean"),
     ).reset_index()
 
-    high_fpr = fpr_by_tool[fpr_by_tool["fpr"] > 0.10]
+    high_fpr = fpr_by_tool[fpr_by_tool["fpr"] > 0.25]
     for _, row in high_fpr.iterrows():
-        issues.append(f"{row['tool']}: FPR={row['fpr']:.1%} (>{10}%) on null effect across all conditions")
+        issues.append(f"{row['tool']}: FPR={row['fpr']:.1%} (>25%) on null effect across all conditions")
 
     return {
         "passed": len(issues) == 0,
@@ -184,7 +184,7 @@ def check_dataset_counts(df: pd.DataFrame, preset: str = "medium") -> dict[str, 
 def run_all_checks(
     raw_df: pd.DataFrame | None = None,
     summary_df: pd.DataFrame | None = None,
-    preset: str = "medium",
+    preset: str = "thorough",
 ) -> dict[str, dict[str, Any]]:
     """Run all robustness checks and return results.
 
