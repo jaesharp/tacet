@@ -872,9 +872,12 @@ pub fn calibrate_floor_from_null(
         let w1_baseline = compute_w1_distance(&mut b1, &mut b2);
         let w1_sample = compute_w1_distance(&mut s1, &mut s2);
 
-        // Average the two null replicates and scale by sqrt(n_blocks_cal)
+        // Average the two null replicates and scale by sqrt(n_blocks_cal).
+        // Correction: null W₁ replicates use half-samples (m = n_per_class/2),
+        // but the floor guards a decision made with the full n_per_class samples.
+        // Since W₁ variance ∝ 1/√m, the half-sample W₁ overestimates by √2.
         let avg_w1 = (w1_baseline + w1_sample) / 2.0;
-        let scaled_w1 = avg_w1 * sqrt_n_blocks_cal;
+        let scaled_w1 = avg_w1 * sqrt_n_blocks_cal / std::f64::consts::SQRT_2;
 
         null_replicates.push(scaled_w1);
     }
