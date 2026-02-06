@@ -48,6 +48,11 @@ Martin Dunsche, Marcel Maehren, Nurullah Erinola, Robert Merget, Nicolai
 \newblock In {\em 33rd USENIX Security Symposium (USENIX Security 24)}. USENIX
   Association, 2024.
 
+\bibitem{geyer1992}
+Charles~J. Geyer.
+\newblock {Practical Markov Chain Monte Carlo}.
+\newblock {\em Statistical Science}, 7(4):473--483, 1992.
+
 \bibitem{tvla}
 Gilbert Goodwill, Benjamin Jun, Josh Jaffe, and Pankaj Rohatgi.
 \newblock {A testing methodology for side-channel resistance validation}.
@@ -70,6 +75,12 @@ Paul Kocher, Jann Horn, Anders Fogh, Daniel Genkin, Daniel Gruss, Werner Haas,
 \newblock {Spectre Attacks: Exploiting Speculative Execution}.
 \newblock In {\em 40th IEEE Symposium on Security and Privacy (S\&P'19)}, pages
   1--19. IEEE, 2019.
+
+\bibitem{blockbootstrap}
+Hans~R. K{\"u}nsch.
+\newblock {The Jackknife and the Bootstrap for General Stationary
+  Observations}.
+\newblock {\em The Annals of Statistics}, 17(3):1217--1241, 1989.
 
 \bibitem{meltdown}
 Moritz Lipp, Michael Schwarz, Daniel Gruss, Thomas Prescher, Werner Haas,

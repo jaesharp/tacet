@@ -74,6 +74,7 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Calibrated Verdicts}{4}{subsection.3.3}\protected@file@percent }
 \newlabel{sec:approach:decisions}{{3.3}{4}{Calibrated Verdicts}{subsection.3.3}{}}
 \newlabel{sec:approach:decisions@cref}{{[subsection][3][3]3.3}{[1][4][]4}{}{}{}}
+\citation{blockbootstrap}
 \citation{politiswhite}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Handling Autocorrelation}{5}{subsection.3.4}\protected@file@percent }
 \newlabel{sec:approach:autocorrelation}{{3.4}{5}{Handling Autocorrelation}{subsection.3.4}{}}
@@ -87,11 +88,9 @@
 \@writefile{toc}{\contentsline {paragraph}{Operational Budget Policies.}{5}{section*.19}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{O1: Would take too long.}{5}{section*.20}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{O2: Resource budget exceeded.}{5}{section*.21}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Measurement Floor}{5}{subsection.3.6}\protected@file@percent }
-\newlabel{sec:approach:floor}{{3.6}{5}{Measurement Floor}{subsection.3.6}{}}
-\newlabel{sec:approach:floor@cref}{{[subsection][6][3]3.6}{[1][5][]5}{}{}{}}
-\citation{silent}
-\citation{dudect}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Measurement Floor}{6}{subsection.3.6}\protected@file@percent }
+\newlabel{sec:approach:floor}{{3.6}{6}{Measurement Floor}{subsection.3.6}{}}
+\newlabel{sec:approach:floor@cref}{{[subsection][6][3]3.6}{[1][5][]6}{}{}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {4}Implementation}{6}{section.4}\protected@file@percent }
 \newlabel{sec:implementation}{{4}{6}{Implementation}{section.4}{}}
 \newlabel{sec:implementation@cref}{{[section][4][]4}{[1][6][]6}{}{}{}}
@@ -112,6 +111,8 @@
 \newlabel{sec:evaluation:methodology@cref}{{[subsection][1][5]5.1}{[1][6][]6}{}{}{}}
 \@writefile{toc}{\contentsline {paragraph}{Synthetic benchmarks.}{6}{section*.22}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Cryptographic library tests.}{6}{section*.23}\protected@file@percent }
+\citation{silent}
+\citation{dudect}
 \@writefile{toc}{\contentsline {paragraph}{Tools compared.}{7}{section*.24}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Metrics.}{7}{section*.25}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Synthetic Benchmarks}{7}{subsection.5.2}\protected@file@percent }
@@ -127,9 +128,9 @@
 \newlabel{tab:calibration_fpr}{{2}{7}{Calibration FPR per attacker model (400 trials each, noisy server). Tight-threshold models return Inconclusive when the measurement floor exceeds their threshold---a conservative design choice (\Cref {sec:approach:decisions})}{table.caption.31}{}}
 \newlabel{tab:calibration_fpr@cref}{{[table][2][]2}{[1][7][]7}{}{}{}}
 \citation{kyberslash}
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces False positive rate by autocorrelation structure (null effect, shift pattern, W$_1$ distance statistic). Orange indicates false positives, taupe indicates correct ``no effect found'', teal indicates inconclusive (\textsc  {Tacet}\xspace  only). Under strong positive autocorrelation ($\rho = 0.8$), classical tools show 7--40\% false positive rates while \textsc  {Tacet}\xspace  achieves 0\% FPR by returning Inconclusive when precision is insufficient rather than forcing unreliable verdicts.}}{8}{figure.caption.27}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces False positive rate by autocorrelation structure (null effect, shift pattern, W$_1$ distance statistic). Orange indicates false positives, taupe indicates correct ``no effect found'', teal indicates inconclusive (\textsc  {Tacet}\xspace  only). Under strong positive autocorrelation ($\rho = 0.8$), other tools show 12--50\% false positive rates while \textsc  {Tacet}\xspace  achieves 0\% FPR by returning Inconclusive when precision is insufficient rather than forcing unreliable verdicts.}}{8}{figure.caption.27}\protected@file@percent }
 \providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
-\newlabel{fig:fpr_heatmap}{{1}{8}{False positive rate by autocorrelation structure (null effect, shift pattern, W$_1$ distance statistic). Orange indicates false positives, taupe indicates correct ``no effect found'', teal indicates inconclusive (\tacet only). Under strong positive autocorrelation ($\rho = 0.8$), classical tools show 7--40\% false positive rates while \tacet achieves 0\% FPR by returning Inconclusive when precision is insufficient rather than forcing unreliable verdicts}{figure.caption.27}{}}
+\newlabel{fig:fpr_heatmap}{{1}{8}{False positive rate by autocorrelation structure (null effect, shift pattern, W$_1$ distance statistic). Orange indicates false positives, taupe indicates correct ``no effect found'', teal indicates inconclusive (\tacet only). Under strong positive autocorrelation ($\rho = 0.8$), other tools show 12--50\% false positive rates while \tacet achieves 0\% FPR by returning Inconclusive when precision is insufficient rather than forcing unreliable verdicts}{figure.caption.27}{}}
 \newlabel{fig:fpr_heatmap@cref}{{[figure][1][]1}{[1][7][]8}{}{}{}}
 \@writefile{toc}{\contentsline {paragraph}{Effect geometry.}{8}{section*.32}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Ablation Studies}{8}{subsection.5.4}\protected@file@percent }
@@ -193,22 +194,24 @@
 \bibcite{crosby2009}{5}
 \bibcite{silent}{6}
 \bibcite{rtlf}{7}
-\bibcite{tvla}{8}
-\bibcite{marvin}{9}
-\bibcite{tlsfuzzer}{10}
-\bibcite{spectre}{11}
-\bibcite{meltdown}{12}
-\bibcite{raccoon}{13}
-\bibcite{noble}{14}
-\bibcite{politiswhite}{15}
-\bibcite{dudect}{16}
-\bibcite{go-rsa-docs}{17}
-\bibcite{trailofbits-dudect}{18}
-\bibcite{timeless}{19}
-\bibcite{villani2009}{20}
-\bibcite{hertzbleed}{21}
-\bibcite{ctwasm}{22}
-\bibcite{flushreload}{23}
+\bibcite{geyer1992}{8}
+\bibcite{tvla}{9}
+\bibcite{marvin}{10}
+\bibcite{tlsfuzzer}{11}
+\bibcite{spectre}{12}
+\bibcite{blockbootstrap}{13}
+\bibcite{meltdown}{14}
+\bibcite{raccoon}{15}
+\bibcite{noble}{16}
+\bibcite{politiswhite}{17}
+\bibcite{dudect}{18}
+\bibcite{go-rsa-docs}{19}
+\bibcite{trailofbits-dudect}{20}
+\bibcite{timeless}{21}
+\bibcite{villani2009}{22}
+\bibcite{hertzbleed}{23}
+\bibcite{ctwasm}{24}
+\bibcite{flushreload}{25}
 \@writefile{toc}{\contentsline {section}{\numberline {A}Statistical Methodology Details}{13}{appendix.A}\protected@file@percent }
 \newlabel{app:methodology}{{A}{13}{Statistical Methodology Details}{appendix.A}{}}
 \newlabel{app:methodology@cref}{{[section][1][]A}{[1][13][]13}{}{}{}}
@@ -220,10 +223,11 @@
 \@writefile{toc}{\contentsline {paragraph}{Likelihood.}{13}{section*.50}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Support mismatch.}{13}{section*.51}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Prior.}{13}{section*.52}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {A.2}Inference Procedure}{13}{subsection.A.2}\protected@file@percent }
-\newlabel{app:inference}{{A.2}{13}{Inference Procedure}{subsection.A.2}{}}
-\newlabel{app:inference@cref}{{[subsection][2][1]A.2}{[1][13][]13}{}{}{}}
-\@writefile{toc}{\contentsline {paragraph}{Gibbs Sampler.}{13}{section*.53}\protected@file@percent }
+\citation{geyer1992}
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.2}Inference Procedure}{14}{subsection.A.2}\protected@file@percent }
+\newlabel{app:inference}{{A.2}{14}{Inference Procedure}{subsection.A.2}{}}
+\newlabel{app:inference@cref}{{[subsection][2][1]A.2}{[1][14][]14}{}{}{}}
+\@writefile{toc}{\contentsline {paragraph}{Gibbs Sampler.}{14}{section*.53}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Convergence and Cost.}{14}{section*.54}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Leak Probability.}{14}{section*.55}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {A.3}Block Bootstrap for Autocorrelation}{14}{subsection.A.3}\protected@file@percent }
@@ -233,10 +237,10 @@
 \@writefile{toc}{\contentsline {paragraph}{Stream-Based Block Bootstrap.}{14}{section*.57}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Block Length Selection.}{14}{section*.58}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Variance Scaling.}{14}{section*.59}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {A.4}Quality Gates}{14}{subsection.A.4}\protected@file@percent }
-\newlabel{app:gates}{{A.4}{14}{Quality Gates}{subsection.A.4}{}}
-\newlabel{app:gates@cref}{{[subsection][4][1]A.4}{[1][14][]14}{}{}{}}
-\@writefile{toc}{\contentsline {paragraph}{S1: Insufficient Information Gain.}{14}{section*.60}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.4}Quality Gates}{15}{subsection.A.4}\protected@file@percent }
+\newlabel{app:gates}{{A.4}{15}{Quality Gates}{subsection.A.4}{}}
+\newlabel{app:gates@cref}{{[subsection][4][1]A.4}{[1][14][]15}{}{}{}}
+\@writefile{toc}{\contentsline {paragraph}{S1: Insufficient Information Gain.}{15}{section*.60}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{S2: Condition Drift Detected.}{15}{section*.61}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{O1: Would Take Too Long.}{15}{section*.62}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{O2: Resource Budget Exceeded.}{15}{section*.63}\protected@file@percent }
@@ -245,9 +249,10 @@
 \newlabel{app:floor}{{A.5}{15}{Measurement Floor Derivation}{subsection.A.5}{}}
 \newlabel{app:floor@cref}{{[subsection][5][1]A.5}{[1][15][]15}{}{}{}}
 \@writefile{toc}{\contentsline {paragraph}{Floor-Rate Constant.}{15}{section*.65}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Dynamic Measurement Floor.}{15}{section*.66}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Effective Threshold.}{15}{section*.67}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Null-Calibrated Variance Floor.}{15}{section*.66}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Dynamic Measurement Floor.}{16}{section*.67}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Effective Threshold.}{16}{section*.68}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {A.6}Adaptive Batching}{16}{subsection.A.6}\protected@file@percent }
 \newlabel{app:batching}{{A.6}{16}{Adaptive Batching}{subsection.A.6}{}}
-\newlabel{app:batching@cref}{{[subsection][6][1]A.6}{[1][15][]16}{}{}{}}
+\newlabel{app:batching@cref}{{[subsection][6][1]A.6}{[1][16][]16}{}{}{}}
 \gdef \@abspage@last{16}

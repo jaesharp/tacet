@@ -133,10 +133,10 @@ from ``insufficient evidence.'' The system handles autocorrelated measurements v
 stream-based block bootstrap and detects degraded conditions through quality gates.
 %
 In our evaluation, \tacet detected CVE-2023-49092 (MARVIN attack) in
-RustCrypto's RSA implementation without prior knowledge of the vulnerability. Across 2{,}270 trials on a heavily loaded
-server (1{,}600 synthetic calibration trials and 670 on real cryptographic
-implementations spanning 7~libraries), \tacet produced 5~false positives (0.22\%
-aggregate FPR; 0.47\% conditional on definitive verdict), consistent with the
+RustCrypto's RSA implementation without prior knowledge of the vulnerability. Across 2{,}270 trials on heavily loaded
+servers (1{,}600 synthetic calibration trials and 670 on real cryptographic
+implementations spanning 7~libraries), \tacet produced 4~false positives (0.18\%
+aggregate FPR; 0.39\% conditional on definitive verdict), consistent with the
 $\leq$5\% target.
 Designed for CI integration, \tacet reduces flaky tests by returning Inconclusive
 under degraded measurement conditions instead of unreliable verdicts. The library
@@ -219,7 +219,7 @@ Our contributions are:
 
     \item \textbf{Comprehensive evaluation and implementation}: Comparison
           against existing tools (\dudect, \tlsfuzzer, \rtlf, \silent, TVLA) on
-          synthetic benchmarks and 170 cryptographic test cases across four ecosystems
+          synthetic benchmarks and 160 cryptographic test cases across four ecosystems
           (Rust, C/C++, Go, JavaScript), with a production-ready Rust implementation
           and C/C++, Go, and JavaScript (via WASM; server-side runtimes only) bindings
           designed for CI integration.
@@ -537,7 +537,7 @@ distant ones due to cache state, CPU frequency scaling, and OS scheduling. Stand
 statistical methods assume independent samples. Violating this assumption causes
 underestimated variance and inflated false positive rates.
 
-\tacet addresses this through block bootstrap on the acquisition stream—the
+\tacet addresses this through block bootstrap~\cite{blockbootstrap} on the acquisition stream—the
 interleaved sequence of (class, timing) pairs in measurement order. Rather than
 resampling individual measurements (which destroys the dependence structure),
 we resample contiguous blocks and reconstruct timing distributions from each
@@ -556,7 +556,11 @@ can be much smaller than the nominal count when autocorrelation is strong.
 is that \tacet uses \emph{stream-based bootstrap}: resampling the interleaved
 acquisition stream, not per-class samples. This preserves cross-class
 temporal dependencies (e.g., cache state carrying from a Fixed measurement to
-the next Random measurement). \tacet also monitors for
+the next Random measurement). Additionally, \tacet applies a null-calibrated
+variance floor (\Cref{app:floor}): under strong dependence, block bootstrap
+can underestimate the variance of the W$_1$ functional, so we floor the
+likelihood variance at the empirical null variance to prevent posterior
+overconfidence. \tacet also monitors for
 stationarity violations via quality gates, and outputs Inconclusive when
 autocorrelation is too severe to handle.
 
@@ -722,6 +726,8 @@ evaluation independent of hardware. We inject effects as shifts in mean timing
 (simulating branch differences) or shifts in upper quantiles only (simulating
 cache effects), with autocorrelation modeled as AR(1) processes at varying
 correlation coefficients $\rho \in \{-0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6, 0.8\}$.
+The base noise standard deviation is $\sigma = \ns{5}$; effect sizes are
+reported as multiples of $\sigma$.
 
 \paragraph{Cryptographic library tests.}
 Real-world tests run on AWS EC2 instances: \texttt{c8g.4xlarge} (ARM64 Graviton4,
@@ -732,16 +738,12 @@ wolfSSL, mbedTLS, Botan), Go standard library, and JavaScript/WASM (node-forge,
 crypto-js, Noble cryptography). Coverage spans symmetric ciphers, asymmetric crypto,
 hashes, AEAD, and post-quantum algorithms.\footnote{BoringSSL tests were developed
 but cannot be integrated due to Rust linker conflicts between \texttt{openssl}
-and \texttt{boring} crates. Go's circl library (post-quantum) tests are blocked
-by an FFI bug in tacet-go bindings.}
+and \texttt{boring} crates.}
 
 \paragraph{Tools compared.}
 We primarily compare \tacet against the tools most relevant to practice:
 \dudect, \silent, \rtlf, \tlsfuzzer, and TVLA~t-test---the same set evaluated
 by \silent~\cite{silent}, plus \silent itself.
-We additionally benchmark three standard statistical tests
-(Kolmogorov-Smirnov, Anderson-Darling, MONA) to demonstrate the failure of
-naive approaches under autocorrelation.
 All tools receive identical sample counts (10,000 samples per class,
 matching \dudect's minimum reporting threshold~\cite{dudect}).
 
@@ -760,25 +762,19 @@ category, all verdicts are either Pass or Fail.
 \Cref{fig:fpr_heatmap} shows verdict distributions under the null hypothesis
 (no injected effect) across varying autocorrelation structures.
 
-Under i.i.d.\ conditions ($\rho = 0$), \tacet maintains 0\% FPR across all
-injection patterns. As positive autocorrelation increases, tools that assume
-independence show rising false positive rates: at $\rho = 0.8$, \rtlf reaches
-30\%, \dudect 12\%, and \tlsfuzzer 40\%. \tacet maintains 0\% FPR across
-all autocorrelation conditions by returning Inconclusive when
-measurement conditions cannot support a confident verdict.
+Under i.i.d.\ conditions ($\rho = 0$), all tools maintain 0\% FPR. As positive
+autocorrelation increases, tools that assume independence show rising false
+positive rates: at $\rho = 0.8$, \tlsfuzzer reaches 50\%, \rtlf 32\%, \silent
+21\%, \dudect 20\%, and TVLA 12\% (300 null trials per tool per noise model).
+\tacet maintains 0\% FPR (0/4{,}800) across all autocorrelation conditions and both
+threshold settings, returning Inconclusive when measurement conditions cannot
+support a confident verdict.
 
-\silent also handles autocorrelation via $m$-dependent bootstrap, reaching
-12\% FPR at $\rho = 0.8$. Where \silent must still output
-Pass or Fail, \tacet returns Inconclusive when evidence is insufficient.
-Under strong autocorrelation ($\rho \geq 0.6$), \tacet returns Inconclusive
-on most null-effect trials at the tightest threshold---a consequence of the
-block bootstrap correctly widening confidence intervals beyond the
-\textsc{SharedHardware} threshold.
-
-Standard statistical tests (Anderson-Darling, Kolmogorov-Smirnov) perform
-worse: AD-test reaches 45\% FPR at $\rho = 0.8$ and already exceeds the 5\%
-target under i.i.d.\ conditions (7\% FPR), confirming that naive tests are
-unreliable for timing analysis where autocorrelation is the norm.
+Under strong autocorrelation ($\rho \geq 0.6$) at the tightest threshold
+($\theta = \ns{0.4}$), \tacet returns Inconclusive on 89--100\% of null-effect
+trials---a consequence of the block bootstrap correctly widening confidence
+intervals. At wider thresholds ($\theta = \ns{100}$), \tacet achieves 100\%
+Pass (2{,}400/2{,}400) under all noise conditions.
 
 \begin{figure*}[ht]
     \centering
@@ -787,7 +783,7 @@ unreliable for timing analysis where autocorrelation is the norm.
              shift pattern, W$_1$ distance statistic). Orange indicates false positives,
              taupe indicates correct ``no effect found'', teal indicates inconclusive
              (\tacet only). Under strong positive autocorrelation ($\rho = 0.8$),
-             classical tools show 7--40\% false positive rates while \tacet
+             other tools show 12--50\% false positive rates while \tacet
              achieves 0\% FPR by returning Inconclusive when precision
              is insufficient rather than forcing unreliable verdicts.}
     \label{fig:fpr_heatmap}
@@ -795,24 +791,25 @@ unreliable for timing analysis where autocorrelation is the norm.
 
 \paragraph{Detection power across effect sizes.}
 \Cref{fig:power_heatmap} shows detection rates as a function of effect size
-under i.i.d.\ conditions. For shift effects at $0.2\sigma$ ($= \ns{1.0}$,
+under AR(1) noise ($\rho = 0.6$). For shift effects at $0.2\sigma$ ($= \ns{1.0}$,
 $2.5\times$ the \textsc{SharedHardware} threshold) and above, \tacet achieves
 100\% detection---matching all other tools.
 
-At $0.1\sigma$ ($= \ns{0.5}$, just 25\% above $\theta$), detection drops to
-32\%. This near-threshold regime is inherently difficult: the effect
-($\ns{0.5}$) is only 25\% above the threshold ($\ns{0.4}$).
+Under i.i.d.\ conditions ($\rho = 0$), at $0.1\sigma$ ($= \ns{0.5}$, just 25\%
+above $\theta$), detection drops to 18\%. This near-threshold regime is inherently
+difficult: the effect ($\ns{0.5}$) is only 25\% above the threshold ($\ns{0.4}$).
 Tools without a threshold (\dudect, \rtlf, \tlsfuzzer) detect any distributional
-difference and naturally show higher rates (57--99\%) at this level.
-Among threshold-based tools, \silent achieves 81\%---a power advantage of the
+difference and naturally show higher rates at this level.
+Among threshold-based tools, \silent achieves 100\%---a power advantage of the
 quantile approach for near-threshold effects under i.i.d.\ conditions
 (\Cref{sec:discussion:tradeoffs}).
 
 Under autocorrelation, \tacet maintains 100\% detection for shift effects at
-$\geq 1\sigma$ across all AR(1) conditions including $\rho = 0.8$. At
-$0.2\sigma$ ($= \ns{1.0}$), detection degrades gracefully: 43\% at $\rho = 0.3$,
-10\% at $\rho = 0.6$, and 0\% at $\rho = 0.8$ (all Inconclusive)---a consequence
-of the block bootstrap correctly widening confidence intervals.
+$\geq 1\sigma$ across all AR(1) conditions including $\rho = 0.8$
+(4{,}000/4{,}000 trials). At
+$0.2\sigma$ ($= \ns{1.0}$), detection degrades gracefully: 64\% at $\rho = 0.4$,
+38\% at $\rho = 0.6$, and 14\% at $\rho = 0.8$ (remainder Inconclusive)---a
+consequence of the block bootstrap correctly widening confidence intervals.
 
 \begin{figure*}[ht]
     \centering
@@ -890,7 +887,7 @@ effects $\geq$2$\times$ threshold, confirming accurate quantification.
 show strongest detection---consistent with W$_1$'s theoretical advantage
 for separated distributions. For tail-only effects (upper 5\% shifted),
 \tacet achieves 100\% detection at $\geq 1\sigma$ under i.i.d.\ conditions but
-shows lower power at near-threshold effects than \silent (33\% vs.\ 96\% at $0.4\sigma$).
+shows lower power at near-threshold effects than \silent (18\% vs.\ 100\% at $0.1\sigma$).
 However, our ablation below demonstrates that quantile-based test statistics show
 reduced bimodal sensitivity that scales with quantile coverage---from complete
 blindness at p10--p90 to partial detection at p5--p95---while W$_1$ achieves full
@@ -928,7 +925,7 @@ distribution, requiring no assumption about which quantile range is affected.
 \subsection{Crypto Library Validation}
 \label{sec:evaluation:crypto}
 
-\Cref{tab:crypto_tests} summarizes validation across 170 cryptographic
+\Cref{tab:crypto_tests} summarizes validation across 160 cryptographic
 test cases spanning four ecosystems.
 
 \begin{table}[ht]
@@ -958,36 +955,34 @@ test cases spanning four ecosystems.
 \multicolumn{3}{@{}l@{}}{\textbf{Go}} \\
 \quad crypto/* & ECDSA, RSA & 18 \\
 \quad x/crypto & ChaCha20, Argon2, Curve25519, BLAKE2 & 15 \\
-\quad CIRCL & ML-KEM, ML-DSA, X25519, Ed25519 & 10 \\
 \midrule
 \multicolumn{3}{@{}l@{}}{\textbf{JavaScript/WASM}} \\
 \quad node-forge & RSA, Ed25519, RSA-PSS & 9 \\
 \quad crypto-js & AES, HMAC, PBKDF2 & 12 \\
 \quad noble-* & secp256k1, Ed25519, ChaCha20 & 20 \\
 \midrule
-\textbf{Total} & & \textbf{170} \\
+\textbf{Total} & & \textbf{160} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-% Data source: results/paper-crypto-fpr-noisy/fpr_merged_final.csv
+% Data source: results/fpr_crypto_noisy_final.csv
 \paragraph{False positive rate on cryptographic implementations.}
 To validate FPR on real code, we ran 67 constant-time cryptographic tests
-(7~libraries across Rust and C/C++) 10~times each under the same noisy conditions
-as the calibration validation above (670~total trials).
-\tacet produced 1~false positive out of 670~trials (0.15\% FPR, Wilson 95\% CI:
-[0.0\%, 0.8\%])---the sole false positive occurred on LibreSSL's ECDSA P-256
-verification, where system noise caused a spurious timing difference after
-33{,}000~samples.
-Of the 670~trials, 280 (41.8\%) returned Pass and 389 (58.1\%) returned
-Inconclusive; the latter occurred when the measurement floor under load exceeded
-the test's threshold (ThresholdElevated), consistent with the calibration results
-above.
+(10~libraries across Rust and C/C++) 10~times each under similarly noisy conditions
+(32-vCPU x86\_64 AMD EPYC 9575F, load average ${\sim}107$, 670~total trials).
+\tacet produced 0~false positives out of 670~trials (0.00\% FPR, Wilson 95\% CI:
+[0.0\%, 0.6\%]).
+Of the 670~trials, 229 (34.2\%) returned Pass, 318 (47.5\%) returned
+Inconclusive, and 123 (18.4\%) returned Unmeasurable or were skipped
+(operations too fast to measure reliably under heavy load); none returned Fail.
+The Inconclusive outcomes occurred when the measurement floor under load exceeded
+the test's threshold (ThresholdElevated), consistent with the calibration results above.
 Combining calibration and cryptographic trials, the aggregate FPR is
-5/2{,}270 = 0.22\% (Wilson 95\% CI: [0.1\%, 0.5\%]).
-Conditioning on the 1{,}075 definitive verdicts (excluding Inconclusive),
-the FPR is 5/1{,}075 = 0.47\% (Wilson 95\% CI: [0.2\%, 1.1\%])---still
-well below the 5\% target.
+4/2{,}270 = 0.18\% (Wilson 95\% CI: [0.1\%, 0.5\%]).
+Conditioning on the 1{,}023 definitive verdicts (excluding Inconclusive and Unmeasurable),
+the FPR is 4/1{,}023 = 0.39\% (Wilson 95\% CI: [0.2\%, 1.0\%])---well
+below the 5\% target.
 This is consistent with the empirical calibration property defined in \Cref{sec:approach:decisions},
 including ML-KEM (Kyber-768) and ML-DSA (Dilithium3), which passed at the stricter
 \textsc{PostQuantumSentinel} threshold (\ns{2}, $\sim$10 cycles)~\cite{kyberslash}.
@@ -1012,7 +1007,7 @@ The posterior did not cross the 0.95 decision boundary because RSA
 decryption exhibits significant temporal autocorrelation (block
 length~19, ESS~526 of 10{,}000 calibration samples), which correctly
 widens the credible intervals. Nevertheless, the effect estimate---\ns{126}
-(95\% CI: [75, 171]~ns)---and the elevated posterior probability
+(95\% CI: [75, 171]\,ns)---and the elevated posterior probability
 flagged the test for manual review.
 
 \paragraph{Post-hoc confirmation.}
@@ -1028,7 +1023,7 @@ its utility as a triage tool for timing side-channel regression testing.
 \tacet also detected timing leaks that turned out to be documented and accepted by
 implementers. Testing noble-ciphers~\cite{noble} (JavaScript) without prior
 knowledge of its implementation choices, \tacet detected AES-256-CTR key expansion
-timing ($P(\text{leak})=0.96$, 45--\ns{120} effect). Investigation revealed the library
+timing ($P(\text{leak})=0.96$, \SIrange{45}{120}{\nano\second} effect). Investigation revealed the library
 explicitly uses T-tables~\cite{bernstein2005cache} for performance—the documentation
 acknowledges this creates cache-timing leaks. Similarly, Go's \texttt{crypto/rsa}
 PKCS\#1 v1.5~\cite{go-rsa-docs} showed timing variation which the documentation warns
@@ -1068,18 +1063,19 @@ need to understand the statistical details. The API is simple: specify a thresho
 
 \paragraph{Lower power at near-threshold effects.}
 At near-threshold effects ($0.1\sigma = \ns{0.5}$ vs.\ $\theta = \ns{0.4}$),
-\tacet's 32\% detection rate is lower than \silent's 81\% under i.i.d.\
+\tacet's 18\% detection rate is lower than \silent's 100\% under i.i.d.\
 conditions---a genuine power gap between two threshold-based tools.
 \silent's quantile approach extracts more information at this margin.
 However, the gap is specific to the i.i.d.\ regime: under any autocorrelation,
 \tacet's measurement floor rises above $\theta = \ns{0.4}$ and the near-threshold
 comparison becomes moot. At $\rho = 0.8$, \tacet maintains 0\% FPR (returning
-Inconclusive on unreliable measurements) vs.\ \silent's 12\%.
+Inconclusive on unreliable measurements) while tools without autocorrelation
+handling reach 12--50\% FPR.
 
-Non-threshold tools (\dudect at 57\%, \rtlf at 88\%) naturally show higher
+Non-threshold tools (\dudect, \rtlf, \tlsfuzzer) naturally show higher
 detection at $0.1\sigma$: without a threshold, they detect any distributional
 difference and are not constrained by near-threshold discrimination.
-Their FPR reaches 12--30\% at $\rho = 0.8$.
+Their FPR reaches 20--50\% at $\rho = 0.8$.
 
 %-------------------------------------------------------------------------------
 \subsection{Limitations}
@@ -1142,13 +1138,13 @@ benchmarks in future work.
 Without prior knowledge of CVE-2023-49092, \tacet flagged RustCrypto's RSA
 implementation during routine testing (\Cref{sec:evaluation:marvin}).
 Across 2{,}270 trials (1{,}600 calibration + 670 on real cryptographic
-implementations) on a heavily loaded 64-vCPU server, the tool produced
-5~false positives (0.22\% aggregate FPR; 0.47\% conditional on definitive
+implementations) on heavily loaded servers, the tool produced
+4~false positives (0.18\% aggregate FPR; 0.39\% conditional on definitive
 verdict), consistent with the $\leq$5\% target under the tested benchmark
 conditions. Under extreme autocorrelation ($\rho = 0.8$), \tacet maintains 0\%
 synthetic FPR by returning Inconclusive when measurement conditions
 cannot support a confident verdict---other tools with comparable
-detection power show 7--40\% FPR at this autocorrelation level.
+detection power show 12--50\% FPR at this autocorrelation level.
 
 The methodological contributions are: Wasserstein-1 distance for tail-sensitive
 detection of timing leaks; Bayesian posterior probabilities for interpretable
@@ -1274,7 +1270,7 @@ variance underestimation. Using the scale-mixture representation:
 \widehat{W}_1 \mid W, \kappa &\sim \mathcal{N}\!\left(W, \frac{v_n}{\kappa}\right) \\
 \kappa &\sim \text{Gamma}\!\left(\frac{\nu_\ell}{2}, \frac{\nu_\ell}{2}\right)
 \end{align}
-with $\nu_\ell = 4$. Marginally, this yields $\widehat{W}_1 \mid W \sim t_{\nu_\ell}(W, v_n)$.
+with $\nu_\ell = 8$. Marginally, this yields $\widehat{W}_1 \mid W \sim t_{\nu_\ell}(W, v_n)$.
 
 When the estimated variance $v_n$ is too small (e.g., from unmodeled autocorrelation), the
 scale parameter $\kappa$ is pulled below 1, automatically inflating uncertainty. This prevents
@@ -1291,11 +1287,24 @@ A truncated likelihood would be formally correct but would break the conjugate G
 
 The variance $v_n$ is computed from calibration-phase bootstrap as:
 \begin{equation}
-v_n = \frac{v_{\text{rate}}}{n_{\text{blocks}}(n)}
+v_n = \frac{v_{\text{rate}}}{n}
 \end{equation}
-where $v_{\text{rate}}$ is the variance-rate constant estimated during calibration, and
-$n_{\text{blocks}}(n) = \max(1, \lfloor n/L \rfloor)$ is the number of approximately independent
-blocks given block length $L$.
+where $v_{\text{rate}}$ is the variance-rate constant estimated during calibration and
+$n$ is the total sample count. Since $v_{\text{rate}}$ is estimated via block bootstrap
+(which preserves temporal dependence structure), it already reflects the long-run
+variance rate---no additional block-count scaling is needed.
+
+To prevent posterior overconfidence under dependence, we apply a null-calibrated
+variance floor:
+\begin{equation}
+v_{\text{eff}} = \max\!\left(v_n,\; \frac{v_{\text{null}}}{n_{\text{blocks}}}\right)
+\end{equation}
+where $v_{\text{null}}$ is the variance of the null W$_1$ replicates (computed during
+measurement floor calibration, \Cref{app:floor}) and $n_{\text{blocks}} = \max(1, \lfloor n/L \rfloor)$.
+Under strong autocorrelation, block bootstrap can underestimate W$_1$ variance;
+the null replicates provide an independent estimate of the sampling variability
+under the null hypothesis, preventing the posterior from becoming artificially
+concentrated.
 
 \paragraph{Prior.}
 We place a Half-Student-$t$ prior on the true W$_1$ distance $W$:
@@ -1375,7 +1384,7 @@ The algorithm resamples contiguous blocks of length $L$ with replacement, recons
 stream of the same length, splits by class, and computes $\widehat{W}_1$ for each replicate.
 Block resampling may produce slightly unequal class sizes; when this occurs, we use the general
 1D Wasserstein formula for unequal sample sizes or truncate the larger class by one sample. Over
-$B = 2000$ iterations, we estimate the variance $v_{\text{cal}}$ of $\widehat{W}_1$ under the
+$B = 200$ iterations, we estimate the variance $v_{\text{cal}}$ of $\widehat{W}_1$ under the
 calibration sample size.
 
 \paragraph{Block Length Selection.}
@@ -1383,25 +1392,24 @@ We use the Politis-White automatic block length selection algorithm with a class
 
 The optimal block length scales as $\hat{b} \propto T^{1/3}$ where $T$ is the stream length. We clamp $\hat{b} \in [10, \min(3\sqrt{T}, T/3)]$ to prevent degenerate blocks. In high-autocorrelation regimes (detected when $\rho_{\text{max}}(10) > 0.3$), we inflate the block length by 50\% for additional conservatism.
 
-We also enforce an IACT-based floor: $\hat{b} \geq \lceil 2 c_\tau \hat{\tau}_{\max} \rceil$ where $\hat{\tau}_{\max}$ is the maximum class-conditional integrated autocorrelation time (estimated via Geyer's initial monotone sequence) and $c_\tau = 2.0$. The factor of 2 converts from within-class lags to interleaved-stream lags. This floor ensures blocks are long enough to capture the full dependence structure even when Politis-White underestimates it for nonlinear functionals like W$_1$.
+We also enforce an IACT-based floor: $\hat{b} \geq \lceil 2 c_\tau \hat{\tau}_{\max} \rceil$ where $\hat{\tau}_{\max}$ is the maximum class-conditional integrated autocorrelation time (estimated via Geyer's initial monotone sequence~\cite{geyer1992}) and $c_\tau = 2.0$. The factor of 2 converts from within-class lags to interleaved-stream lags. This floor ensures blocks are long enough to capture the full dependence structure even when Politis-White underestimates it for nonlinear functionals like W$_1$.
 
 \paragraph{Variance Scaling.}
-The key insight enabling adaptive sampling is that W$_1$ estimator variance scales as $1/n_{\text{blocks}}$.
+The key insight enabling adaptive sampling is that the W$_1$ estimator variance scales as $1/n$.
 We estimate a \textbf{variance-rate} constant during calibration:
 \begin{equation}
-v_{\text{rate}} = v_{\text{cal}} \cdot n_{\text{blocks,cal}}
+v_{\text{rate}} = v_{\text{cal}} \cdot n_{\text{cal}}
 \end{equation}
+where $v_{\text{cal}}$ is the bootstrap variance of $\widehat{W}_1$ at the calibration sample
+size $n_{\text{cal}}$.
 
 During the adaptive loop with $n$ samples:
 \begin{equation}
-v_n = \frac{v_{\text{rate}}}{n_{\text{blocks}}(n)}
+v_n = \frac{v_{\text{rate}}}{n}
 \end{equation}
-where $n_{\text{blocks}}(n) = \max(1, \lfloor n/L \rfloor)$ is the number of approximately independent
-blocks. This allows cheap posterior updates without re-bootstrapping at each batch.
-
-The terminology ``$n_{\text{blocks}}$'' replaces the earlier ``$n_{\text{eff}}$'' (effective sample
-size) to avoid confusion with IACT-based estimators. The block count provides a conservative lower
-bound on the number of approximately independent observations given the dependence structure.
+Since the block bootstrap already incorporates the dependence structure into
+$v_{\text{rate}}$, dividing by raw $n$ rather than $n_{\text{blocks}}$ is correct.
+This allows cheap posterior updates without re-bootstrapping at each batch.
 
 \subsection{Quality Gates}
 \label{app:gates}
@@ -1419,7 +1427,7 @@ for the 1D W$_1$ distance $\delta$:
 \right)
 \end{equation}
 where $V_{\text{post}}$ is the posterior variance of $\delta$ (estimated from Gibbs samples)
-and $V_0^{\text{marginal}} = 2\sigma^2$ is the marginal prior variance (§3.4.3).
+and $V_0^{\text{marginal}} = 2\sigma_t^2$ is the marginal prior variance (\Cref{app:model}).
 
 The threshold of 0.7 nats was selected empirically from pilot studies on synthetic data with known null effects—values below this consistently indicated insufficient posterior movement to support reliable verdicts. The 0.001 nats threshold for NotLearning similarly reflects the practical lower bound of KL divergence detectability given MCMC approximation error with 192 retained samples.
 
@@ -1466,6 +1474,25 @@ c_{\text{floor}} = q_{0.95}\!\left(\frac{\widehat{W}_1^{(b)} \cdot \sqrt{n_{\tex
 This floor-rate constant captures the 95th percentile of the null distribution of raw W$_1$, scaled to
 be sample-size-independent. Critically, we use \emph{raw} $\widehat{W}_1$ values (not debiased or
 clamped), ensuring the floor accounts for the natural positive bias of W$_1$ under the null hypothesis.
+
+\paragraph{Null-Calibrated Variance Floor.}
+The same null replicates serve a second purpose: preventing posterior overconfidence
+under dependence. We compute the variance of the scaled null W$_1$ replicates:
+\begin{equation}
+v_{\text{null}} = \text{Var}\!\left(\widehat{W}_1^{(b)} \cdot \sqrt{n_{\text{blocks,cal}}}\right)
+\end{equation}
+During inference, the effective variance used in the likelihood is:
+\begin{equation}
+v_{\text{eff}} = \max\!\left(\frac{v_{\text{rate}}}{n},\; \frac{v_{\text{null}}}{n_{\text{blocks}}}\right)
+\end{equation}
+Under strong autocorrelation, the block bootstrap can underestimate the true sampling
+variability of $\widehat{W}_1$---particularly when the dependence structure of the
+W$_1$ functional differs from that of individual observations. The null replicates
+provide an independent variance estimate computed under the null hypothesis.
+When this null variance exceeds the bootstrap variance, the floor activates,
+widening the posterior and preventing false conclusions. In our evaluation,
+this mechanism is responsible for maintaining 0\% FPR under AR(1) conditions
+with $\rho$ up to 0.8 (\Cref{sec:evaluation:synthetic}).
 
 \paragraph{Dynamic Measurement Floor.}
 During the adaptive loop with $n$ samples, the statistical floor shrinks as more data is collected:

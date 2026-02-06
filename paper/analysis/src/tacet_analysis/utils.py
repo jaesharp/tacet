@@ -4,7 +4,7 @@ from pathlib import Path
 
 # Project paths
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "thorough-post-bugfix-merged"
+DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "thorough-final-merged"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
 FIGURES_DIR = OUTPUT_DIR / "figures"
 
@@ -119,7 +119,7 @@ PRIMARY_TOOL_COLORS = {
 
 # Thorough dataset path (higher trial count, more effect sizes)
 # Lives under paper/analysis/results/ (not repo-root results/)
-THOROUGH_DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "thorough-post-bugfix-merged"
+THOROUGH_DATA_DIR = PROJECT_ROOT.parent.parent / "results" / "thorough-final-merged"
 
 # Target figure widths matching the LaTeX layout:
 #   USENIX textwidth = 7.0", figure* uses width=0.85\textwidth, figure uses ~columnwidth
