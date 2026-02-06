@@ -54,7 +54,8 @@ use rand::Rng;
 ///
 /// # Returns
 ///
-/// W₁ distance in nanoseconds. Returns 0.0 for empty inputs or size mismatch.
+/// W₁ distance in nanoseconds. Returns 0.0 for empty inputs.
+/// For unequal-sized inputs, truncates to the minimum length.
 ///
 /// # Algorithm
 ///
@@ -79,12 +80,6 @@ pub fn compute_w1_distance(baseline: &[f64], sample: &[f64]) -> f64 {
         return 0.0;
     }
 
-    if baseline.len() != sample.len() {
-        return 0.0;
-    }
-
-    let n = baseline.len();
-
     // Sort both arrays
     let mut baseline_sorted = baseline.to_vec();
     let mut sample_sorted = sample.to_vec();
@@ -92,7 +87,12 @@ pub fn compute_w1_distance(baseline: &[f64], sample: &[f64]) -> f64 {
     baseline_sorted.sort_unstable_by(|a, b| a.total_cmp(b));
     sample_sorted.sort_unstable_by(|a, b| a.total_cmp(b));
 
-    // Compute average absolute difference
+    // For unequal sizes, truncate sorted arrays to the minimum length.
+    // The block bootstrap can produce slightly unequal class sizes; returning
+    // 0.0 would corrupt the variance estimate.
+    let n = baseline_sorted.len().min(sample_sorted.len());
+
+    // Compute average absolute difference between order statistics
     let mut sum = 0.0;
     for i in 0..n {
         sum += (baseline_sorted[i] - sample_sorted[i]).abs();

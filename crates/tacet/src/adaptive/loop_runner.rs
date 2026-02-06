@@ -413,7 +413,7 @@ fn compute_posterior_from_state(
         calibration.sigma_t,
         calibration.theta_eff,
         config.seed,
-        4.0, // nu_likelihood: Student-t df for robustness
+        8.0, // nu_likelihood: Student-t df (§A.1: ν_ℓ = 8)
     );
 
     // Note: v6.0 uses simplified 1D posterior without kappa/lambda diagnostics

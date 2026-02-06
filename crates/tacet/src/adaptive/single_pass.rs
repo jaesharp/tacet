@@ -36,11 +36,8 @@ use tacet_core::result::{
     Diagnostics, EffectEstimate, Exploitability, InconclusiveReason, IssueCode, MeasurementQuality,
     Outcome, QualityIssue,
 };
-use tacet_core::statistics::{bootstrap_w1_variance, compute_w1_debiased, AcquisitionStream};
+use tacet_core::statistics::{bootstrap_w1_variance, compute_w1_distance, AcquisitionStream};
 use tacet_core::types::AttackerModel;
-
-use rand::SeedableRng;
-use rand_xoshiro::Xoshiro256PlusPlus;
 
 /// Configuration for single-pass analysis.
 #[derive(Debug, Clone)]
@@ -190,9 +187,11 @@ pub fn analyze_single_pass(
     let baseline = &baseline_ns[..n];
     let test = &test_ns[..n];
 
-    // Step 1: Compute W₁ distance with debiasing (the observed effect)
-    let mut rng = Xoshiro256PlusPlus::seed_from_u64(config.seed);
-    let w1_obs = compute_w1_debiased(baseline, test, &mut rng);
+    // Step 1: Compute raw W₁ distance (the observed effect)
+    // Use raw W₁, NOT debiased — consistent with the adaptive loop (loop_runner.rs).
+    // Debiased W₁ subtracts the null floor and clamps to zero, which biases the
+    // likelihood and breaks the statistical model. Debiased is display-only.
+    let w1_obs = compute_w1_distance(baseline, test);
 
     // Step 2: Detect discrete mode (spec §3.3.2)
     let unique_baseline: std::collections::HashSet<i64> =
@@ -297,15 +296,16 @@ pub fn analyze_single_pass(
     }
 
     // Step 7: Compute 1D Bayesian posterior (spec §3.4.4)
-    // Scale variance for sample size: var_n = variance / n
-    let var_n = variance / (n as f64);
+    // var_n = var_rate / n = (variance * n) / n = variance
+    // The bootstrap already gives Var(W₁) at the current sample size n.
+    let var_n = var_rate / (n as f64);
     let bayes_result = tacet_core::analysis::compute_bayes_1d(
         w1_obs,
         var_n,
         sigma_t,
         theta_eff,
         config.seed,
-        4.0, // nu_likelihood: Student-t df for robustness
+        8.0, // nu_likelihood: Student-t df (§A.1: ν_ℓ = 8)
     );
     let leak_probability = bayes_result.leak_probability;
 

@@ -300,7 +300,14 @@ const BLOCK_LENGTH_FLOOR: usize = 10;
 ///    - ρ^(R)_k = corr(y_t, y_{t+k} | c_t = c_{t+k} = Sample)
 /// 2. Combine conservatively: |ρ^(max)_k| = max(|ρ^(F)_k|, |ρ^(R)_k|)
 /// 3. Run Politis-White on the combined ACF
-/// 4. Apply safety floor: b ← max(b, 10)
+/// 4. Apply IACT-based floor: b ← max(b, ⌈c_τ × τ*⌉) where τ* is the
+///    class-conditional IACT (Geyer IMS) and c_τ = 2.0
+/// 5. Apply safety floor: b ← max(b, 10)
+///
+/// The IACT floor (step 4) ensures that the block length is long enough to
+/// capture the dependence structure for nonlinear statistics like W₁. Politis-White
+/// optimizes block length for scalar statistics; W₁ (a rank-based functional)
+/// can require longer blocks when autocorrelation is strong.
 ///
 /// # Arguments
 ///
@@ -330,6 +337,18 @@ pub fn class_conditional_optimal_block_length(stream: &[TimingSample], is_fragil
     // Apply safety floor (spec §3.3.2 Step 4)
     let mut result = (math::ceil(block_length) as usize).max(BLOCK_LENGTH_FLOOR);
 
+    // IACT-based block length floor: ensures blocks are long enough to capture
+    // dependence for nonlinear statistics like W₁ under strong autocorrelation.
+    //
+    // Extract class-conditional series and compute IACT via Geyer's IMS.
+    // The IACT τ gives the effective memory length of the process. The block
+    // must span at least c_τ × τ within-class lags, which corresponds to
+    // 2 × c_τ × τ in interleaved stream units (same-class samples are at
+    // every other position in the stream).
+    const C_TAU: f64 = 2.0;
+    let iact_floor = compute_iact_block_floor(stream, C_TAU);
+    result = result.max(iact_floor);
+
     // Apply inflation factor for fragile regimes (spec §3.3.2 Step 4)
     if is_fragile {
         result = math::ceil((result as f64) * 1.5) as usize;
@@ -338,6 +357,40 @@ pub fn class_conditional_optimal_block_length(stream: &[TimingSample], is_fragil
     // Cap at reasonable maximum
     let max_block = ((3.0 * math::sqrt(n as f64)).min(n as f64 / 3.0)) as usize;
     result.min(max_block).max(BLOCK_LENGTH_FLOOR)
+}
+
+/// Compute the IACT-based block length floor from class-conditional time series.
+///
+/// Extracts per-class timing values, computes Geyer IMS IACT on each,
+/// takes the max, and returns ⌈2 × c_τ × τ_max⌉ (the factor of 2 converts
+/// from within-class lags to interleaved stream lags).
+fn compute_iact_block_floor(stream: &[TimingSample], c_tau: f64) -> usize {
+    use super::iact::geyer_ims_iact;
+
+    // Extract class-conditional time series
+    let mut baseline_vals: Vec<f64> = Vec::new();
+    let mut sample_vals: Vec<f64> = Vec::new();
+
+    for s in stream {
+        match s.class {
+            Class::Baseline => baseline_vals.push(s.time_ns),
+            Class::Sample => sample_vals.push(s.time_ns),
+        }
+    }
+
+    // Need enough samples for IACT estimation
+    if baseline_vals.len() < 20 || sample_vals.len() < 20 {
+        return BLOCK_LENGTH_FLOOR;
+    }
+
+    let tau_baseline = geyer_ims_iact(&baseline_vals).tau;
+    let tau_sample = geyer_ims_iact(&sample_vals).tau;
+    let tau_max = tau_baseline.max(tau_sample);
+
+    // Convert from within-class IACT to interleaved stream block length:
+    // block_length_stream = 2 × c_τ × τ (factor of 2 for interleaving)
+    let block_floor = math::ceil(2.0 * c_tau * tau_max) as usize;
+    block_floor.max(BLOCK_LENGTH_FLOOR)
 }
 
 /// Compute class-conditional ACF at acquisition-stream lags.

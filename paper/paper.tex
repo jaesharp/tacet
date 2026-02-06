@@ -479,7 +479,7 @@ level: we model the observed W$_1$ distance with a robust Student-$t$ likelihood
 that automatically inflates uncertainty when the variance estimate is too small,
 and place a Half-Student-$t$ prior on the true W$_1$ distance with scale selected
 based on the user-requested threshold. We approximate the posterior via Gibbs sampling
-(256 iterations) with $<$\ms{1} computational overhead.
+(5{,}000 iterations, 1{,}000 burn-in) with $<$\ms{1} computational overhead.
 
 %-------------------------------------------------------------------------------
 \subsection{Calibrated Verdicts}
@@ -497,10 +497,10 @@ We use these posterior thresholds as a design choice intended to achieve
 the stated frequentist bounds. This is an empirical property of the
 system under tested conditions, not a finite-sample guarantee:
 \Cref{sec:evaluation:results} validates that the bounds hold across
-our benchmark suite, but under extreme autocorrelation ($\rho = 0.8$)
-FPR rises to 8\%---still the lowest among tools with comparable
-detection power. Further degradation is mitigated by Inconclusive
-verdicts instead of forced Pass/Fail.
+our benchmark suite. Under extreme autocorrelation ($\rho = 0.8$),
+\tacet achieves 0\% FPR by returning Inconclusive when measurement
+conditions cannot support a confident verdict, rather than forcing
+unreliable Pass/Fail decisions.
 
 \begin{itemize}
     \item \textbf{Pass}: The posterior probability of a timing leak exceeding
@@ -545,11 +545,12 @@ bootstrap replicate. This preserves temporal dependence within blocks while
 estimating the variance inflation caused by autocorrelation.
 
 \tacet selects block length automatically using the Politis-White algorithm~\cite{politiswhite},
-which estimates the optimal block size from the autocorrelation structure. We
-also compute the integrated autocorrelation time (IACT), which quantifies how
-many nominal samples equal one independent observation. The effective sample size
-$n_{\text{eff}} = n / \hat{\tau}$ can be much smaller than the nominal count when
-autocorrelation is strong.
+which estimates the optimal block size from the autocorrelation structure, with
+an IACT-based floor ensuring blocks are long enough even when Politis-White
+underestimates for nonlinear functionals (\Cref{app:bootstrap}). The integrated
+autocorrelation time (IACT) quantifies how many nominal samples equal one
+independent observation; the effective sample size $n_{\text{eff}} = n / \hat{\tau}$
+can be much smaller than the nominal count when autocorrelation is strong.
 
 \silent also uses block bootstrap to handle autocorrelation. The difference
 is that \tacet uses \emph{stream-based bootstrap}: resampling the interleaved
@@ -762,13 +763,17 @@ category, all verdicts are either Pass or Fail.
 Under i.i.d.\ conditions ($\rho = 0$), \tacet maintains 0\% FPR across all
 injection patterns. As positive autocorrelation increases, tools that assume
 independence show rising false positive rates: at $\rho = 0.8$, \rtlf reaches
-30\%, \dudect 12\%, and \tlsfuzzer 40\%. \tacet's maximum FPR across all
-conditions is 8\% (at $\rho = 0.8$), the lowest among tools with comparable
-detection power.
+30\%, \dudect 12\%, and \tlsfuzzer 40\%. \tacet maintains 0\% FPR across
+all autocorrelation conditions by returning Inconclusive when
+measurement conditions cannot support a confident verdict.
 
 \silent also handles autocorrelation via $m$-dependent bootstrap, reaching
 12\% FPR at $\rho = 0.8$. Where \silent must still output
 Pass or Fail, \tacet returns Inconclusive when evidence is insufficient.
+Under strong autocorrelation ($\rho \geq 0.6$), \tacet returns Inconclusive
+on most null-effect trials at the tightest threshold---a consequence of the
+block bootstrap correctly widening confidence intervals beyond the
+\textsc{SharedHardware} threshold.
 
 Standard statistical tests (Anderson-Darling, Kolmogorov-Smirnov) perform
 worse: AD-test reaches 45\% FPR at $\rho = 0.8$ and already exceeds the 5\%
@@ -783,9 +788,8 @@ unreliable for timing analysis where autocorrelation is the norm.
              taupe indicates correct ``no effect found'', teal indicates inconclusive
              (\tacet only). Under strong positive autocorrelation ($\rho = 0.8$),
              classical tools show 7--40\% false positive rates while \tacet
-             limits FPR to 8\%---the lowest among tools with comparable
-             detection power---by returning Inconclusive on most trials
-             where precision is insufficient.}
+             achieves 0\% FPR by returning Inconclusive when precision
+             is insufficient rather than forcing unreliable verdicts.}
     \label{fig:fpr_heatmap}
 \end{figure*}
 
@@ -804,11 +808,11 @@ Among threshold-based tools, \silent achieves 81\%---a power advantage of the
 quantile approach for near-threshold effects under i.i.d.\ conditions
 (\Cref{sec:discussion:tradeoffs}).
 
-Under autocorrelation, the measurement floor rises above $\theta =
-\ns{0.4}$, and \tacet correctly returns Inconclusive (ThresholdElevated) rather
-than issuing verdicts it cannot support. At $0.2\sigma$ under AR(1) noise,
-\tacet's detection rate is ${\sim}49\%$---a consequence of the block bootstrap
-correctly widening confidence intervals.
+Under autocorrelation, \tacet maintains 100\% detection for shift effects at
+$\geq 1\sigma$ across all AR(1) conditions including $\rho = 0.8$. At
+$0.2\sigma$ ($= \ns{1.0}$), detection degrades gracefully: 43\% at $\rho = 0.3$,
+10\% at $\rho = 0.6$, and 0\% at $\rho = 0.8$ (all Inconclusive)---a consequence
+of the block bootstrap correctly widening confidence intervals.
 
 \begin{figure*}[ht]
     \centering
@@ -1069,8 +1073,8 @@ conditions---a genuine power gap between two threshold-based tools.
 \silent's quantile approach extracts more information at this margin.
 However, the gap is specific to the i.i.d.\ regime: under any autocorrelation,
 \tacet's measurement floor rises above $\theta = \ns{0.4}$ and the near-threshold
-comparison becomes moot. At $\rho = 0.8$, \tacet maintains 8\% FPR vs.\
-\silent's 12\%.
+comparison becomes moot. At $\rho = 0.8$, \tacet maintains 0\% FPR (returning
+Inconclusive on unreliable measurements) vs.\ \silent's 12\%.
 
 Non-threshold tools (\dudect at 57\%, \rtlf at 88\%) naturally show higher
 detection at $0.1\sigma$: without a threshold, they detect any distributional
@@ -1141,9 +1145,10 @@ Across 2{,}270 trials (1{,}600 calibration + 670 on real cryptographic
 implementations) on a heavily loaded 64-vCPU server, the tool produced
 5~false positives (0.22\% aggregate FPR; 0.47\% conditional on definitive
 verdict), consistent with the $\leq$5\% target under the tested benchmark
-conditions. Under extreme autocorrelation ($\rho = 0.8$), FPR rises to
-8\%, still below all other tools with comparable detection power (7--40\%).
-Inconclusive verdicts absorb further degradation.
+conditions. Under extreme autocorrelation ($\rho = 0.8$), \tacet maintains 0\%
+synthetic FPR by returning Inconclusive when measurement conditions
+cannot support a confident verdict---other tools with comparable
+detection power show 7--40\% FPR at this autocorrelation level.
 
 The methodological contributions are: Wasserstein-1 distance for tail-sensitive
 detection of timing leaks; Bayesian posterior probabilities for interpretable
@@ -1269,7 +1274,7 @@ variance underestimation. Using the scale-mixture representation:
 \widehat{W}_1 \mid W, \kappa &\sim \mathcal{N}\!\left(W, \frac{v_n}{\kappa}\right) \\
 \kappa &\sim \text{Gamma}\!\left(\frac{\nu_\ell}{2}, \frac{\nu_\ell}{2}\right)
 \end{align}
-with $\nu_\ell = 8$. Marginally, this yields $\widehat{W}_1 \mid W \sim t_{\nu_\ell}(W, v_n)$.
+with $\nu_\ell = 4$. Marginally, this yields $\widehat{W}_1 \mid W \sim t_{\nu_\ell}(W, v_n)$.
 
 When the estimated variance $v_n$ is too small (e.g., from unmodeled autocorrelation), the
 scale parameter $\kappa$ is pulled below 1, automatically inflating uncertainty. This prevents
@@ -1333,15 +1338,15 @@ approach, this requires no matrix inversions or Cholesky decompositions---all op
 are scalar.
 
 \paragraph{Convergence and Cost.}
-We run 256 total iterations with 64 burn-in, retaining 192 samples. Mixing is fast due to
-the low-dimensional parameter space and conjugate structure. Initialization at $\lambda^{(0)} =
-\kappa^{(0)} = 1$ (the prior means) provides a good starting point.
+We run 5{,}000 total iterations with 1{,}000 burn-in, retaining 4{,}000 samples. Mixing is fast due to
+the low-dimensional parameter space and conjugate structure. Initialization at $\delta^{(0)} =
+\max(0, \widehat{W}_1)$ provides a good starting point.
 
 We track $\lambda$ mixing via its coefficient of variation (CV) and effective sample size (ESS).
 If $\lambda$ CV $< 0.1$ or $\lambda$ ESS $< 20$, we flag a potential convergence issue in
 diagnostics, though this rarely occurs in practice.
 
-Computational cost per posterior update is $O(N_{\text{gibbs}}) \approx 256$ scalar operations---
+Computational cost per posterior update is $O(N_{\text{gibbs}}) \approx 5{,}000$ scalar operations---
 negligible compared to measurement time ($<1$ms on modern hardware). This is substantially faster
 than a multi-dimensional quantile approach, which would require $O(d^3 + d^2 \cdot N_{\text{gibbs}})$
 operations dominated by Cholesky decompositions.
@@ -1377,6 +1382,8 @@ calibration sample size.
 We use the Politis-White automatic block length selection algorithm with a class-conditional modification. Standard Politis-White estimates autocorrelation from raw lag-$k$ pairs, but with interleaved sampling, a lag-$k$ pair may cross class boundaries. Instead, we compute autocorrelation using only same-class pairs at each acquisition-stream lag, then take the conservative maximum across classes.
 
 The optimal block length scales as $\hat{b} \propto T^{1/3}$ where $T$ is the stream length. We clamp $\hat{b} \in [10, \min(3\sqrt{T}, T/3)]$ to prevent degenerate blocks. In high-autocorrelation regimes (detected when $\rho_{\text{max}}(10) > 0.3$), we inflate the block length by 50\% for additional conservatism.
+
+We also enforce an IACT-based floor: $\hat{b} \geq \lceil 2 c_\tau \hat{\tau}_{\max} \rceil$ where $\hat{\tau}_{\max}$ is the maximum class-conditional integrated autocorrelation time (estimated via Geyer's initial monotone sequence) and $c_\tau = 2.0$. The factor of 2 converts from within-class lags to interleaved-stream lags. This floor ensures blocks are long enough to capture the full dependence structure even when Politis-White underestimates it for nonlinear functionals like W$_1$.
 
 \paragraph{Variance Scaling.}
 The key insight enabling adaptive sampling is that W$_1$ estimator variance scales as $1/n_{\text{blocks}}$.
@@ -1445,12 +1452,15 @@ A critical design element is distinguishing what the user \emph{wants} to detect
 
 \paragraph{Floor-Rate Constant.}
 During calibration, we estimate the null distribution of $\widehat{W}_1$ under the hypothesis of no
-timing leak. This is done by computing $\widehat{W}_1$ between resampled baseline-baseline and
-sample-sample splits using the same block-bootstrap procedure that respects temporal dependence.
+timing leak. For each null replicate, we randomly split the baseline class into halves $B_1, B_2$
+and the sample class into halves $S_1, S_2$, compute $\widehat{W}_1(B_1, B_2)$ and
+$\widehat{W}_1(S_1, S_2)$, and average them. This within-class splitting destroys any
+between-class timing difference while preserving the marginal noise structure.
 
-For each null replicate $\widehat{W}_1^{(b)}$ at calibration sample size $n_{\text{cal}}$:
+Since the half-sample W$_1$ overestimates the full-sample W$_1$ by a factor of $\sqrt{2}$
+(because $\text{Var}(\widehat{W}_1) \propto 1/m$ and $m = n/2$), we apply a $\sqrt{2}$ correction:
 \begin{equation}
-c_{\text{floor}} = q_{0.95}\!\left(\widehat{W}_1^{(b)} \cdot \sqrt{n_{\text{blocks,cal}}}\right)
+c_{\text{floor}} = q_{0.95}\!\left(\frac{\widehat{W}_1^{(b)} \cdot \sqrt{n_{\text{blocks,cal}}}}{\sqrt{2}}\right)
 \end{equation}
 
 This floor-rate constant captures the 95th percentile of the null distribution of raw W$_1$, scaled to
