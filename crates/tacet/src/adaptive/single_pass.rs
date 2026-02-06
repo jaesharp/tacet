@@ -247,8 +247,9 @@ pub fn analyze_single_pass(
     let var_rate = variance * (n as f64);
     let block_length = var_estimate.block_size;
 
-    // Compute c_floor from null distribution
-    let c_floor = calibrate_floor_from_null(&interleaved, block_length, config.bootstrap_iterations, config.seed);
+    // Compute null calibration (floor + null variance for inference)
+    let null_cal = calibrate_floor_from_null(&interleaved, block_length, config.bootstrap_iterations, config.seed);
+    let c_floor = null_cal.c_floor;
 
     // Statistical floor: c_floor / √n_blocks
     let n_blocks = if block_length > 0 { (n / block_length).max(1) } else { n.max(1) };
@@ -280,7 +281,7 @@ pub fn analyze_single_pass(
     let mde = estimate_mde(variance, 0.05); // α = 0.05
     let quality = MeasurementQuality::from_mde_ns(mde.mde_ns);
 
-    // Debug output for investigation
+    // Debug output for investigation (first part — before posterior)
     if std::env::var("TIMING_ORACLE_DEBUG").is_ok() {
         eprintln!(
             "[DEBUG] n = {}, discrete_mode = {}, block_length = {}",
@@ -299,9 +300,22 @@ pub fn analyze_single_pass(
     // var_n = var_rate / n = (variance * n) / n = variance
     // The bootstrap already gives Var(W₁) at the current sample size n.
     let var_n = var_rate / (n as f64);
+
+    // Null-calibrated variance floor: prevents posterior overconfidence under
+    // dependence (AR(1) etc.) where bootstrap may underestimate W₁ variance.
+    // null_var_rate is Var(scaled_null_W₁) in rate form; dividing by n_blocks
+    // gives the null variance at the current sample size.
+    let null_var_n = null_cal.null_var_rate / (n_blocks as f64);
+    let var_eff = var_n.max(null_var_n);
+
+    if std::env::var("TIMING_ORACLE_DEBUG").is_ok() {
+        eprintln!("[DEBUG] var_n = {:.2e}, null_var_n = {:.2e}, var_eff = {:.2e} (null floor active: {})",
+            var_n, null_var_n, var_eff, null_var_n > var_n);
+    }
+
     let bayes_result = tacet_core::analysis::compute_bayes_1d(
         w1_obs,
-        var_n,
+        var_eff,
         sigma_t,
         theta_eff,
         config.seed,

@@ -592,12 +592,13 @@ pub fn calibrate(
 
     // Compute floor-rate constant from null distribution (v7.1 Fix 2)
     // c_floor = q95 of null W₁ distribution, scaled by sqrt(n_blocks)
-    let c_floor = calibrate_floor_from_null(
+    let null_cal = calibrate_floor_from_null(
         &interleaved,
         block_length,
         config.bootstrap_iterations,
         config.seed,
     );
+    let c_floor = null_cal.c_floor;
 
     // Timer tick floor
     let theta_tick = config.timer_resolution_ns;
@@ -778,12 +779,30 @@ pub fn calibrate_halft_prior_scale_1d(
     (sigma_low + sigma_high) / 2.0
 }
 
+/// Result from null floor calibration.
+///
+/// Contains the floor statistic (95th percentile) plus the mean and variance
+/// of the null W₁ replicates in rate form. The variance can be used as a floor
+/// on the bootstrap variance to prevent posterior overconfidence under dependence.
+#[derive(Debug, Clone, Copy)]
+pub struct NullCalibration {
+    /// 95th percentile of scaled null W₁ replicates (c_floor in rate form: ns·√n_blocks).
+    pub c_floor: f64,
+    /// Mean of scaled null W₁ replicates (null bias in rate form).
+    pub null_mean_rate: f64,
+    /// Variance of scaled null W₁ replicates (null variance in rate form).
+    pub null_var_rate: f64,
+}
+
 /// Calibrate floor constant c_floor from null distribution of raw W₁.
 ///
 /// Uses within-class splits to generate null W₁ replicates under "no leak"
 /// assumption, then takes 95th percentile scaled by sqrt(n_blocks).
 ///
 /// At runtime: theta_floor(n) = max(theta_tick, c_floor / sqrt(n_blocks(n)))
+///
+/// Also returns the mean and variance of the null replicates (in rate form)
+/// for use as a variance floor in Bayesian inference.
 ///
 /// # Arguments
 /// * `interleaved` - Calibration samples (both classes interleaved)
@@ -792,22 +811,13 @@ pub fn calibrate_halft_prior_scale_1d(
 /// * `seed` - Deterministic RNG seed
 ///
 /// # Returns
-/// The 95th percentile constant c_floor calibrated from null distribution.
-///
-/// # Algorithm
-/// 1. For each bootstrap replicate:
-///    a. Randomly split baseline into B1, B2
-///    b. Randomly split sample into S1, S2
-///    c. Compute W₁(B1, B2) and W₁(S1, S2)
-///    d. Average them (both are null replicates)
-///    e. Scale by sqrt(n_blocks_cal) to get calibration-size constant
-/// 2. Return 95th percentile of these scaled null statistics
+/// `NullCalibration` with 95th percentile, mean, and variance of scaled null W₁.
 pub fn calibrate_floor_from_null(
     interleaved: &[TimingSample],
     block_length: usize,
     n_bootstrap: usize,
     seed: u64,
-) -> f64 {
+) -> NullCalibration {
     use rand::seq::SliceRandom;
 
     let n = interleaved.len();
@@ -835,7 +845,7 @@ pub fn calibrate_floor_from_null(
     let n_baseline = baseline_samples.len();
     let n_sample = sample_samples.len();
 
-    // Generate null W₁ replicates via within-class splits
+    // Generate null W₁ replicates via within-class random splits.
     let mut null_replicates: Vec<f64> = Vec::with_capacity(n_bootstrap);
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(seed);
 
@@ -882,10 +892,27 @@ pub fn calibrate_floor_from_null(
         null_replicates.push(scaled_w1);
     }
 
+    // Compute null replicate statistics before partial sorting
+    let null_mean_rate = null_replicates.iter().sum::<f64>() / n_bootstrap as f64;
+    let null_var_rate = if n_bootstrap > 1 {
+        null_replicates
+            .iter()
+            .map(|x| (x - null_mean_rate).powi(2))
+            .sum::<f64>()
+            / (n_bootstrap - 1) as f64
+    } else {
+        0.0
+    };
+
     // Return 95th percentile
     let percentile_idx = ((n_bootstrap as f64 * 0.95) as usize).min(n_bootstrap - 1);
     null_replicates.select_nth_unstable_by(percentile_idx, |a, b| a.total_cmp(b));
-    null_replicates[percentile_idx]
+
+    NullCalibration {
+        c_floor: null_replicates[percentile_idx],
+        null_mean_rate,
+        null_var_rate,
+    }
 }
 
 #[cfg(test)]
@@ -1173,11 +1200,18 @@ mod tests {
         let n_bootstrap = 200;
         let seed = 42;
 
-        let c_floor = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
+        let null_cal = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
+        let c_floor = null_cal.c_floor;
 
         // Should be positive and finite
         assert!(c_floor > 0.0, "c_floor should be positive");
         assert!(c_floor.is_finite(), "c_floor should be finite");
+
+        // Null variance should also be non-negative and finite
+        assert!(
+            null_cal.null_var_rate >= 0.0 && null_cal.null_var_rate.is_finite(),
+            "null_var_rate should be non-negative and finite"
+        );
     }
 
     #[test]
@@ -1201,14 +1235,14 @@ mod tests {
         let n_bootstrap = 150;
         let seed = 12345;
 
-        let c_floor_1 = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
-        let c_floor_2 = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
+        let null_cal_1 = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
+        let null_cal_2 = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
 
         assert!(
-            (c_floor_1 - c_floor_2).abs() < 1e-10,
+            (null_cal_1.c_floor - null_cal_2.c_floor).abs() < 1e-10,
             "Same seed should give same c_floor: {} vs {}",
-            c_floor_1,
-            c_floor_2
+            null_cal_1.c_floor,
+            null_cal_2.c_floor
         );
     }
 
@@ -1234,7 +1268,8 @@ mod tests {
         let n_bootstrap = 200;
         let seed = 999;
 
-        let c_floor = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
+        let null_cal = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
+        let c_floor = null_cal.c_floor;
 
         // Under null, should be relatively small (reflects sampling noise only)
         assert!(
@@ -1264,12 +1299,12 @@ mod tests {
         let n_bootstrap = 200;
         let seed = 42;
 
-        let c_floor_small_block = calibrate_floor_from_null(&samples, 5, n_bootstrap, seed);
-        let c_floor_large_block = calibrate_floor_from_null(&samples, 25, n_bootstrap, seed);
+        let null_cal_small = calibrate_floor_from_null(&samples, 5, n_bootstrap, seed);
+        let null_cal_large = calibrate_floor_from_null(&samples, 25, n_bootstrap, seed);
 
         // Both should be positive
-        assert!(c_floor_small_block > 0.0);
-        assert!(c_floor_large_block > 0.0);
+        assert!(null_cal_small.c_floor > 0.0);
+        assert!(null_cal_large.c_floor > 0.0);
 
         // Larger block length means fewer blocks (n_blocks = n / block_length)
         // c_floor is scaled by sqrt(n_blocks), so fewer blocks -> smaller sqrt(n_blocks) -> smaller c_floor
@@ -1277,10 +1312,10 @@ mod tests {
         // For block_length=25: n_blocks = 250/25 = 10, sqrt = 3.16
         // So small_block should have larger c_floor
         assert!(
-            c_floor_small_block > c_floor_large_block,
+            null_cal_small.c_floor > null_cal_large.c_floor,
             "Smaller block length (more blocks) should yield larger c_floor due to sqrt(n_blocks) scaling: small={}, large={}",
-            c_floor_small_block,
-            c_floor_large_block
+            null_cal_small.c_floor,
+            null_cal_large.c_floor
         );
     }
 
@@ -1305,7 +1340,8 @@ mod tests {
         let n_bootstrap = 1000; // More samples for better percentile estimate
         let seed = 777;
 
-        let c_floor = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
+        let null_cal = calibrate_floor_from_null(&samples, block_length, n_bootstrap, seed);
+        let c_floor = null_cal.c_floor;
 
         // Generate fresh null replicates and check that c_floor is indeed high percentile
         use rand::seq::SliceRandom;
