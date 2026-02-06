@@ -958,15 +958,17 @@ impl TimingOracle {
         };
 
         let mut adaptive_state = AdaptiveState::with_capacity(self.config.max_samples);
+        let ns_per_cycle = 1.0 / timer.cycles_per_ns();
 
         // Add calibration samples to adaptive state (they count toward total)
-        adaptive_state.add_batch(
+        // Use add_batch_with_conversion to enable online stats for drift detection (spec §3.5.2 Gate 4)
+        adaptive_state.add_batch_with_conversion(
             calibration_baseline_cycles.clone(),
             calibration_sample_cycles.clone(),
+            ns_per_cycle,
         );
 
         // Create stationarity tracker for drift detection (spec Section 3.2.1)
-        let ns_per_cycle = 1.0 / timer.cycles_per_ns();
         let tracker_seed = self
             .config
             .measurement_seed
@@ -1114,7 +1116,7 @@ impl TimingOracle {
             }
 
             input_idx += batch_size;
-            adaptive_state.add_batch(batch_baseline, batch_sample);
+            adaptive_state.add_batch_with_conversion(batch_baseline, batch_sample, ns_per_cycle);
 
             // Run one step of adaptive analysis
             let outcome = run_adaptive(
@@ -1378,9 +1380,11 @@ impl TimingOracle {
 
         // Set up state with calibration samples
         let mut adaptive_state = AdaptiveState::with_capacity(self.config.max_samples);
-        adaptive_state.add_batch(
+        let ns_per_cycle = 1.0 / timer.cycles_per_ns();
+        adaptive_state.add_batch_with_conversion(
             calibration_baseline_cycles.to_vec(),
             calibration_sample_cycles.to_vec(),
+            ns_per_cycle,
         );
 
         // Use a minimal theta for the adaptive machinery (we don't use thresholds in Research mode)
@@ -1481,7 +1485,7 @@ impl TimingOracle {
             }
 
             input_idx += batch_size;
-            adaptive_state.add_batch(batch_baseline, batch_sample);
+            adaptive_state.add_batch_with_conversion(batch_baseline, batch_sample, ns_per_cycle);
 
             // Run one step of adaptive analysis to get posterior
             let outcome = run_adaptive(
