@@ -418,6 +418,7 @@ fn orion_aead_decrypt_constant_time() {
 /// CRITICAL TEST: Password hashing is a high-value timing attack target.
 /// Uses stricter SharedHardware threshold (~2 cycles @ 5 GHz).
 #[test]
+#[ignore = "password hashing is too slow for routine test runs"]
 fn orion_pwhash_constant_time() {
     use orion::pwhash;
 

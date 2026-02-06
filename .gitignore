@@ -16,16 +16,17 @@ target/
 **/mutants.out*/
 
 # =============================================================================
-# C Bindings (crates/timing-oracle-c)
+# C Bindings (crates/tacet-c)
 # =============================================================================
 
 # CMake build directories
-crates/timing-oracle-c/tests/build/
-crates/timing-oracle-c/tests/build-asan/
+crates/tacet-c/tests/build/
+crates/tacet-c/tests/build-asan/
 
 # Compiled examples
-crates/timing-oracle-c/examples/simple
-crates/timing-oracle-c/examples/adaptive
+crates/tacet-c/examples/simple
+crates/tacet-c/examples/simple_callback
+crates/tacet-c/examples/adaptive
 
 # =============================================================================
 # C++ Bindings (bindings/cpp)
@@ -40,36 +41,32 @@ bindings/cpp/test_cpp_wrapper
 # =============================================================================
 
 # Downloaded static libraries (via go generate)
-crates/timing-oracle-go/internal/ffi/lib/
+crates/tacet-go/internal/ffi/lib/
 
 # Go test binaries
-crates/timing-oracle-go/*.test
-crates/timing-oracle-go/examples/simple/simple
+crates/tacet-go/*.test
+crates/tacet-go/examples/simple/simple
 
 # Coverage files
-crates/timing-oracle-go/*.out
-crates/timing-oracle-go/coverage.html
+crates/tacet-go/*.out
+crates/tacet-go/coverage.html
 
 # =============================================================================
-# Node.js/NAPI Bindings (crates/timing-oracle-napi)
+# Node.js / NAPI Bindings
 # =============================================================================
 
-# Dependencies
-crates/timing-oracle-napi/node_modules/
+# Dependencies (all node_modules everywhere)
+**/node_modules/
 
 # Native addon binaries
-crates/timing-oracle-napi/*.node
 *.node
 
 # TypeScript compiled output (generated during build)
-crates/timing-oracle-napi/dist/
+crates/tacet-napi/dist/
 
 # =============================================================================
 # Documentation Website (website/)
 # =============================================================================
-
-# Dependencies
-website/node_modules/
 
 # Build output
 website/dist/
@@ -79,6 +76,40 @@ website/.astro/
 
 # Wrangler
 website/.wrangler/
+
+# =============================================================================
+# Python
+# =============================================================================
+
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# =============================================================================
+# LaTeX
+# =============================================================================
+
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+# Note: *.log is NOT globally ignored (too broad), only paper-specific below
+paper/*.log
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.out
+
+# =============================================================================
+# Backup files
+# =============================================================================
+
+*.bak
+*.bak2
 
 # =============================================================================
 # IDE / Editor
@@ -130,8 +161,56 @@ benchmark_data/
 # Benchmark results (can be large)
 bench_results/
 
+# Archived intermediate results (kept locally, not in repo)
+results/_old/
+
+# Paper analysis caches and old figure versions
+paper/analysis/outputs/figures copy*/
+paper/analysis/outputs/figures_old*/
+paper/analysis/outputs/figures_pre_style/
+
+# Paper analysis intermediate results
+paper/analysis/results/medium-*/
+paper/analysis/results/thorough-*/
+
 # Random PDFs that ended up here
 *.pdf
 
 # AI assistant configuration (personal/local)
 .claude/
+
+# Compiled artifacts that ended up at root
+*.rlib
+
+# Root-level development artifacts (ad-hoc scripts, figures, debug files)
+/analyze_regression*.py
+/compare_summaries.py
+/final_analysis.py
+/benchmark_results.csv
+/benchmark_summary.csv
+/benchmark_report.md
+/fpr_results_*.csv
+/fpr_run_local_*.log
+/test_fpr.log
+/debug_iact.rs
+/test_json_output.rs
+/test_tail_slow_share
+/extra-*.png
+/v1-fig*.png
+/v2-fig*.png
+/v3-fig*.png
+
+# Internal development notes (not user-facing docs)
+/C_LIBRARIES_INTEGRATION.md
+/GO_STDLIB_CRYPTO_ANALYSIS.md
+/HISTOGRAM_FEATURE.md
+/HISTOGRAM_IMPLEMENTATION.md
+/MBEDTLS_FFI_FIX_SUMMARY.md
+
+# Internal docs
+docs/AWS_VALIDATION_RUN.md
+docs/USENIX_PAPER_PLAN.md
+docs/internal/
+
+# Empty directories
+calibration_data/
