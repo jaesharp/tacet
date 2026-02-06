@@ -220,7 +220,8 @@ impl ToolAdapter for TimingOracleAdapter {
             oracle = oracle.max_samples(max);
         }
 
-        let outcome = oracle.analyze_raw_samples(&baseline_ns, &test_ns);
+        // Synthetic data has no timer quantisation floor
+        let outcome = oracle.analyze_raw_samples_with_resolution(&baseline_ns, &test_ns, 0.0);
         let elapsed_ms = start.elapsed().as_millis() as u64;
 
         match outcome {
@@ -332,7 +333,8 @@ impl ToolAdapter for TimingOracleAdapter {
             oracle = oracle.max_samples(max);
         }
 
-        let outcome = oracle.analyze_raw_samples(&baseline_ns, &test_ns);
+        // Synthetic data has no timer quantisation floor
+        let outcome = oracle.analyze_raw_samples_with_resolution(&baseline_ns, &test_ns, 0.0);
         let elapsed_ms = start.elapsed().as_millis() as u64;
 
         match outcome {

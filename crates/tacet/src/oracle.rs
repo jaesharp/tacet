@@ -1673,6 +1673,21 @@ impl TimingOracle {
     /// }
     /// ```
     pub fn analyze_raw_samples(&self, baseline_ns: &[f64], test_ns: &[f64]) -> Outcome {
+        self.analyze_raw_samples_with_resolution(baseline_ns, test_ns, 1.0)
+    }
+
+    /// Like [`analyze_raw_samples`](Self::analyze_raw_samples), but lets the caller specify
+    /// the timer resolution of the data source.
+    ///
+    /// Set `timer_resolution_ns` to the known tick size of the timer that produced the data
+    /// (e.g., 41.7 for Apple Silicon cntvct_el0, ~0.3 for x86-64 rdtsc). Use `0.0` for
+    /// synthetic data where there is no quantisation floor.
+    pub fn analyze_raw_samples_with_resolution(
+        &self,
+        baseline_ns: &[f64],
+        test_ns: &[f64],
+        timer_resolution_ns: f64,
+    ) -> Outcome {
         use crate::adaptive::single_pass::{analyze_single_pass, SinglePassConfig};
 
         let theta_ns = self.config.resolve_min_effect_ns();
@@ -1682,7 +1697,7 @@ impl TimingOracle {
             pass_threshold: self.config.pass_threshold,
             fail_threshold: self.config.fail_threshold,
             bootstrap_iterations: 2000,
-            timer_resolution_ns: 1.0, // Unknown for raw samples
+            timer_resolution_ns,
             seed: self.config.measurement_seed.unwrap_or(DEFAULT_SEED),
             kl_min: 0.7,
             bootstrap_method: self.config.bootstrap_method,
