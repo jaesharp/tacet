@@ -219,7 +219,7 @@ fn compute_effect_delay(apply_effect: bool, effect: &BenchmarkEffect) -> u64 {
                 0
             } else {
                 RNG.with(|rng| {
-                    if rng.borrow_mut().gen::<f64>() < *slow_prob {
+                    if rng.borrow_mut().random::<f64>() < *slow_prob {
                         *slow_delay_ns
                     } else {
                         0
@@ -248,7 +248,7 @@ fn compute_effect_delay(apply_effect: bool, effect: &BenchmarkEffect) -> u64 {
                 0
             } else {
                 RNG.with(|rng| {
-                    let is_tail = rng.borrow_mut().gen::<f64>() < *tail_prob;
+                    let is_tail = rng.borrow_mut().random::<f64>() < *tail_prob;
                     if is_tail {
                         (*base_delay_ns as f64 * *tail_mult) as u64
                     } else {

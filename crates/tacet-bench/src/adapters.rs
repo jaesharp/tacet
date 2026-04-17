@@ -2217,7 +2217,7 @@ fn rtlf_bootstrap_test(
                 // This is standard practice for parallel bootstrap and maintains
                 // statistical validity (same asymptotic properties as sequential)
                 ThreadLocalState {
-                    rng: SmallRng::from_entropy(),
+                    rng: SmallRng::from_os_rng(),
                     b1: vec![0u64; n],
                     b2: vec![0u64; n],
                     t1: vec![0u64; n],
